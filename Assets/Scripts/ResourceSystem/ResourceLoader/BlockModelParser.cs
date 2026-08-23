@@ -9,7 +9,8 @@ public static class BlockModelParser
         var data = JsonUtility.FromJson<BlockModelData>(json);
         var model = new CustomModel
         {
-            ModelName = data.modelName,
+            modId = data.modId,
+            name = data.modelName,
             MeshData = new Dictionary<string, ModelFaceData>()
         };
         foreach(var f in data.faces)
@@ -25,7 +26,8 @@ public static class BlockModelParser
             uv =  f.uv,
             colors = f.colors,
             normals = new List<Vector3>(),
-            triangles = f.triangles
+            triangles = f.triangles,
+            canBeOccluded = f.canBeOccluded
         };
 
         Vector3 normal = Vector3.zero;

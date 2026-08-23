@@ -1,8 +1,10 @@
 {
+    "modId": "base_game",
     "modelName": "stair",
     "faces": [
         {
             "name": "bottom",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 1.0,
@@ -80,6 +82,7 @@
         },
         {
             "name": "left",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 1.0,
@@ -190,6 +193,7 @@
         },
         {
             "name": "back",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 0.0,
@@ -267,6 +271,7 @@
         },
         {
             "name": "right",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 0.0,
@@ -377,6 +382,7 @@
         },
         {
             "name": "lower_front",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 1.0,
@@ -454,6 +460,7 @@
         },
         {
             "name": "upper_front",
+            "canBeOccluded": false,
             "verts": [
                 {
                     "x": 1.0,
@@ -531,6 +538,7 @@
         },
         {
             "name": "front-top",
+            "canBeOccluded": false,
             "verts": [
                 {
                     "x": 1.0,
@@ -608,6 +616,7 @@
         },
         {
             "name": "back_top",
+            "canBeOccluded": true,
             "verts": [
                 {
                     "x": 1.0,

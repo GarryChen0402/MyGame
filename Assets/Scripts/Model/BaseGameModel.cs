@@ -6,7 +6,8 @@ public static class BaseGameModel
 
     public static readonly CustomModel FullCubeModel = new()
     {
-        ModelName = "full_cube",
+        modId = "base_game",
+        name = "full_cube",
         MeshData = new()
         {
             ["front"] = new ModelFaceData() //Face Toward to +Z-axis 

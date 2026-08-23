@@ -14,9 +14,10 @@ public class ModelTester : MonoBehaviour
         List<int> triangles = new();
 
         // TextAsset json = Resources.Load<TextAsset>("Models/full_cube");
-        CustomModel basemodel = BlockModelParser.Parser(modelTarget?.text);
+        CustomModel basemodel = BlockModelParser.Parser(modelTarget.text);
         // BaseGameModel.FullCubeModel.ExtendModelMesh(verts, uv, colors, normals, triangles);
-        basemodel.ExtendModelMesh(verts, uv, colors, normals, triangles);
+        basemodel.ExtendModelMesh(Vector3.zero, verts, uv, colors, normals, triangles);
+        basemodel.ExtendModelMesh(Vector3.up, verts, uv, colors, normals, triangles);
         mesh.SetVertices(verts);
         mesh.SetUVs(0, uv);
         mesh.SetColors(colors);

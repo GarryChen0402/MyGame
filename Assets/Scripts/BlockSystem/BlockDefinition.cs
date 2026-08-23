@@ -1,9 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public struct BlockDefinition 
+public class BlockDefinition : ResourceType
 {
-    public string ModId;
-    public string BlockName;
-    public List<string> TexturePath;
+    public string ModelId;
+    public List<string> TextureIds;
 }

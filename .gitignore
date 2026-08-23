@@ -108,3 +108,6 @@ InitTestScene*.unity*
 
 .vscode/
 Docs/
+
+*.png
+.claude/

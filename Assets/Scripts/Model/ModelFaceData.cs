@@ -9,5 +9,9 @@ public struct ModelFaceData // 自定义模型中， 单个面的信息， 包�
 
     public List<Vector3> normals;
     public List<int> triangles;
-    
+
+    // Whether this face can be hidden by a neighbor block.
+    // False for faces not flush with the cell boundary (e.g. stairs' step risers, torches).
+    public bool canBeOccluded;
+
 }

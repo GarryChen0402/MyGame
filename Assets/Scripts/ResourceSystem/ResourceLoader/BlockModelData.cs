@@ -5,6 +5,7 @@ using UnityEngine;
 [Serializable]
 public class BlockModelData
 {
+    public string modId;
     public string modelName;
     public List<BlockFaceData> faces;
 }
@@ -17,4 +18,6 @@ public class BlockFaceData
     public List<Vector2> uv;
     public List<Color> colors;
     public List<int> triangles;
+    // Default true so faces created in the editor are occludable until explicitly disabled
+    public bool canBeOccluded = true;
 }

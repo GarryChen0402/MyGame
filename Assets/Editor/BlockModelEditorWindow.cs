@@ -161,6 +161,7 @@ public class BlockModelEditorWindow : EditorWindow
         if (face.triangles == null) face.triangles = new List<int>();
 
         face.name = EditorGUILayout.TextField("Name", face.name);
+        face.canBeOccluded = EditorGUILayout.Toggle("Can Be Occluded", face.canBeOccluded);
 
         scroll = EditorGUILayout.BeginScrollView(scroll);
 
