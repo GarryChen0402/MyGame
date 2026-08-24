@@ -46,7 +46,15 @@ public static class CoordUtils
             ChunkCoord.y * BlockSizePerChunk * 1.0f
         );
     }
-
+    public static Vector3Int WorldPosToChunkLocalPos(float x, float y, float z)
+    {
+        return new Vector3Int
+        (
+            (Mathf.FloorToInt(x) % BlockSizePerChunk + BlockSizePerChunk) % BlockSizePerChunk,
+            Mathf.FloorToInt(y),
+            (Mathf.FloorToInt(z) % BlockSizePerChunk + BlockSizePerChunk) % BlockSizePerChunk
+        );
+    }
     public static Vector3Int WorldPosToSubChunkLocalCoord(Vector3 worldPos)
     {
         return new Vector3Int
@@ -87,4 +95,10 @@ public static class CoordUtils
     }
 
     public static int ChunkLocalYToSubChunkLocalY(int y) => (y % BlockSizePerChunk + BlockSizePerChunk) % BlockSizePerChunk;
+
+    public static bool IsCorrectWorldPos(float y)
+    {
+        int yInt = Mathf.FloorToInt(y);
+        return yInt < MaxSubChunkYIndex * BlockSizePerChunk && yInt >= MinSubChunkYIndex * BlockSizePerChunk;
+    }
 }

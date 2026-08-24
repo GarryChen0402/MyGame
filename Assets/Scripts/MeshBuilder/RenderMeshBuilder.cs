@@ -13,8 +13,10 @@ public static class RenderMeshBuilder
     // Returns null if the subchunk contains no blocks.
     public static Mesh ReBuildSubChunkRenderMesh(SubChunk subChunk, Func<int, int, int, ushort> externalBlockQuery = null)
     {
-        Vector3 origin = CoordUtils.SubChunkCoordToWorldPos(subChunk.ChunkCoord, subChunk.YCoord);
-        Vector3Int originInt = new Vector3Int((int)origin.x, (int)origin.y, (int)origin.z);
+        // Mesh vertices are chunk-local; the chunk transform places them in the world
+        Vector3 localOrigin = new Vector3(0, subChunk.YCoord * CoordUtils.BlockSizePerChunk, 0);
+        Vector3 worldOrigin = CoordUtils.SubChunkCoordToWorldPos(subChunk.ChunkCoord, subChunk.YCoord);
+        Vector3Int worldOriginInt = new Vector3Int((int)worldOrigin.x, (int)worldOrigin.y, (int)worldOrigin.z);
 
         var verts = new List<Vector3>();
         var uv = new List<Vector2>();
@@ -47,7 +49,7 @@ public static class RenderMeshBuilder
                 {
                     // Neighbor lies in an adjacent subchunk; ask the world layer (null defaults to air)
                     neighbor = externalBlockQuery != null
-                        ? externalBlockQuery(originInt.x + nx, originInt.y + ny, originInt.z + nz)
+                        ? externalBlockQuery(worldOriginInt.x + nx, worldOriginInt.y + ny, worldOriginInt.z + nz)
                         : (ushort)0;
                 }
                 occlusionMask[dir.Key] = Occludes(neighbor);
@@ -63,7 +65,7 @@ public static class RenderMeshBuilder
                 faceIndex++;
             }
 
-            model.ExtendModelMesh(origin + new Vector3(x, y, z), verts, uv, colors, normals, triangles, occlusionMask, faceRects);
+            model.ExtendModelMesh(localOrigin + new Vector3(x, y, z), verts, uv, colors, normals, triangles, occlusionMask, faceRects);
         }
 
         if (triangles.Count == 0) return null;

@@ -6,6 +6,8 @@ public class Chunk : MonoBehaviour
 {
     private SubChunk[] SubChunks ;
 
+    public Vector2Int ChunkCoord {get; private set;}
+
     public bool IsDirty {get; private set;} = true;
 
     [SerializeField] 
@@ -52,7 +54,7 @@ public class Chunk : MonoBehaviour
     private SubChunk GetOrCreateSubChunk(int worldY)
     {
         int yIndex = CoordUtils.WorldYPosToSubChunkYIndex(worldY) - CoordUtils.MinSubChunkYIndex;
-        if(SubChunks[yIndex] == null)SubChunks[yIndex] = new SubChunk(CoordUtils.WorldPosToChunkCoord(transform.position), yIndex + CoordUtils.MinSubChunkYIndex);
+        if(SubChunks[yIndex] == null)SubChunks[yIndex] = new SubChunk(ChunkCoord, yIndex + CoordUtils.MinSubChunkYIndex);
         return SubChunks[yIndex];
     }
 
@@ -82,7 +84,7 @@ public class Chunk : MonoBehaviour
 
             int voff = verts.Count;
             Mesh subRenderMesh = sub.GetRenderMesh();
-            // Subchunk meshes are already in world coordinates, merge as-is
+            // Subchunk meshes are already in chunk-local coordinates, merge as-is
             foreach(var v in subRenderMesh.vertices) verts.Add(v);
             uvs.AddRange(subRenderMesh.uv);
             colors.AddRange(subRenderMesh.colors);
@@ -113,4 +115,6 @@ public class Chunk : MonoBehaviour
     {
         IsDirty = true;
     }
+
+    public void SetChunkCoord(Vector2Int coord) => ChunkCoord = coord;
 }
