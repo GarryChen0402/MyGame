@@ -60,6 +60,18 @@ public class SubChunk
         );
     }
 
+    public Vector3Int SubChunkLocalCoordToChunkLocalCoord(int x, int y, int z)
+    {
+        return new Vector3Int
+        (
+            x,
+            y + SubChunkBlockSize * SubChunkIndexInChunk,
+            z
+        );
+    }
+
+    public Vector3Int SubChunkLocalCoordToDimisionBlockCoord
+
     private static int SubChunkLocalCoordToIndex(int x, int y, int z)
     {
         return x * SubChunkBlockSize * SubChunkBlockSize + y * SubChunkBlockSize + z;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public static class SubChunkRenderMeshRebuilder
@@ -16,10 +17,10 @@ public static class SubChunkRenderMeshRebuilder
                         if (def == null) continue;
                         if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(def.FullName, out var model)) continue;
                         if (model == null) continue;
-
+                        Dictionary<string, bool> mask = new Dictionary<string, bool>();
                         foreach(var kv in model.GetFaceDirections())
                         {
-                            
+                            var neighbor = 
                         }
                     }
         return null;
