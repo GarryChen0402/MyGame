@@ -10,6 +10,8 @@ public class ResourceSystem
     // Block Definition
     public ResourceRegistryTable<BlockDefinition> BlockDefinitions {get;} = new();
 
+    public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
+
     // Texture 
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;
