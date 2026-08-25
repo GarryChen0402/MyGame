@@ -25,12 +25,12 @@ public class Minecraft : IMod
             ModelId = cube.FullName,
             TextureIds = new()
             {
-                "stone",
-                "stone",
-                "stone",
-                "stone",
-                "stone",
-                "stone"
+                ["top"]    = $"{ModId}:stone",
+                ["bottom"] = $"{ModId}:stone",
+                ["front"]  = $"{ModId}:stone",
+                ["back"]   = $"{ModId}:stone",
+                ["left"]   = $"{ModId}:stone",
+                ["right"]  = $"{ModId}:stone"
             }
         };
 

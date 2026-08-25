@@ -70,7 +70,15 @@ public class SubChunk
         );
     }
 
-    public Vector3Int SubChunkLocalCoordToDimisionBlockCoord
+    public Vector3Int SubChunkLocalCoordToDimisionBlockCoord(int x, int y, int z)
+    {
+        return new Vector3Int
+        (
+            ChunkCoord.x * SubChunkBlockSize + x,
+            SubChunkIndexInChunk * SubChunkBlockSize + y,
+            ChunkCoord.y * SubChunkBlockSize + z
+        );
+    }
 
     private static int SubChunkLocalCoordToIndex(int x, int y, int z)
     {
@@ -82,11 +90,20 @@ public class SubChunk
         return localCoord.x * SubChunkBlockSize * SubChunkBlockSize + localCoord.y * SubChunkBlockSize + localCoord.z;
     }
 
-    public ushort GetBlockAt(Vector3Int localCoord)
+    public ushort GetBlockAt(Vector3Int subChunkLocalCoord)
     {
-        if (!IsCorrectCoord(localCoord)) return 0;
-        int index = SubChunkLocalCoordToIndex(localCoord);
+        if (!IsCorrectCoord(subChunkLocalCoord)) return 0;
+        int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
         return blockData[index];
+    }
+
+    public bool TrySetBlockAt(Vector3Int subChunkLocalCoord, ushort blockId)
+    {
+        if(!IsCorrectCoord(subChunkLocalCoord))return false;
+        int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
+        if(blockData[index] != 0)return false;
+        blockData[index] = blockId;
+        return true;
     }
 
     public Vector3 GetSubChunkOrigin()

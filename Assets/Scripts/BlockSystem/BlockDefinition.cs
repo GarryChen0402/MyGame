@@ -4,5 +4,5 @@ using UnityEngine;
 public class BlockDefinition : ResourceType
 {
     public string ModelId;
-    public List<string> TextureIds;
+    public Dictionary<string, string> TextureIds;
 }
