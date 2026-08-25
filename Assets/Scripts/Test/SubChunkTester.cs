@@ -5,6 +5,7 @@ using UnityEngine;
 // Attach to any object in the scene; runs once in Start.
 public class SubChunkTester : MonoBehaviour
 {
+    [SerializeField] Vector3Int SubChunkCoord;
     private void Start()
     {
         new Minecraft().RegisterAllResources();
@@ -16,7 +17,7 @@ public class SubChunkTester : MonoBehaviour
             return;
         }
 
-        var sub = new SubChunk(new Vector2Int(0, 0), 0);
+        var sub = new SubChunk(new Vector2Int(SubChunkCoord.x, SubChunkCoord.z), SubChunkCoord.y);
 
         for (int y = 0; y < SubChunk.SubChunkBlockSize; y++)
         for (int x = 0; x < SubChunk.SubChunkBlockSize; x++)

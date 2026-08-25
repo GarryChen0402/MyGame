@@ -103,6 +103,7 @@ public class SubChunk
         int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
         if(blockData[index] != 0)return false;
         blockData[index] = blockId;
+        MarkRenderMeshDirty();
         return true;
     }
 
@@ -127,5 +128,6 @@ public class SubChunk
         IsRenderMeshDirty = false;
     }
 
+    public void MarkRenderMeshDirty() => IsRenderMeshDirty = true;
     
 }

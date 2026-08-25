@@ -50,6 +50,6 @@ public static class SubChunkRenderMeshRebuilder
         return mesh;
     }
 
-    // Should be instead by the ChunkManager Func to query the real block in the diminision
+    // Should be instead by the ChunkManager Func to query the real block in the Dimension
     public static Func<Vector3Int, ushort> QueryBlockIdAt = (blockCoord)=> 0;
 }

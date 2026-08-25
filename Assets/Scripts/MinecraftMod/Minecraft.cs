@@ -6,11 +6,17 @@ public class Minecraft : IMod
     public static readonly string ModId = "Minecraft".ToLower();
     public void RegisterAllResources()
     {
-
+        // CustomModel Content
         CustomModel cube = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/full_cube").text);
         cube.modId = ModId;
         cube.name = "full_block";
         ResourceSystem.Instance.CustomModels.Register(cube);
+        // Texture Content
+        ResourceSystem.Instance.RegisterTexture(ModId, "stone", Resources.Load<Texture2D>("Textures/Blocks/stone"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "dirt", Resources.Load<Texture2D>("Textures/Blocks/dirt"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "grass", Resources.Load<Texture2D>("Textures/Blocks/grass"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "grass_side", Resources.Load<Texture2D>("Textures/Blocks/grass_side"));
+        // BlockDefinition Content
         BlockDefinition air = new ()
         {
             modId = ModId,
@@ -34,9 +40,42 @@ public class Minecraft : IMod
             }
         };
 
-        ResourceSystem.Instance.RegisterTexture(ModId, "stone", Resources.Load<Texture2D>("Textures/Blocks/stone"));
+        BlockDefinition dirtDefinition = new()
+        {
+            modId = ModId,
+            name = "dirt",
+            ModelId = cube.FullName,
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:dirt",
+                ["bottom"] = $"{ModId}:dirt",
+                ["front"]  = $"{ModId}:dirt",
+                ["back"]   = $"{ModId}:dirt",
+                ["left"]   = $"{ModId}:dirt",
+                ["right"]  = $"{ModId}:dirt"
+            }
+        };
+
+        BlockDefinition grassDefinition = new()
+        {
+            modId = ModId,
+            name = "grass",
+            ModelId = cube.FullName,
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:grass",
+                ["bottom"] = $"{ModId}:dirt",
+                ["front"]  = $"{ModId}:grass_side",
+                ["back"]   = $"{ModId}:grass_side",
+                ["left"]   = $"{ModId}:grass_side",
+                ["right"]  = $"{ModId}:grass_side"
+            }
+        };
+
         ResourceSystem.Instance.BlockDefinitions.Register(air);
         ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
+        ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
+        ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
         // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
     }
 }
