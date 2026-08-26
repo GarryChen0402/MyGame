@@ -4,6 +4,15 @@ using UnityEngine;
 public class Minecraft : IMod
 {
     public static readonly string ModId = "Minecraft".ToLower();
+    private static DimensionDefinition testDi = new()
+    {
+        modId = ModId,
+        name = "test_dim",
+        MinSubChunkIndex = -1,
+        MaxSubChunkIndex = 1,
+        DimensionGeneratorName = $"{ModId}:test_dim_generator"
+    };
+
     public void RegisterAllResources()
     {
         // CustomModel Content
@@ -76,6 +85,15 @@ public class Minecraft : IMod
         ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
         ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
         ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
+
+        DimensionGeneratorResource testGenerator = new()
+        {
+            modId = ModId,
+            name = "test_dim_generator",
+            GetNewGenerator = ()=> new TestDimensionGenerator()
+        };
+        ResourceSystem.Instance.DimensionGenerator.Register(testGenerator);
+        ResourceSystem.Instance.DimensionDefinitions.Register(testDi);
         // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
     }
 }

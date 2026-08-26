@@ -26,7 +26,7 @@ public class SubChunkTester : MonoBehaviour
 
         // Wire the neighbor query so interior faces are culled; coords outside this subchunk read as air
         Vector3Int originInt = Vector3Int.FloorToInt(sub.GetSubChunkOrigin());
-        SubChunkRenderMeshRebuilder.QueryBlockIdAt = coord => sub.GetBlockAt(coord - originInt);
+        // SubChunkRenderMeshRebuilder.QueryBlockIdAt = coord => sub.GetBlockAt(coord - originInt);
 
         sub.RebuildRenderMesh();
 

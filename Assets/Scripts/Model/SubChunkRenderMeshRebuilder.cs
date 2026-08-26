@@ -35,11 +35,12 @@ public static class SubChunkRenderMeshRebuilder
                         }
                         model.ExtendModelMesh
                         (
-                            new Vector3(x, y, z),
+                            new Vector3(x, y + origin.y, z),
                             verts, uv, colors, normals, triangles, mask, faceRects
                         );
                     }
         Mesh mesh = new();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.SetVertices(verts);
         mesh.SetUVs(0, uv);
         mesh.SetTriangles(triangles, 0);
@@ -51,5 +52,11 @@ public static class SubChunkRenderMeshRebuilder
     }
 
     // Should be instead by the ChunkManager Func to query the real block in the Dimension
-    public static Func<Vector3Int, ushort> QueryBlockIdAt = (blockCoord)=> 0;
+    public static ushort QueryBlockIdAt(Vector3Int DimensionBlockCoord)
+    {
+        var currentDim = WorldRenderer.Instance.CurrentRenderDimension;
+        if(currentDim == null)return 0;
+        else return currentDim.GetBlockAt(DimensionBlockCoord);
+        // return WorldRenderer.Instance.CurrentRenderDimension.try ?? (ushort)0;
+    }
 }

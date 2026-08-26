@@ -48,7 +48,7 @@ public class ResourceRegistryTable<T> where T : ResourceType
     public bool TryGetNumberId(string name, out ushort value)
         => stringIdToNumberId.TryGetValue(name, out value);
     
-    public bool TruGetStringId(ushort index, out string value)
+    public bool TryGetStringId(ushort index, out string value)
         => numberIdToStringId.TryGetValue(index, out value);
     
     public bool ContainsValue(ushort index)

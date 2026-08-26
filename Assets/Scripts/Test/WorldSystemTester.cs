@@ -1,0 +1,43 @@
+using System.Collections;
+using UnityEngine;
+
+// Demo script: registers resources, generates the test dimension, loads a diamond
+// of chunks around the origin and lets WorldRenderer display them. No assertions -
+// run in Play mode and inspect the rendered chunks visually.
+public class WorldSystemTester : MonoBehaviour
+{
+    private void Start() => StartCoroutine(Run());
+
+    private IEnumerator Run()
+    {
+        new Minecraft().RegisterAllResources();
+        ResourceSystem.Instance.BuildAtlas();
+
+        string mod = Minecraft.ModId;
+        string dimName = $"{mod}:test_dim";
+        if(!ResourceSystem.Instance.DimensionDefinitions.TryGetNumberId(dimName, out ushort dimId)) yield break;
+        if(!WorldManager.Instance.TryGetOrGenerateDimension(dimName, out Dimension dim)) yield break;
+
+        // Load a diamond of chunks (Manhattan distance <= range) around the origin
+        var center = new Vector2Int(0, 0);
+        int range = 2;
+        for(int x = -range; x <= range; x++)
+        {
+            int maxZ = range - Mathf.Abs(x);
+            for(int z = -maxZ; z <= maxZ; z++)
+                dim.LoadChunk(center + new Vector2Int(x, z));
+        }
+
+        var wr = Object.FindFirstObjectByType<WorldRenderer>(FindObjectsInactive.Exclude);
+        if(wr == null) yield break;
+        wr.SetRenderDimension(dimId);
+
+        // Move the camera above the world for a clear overview
+        var camera = Camera.main;
+        if(camera != null)
+        {
+            camera.transform.position = new Vector3(0.5f, 80f, 0.5f);
+            camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+    }
+}

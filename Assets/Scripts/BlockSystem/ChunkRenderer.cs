@@ -1,5 +1,6 @@
 using UnityEngine;
 
+[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class ChunkRenderer : MonoBehaviour
 {
     [SerializeField]
@@ -10,10 +11,9 @@ public class ChunkRenderer : MonoBehaviour
 
     private void Awake()
     {
-        meshFilter = GetComponent<MeshFilter>();
-        if(meshFilter == null)gameObject.AddComponent<MeshFilter>();
-        meshRenderer = GetComponent<MeshRenderer>();
-        if(meshRenderer == null)gameObject.AddComponent<MeshRenderer>();
+        meshFilter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
+        meshRenderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
+        meshRenderer.material = ResourceSystem.Instance.BlockMaterial;
     }
 
     private void Update()

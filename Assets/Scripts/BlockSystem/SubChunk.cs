@@ -24,7 +24,7 @@ public class SubChunk
     }
     public static bool IsCorrectCoord(Vector3Int localCoord)
     {
-        return localCoord.x >= 0 && localCoord.x< SubChunkBlockSize
+        return localCoord.x >= 0 && localCoord.x < SubChunkBlockSize
             && localCoord.y >= 0 && localCoord.y < SubChunkBlockSize
             && localCoord.z >= 0 && localCoord.z < SubChunkBlockSize;
     }
@@ -38,9 +38,9 @@ public class SubChunk
     {
         return new Vector3Int
         (
-            (blockCoord.x % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize,
-            (blockCoord.y % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize,
-            (blockCoord.z % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize
+            (blockCoord.x % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize,
+            (blockCoord.y % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize,
+            (blockCoord.z % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize
         );
     }
     /// <summary>
@@ -54,9 +54,9 @@ public class SubChunk
     {
         return new Vector3Int
         (
-            (x % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize,
-            (y % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize,
-            (z % SubChunkBlockSize + SubChunkBlockSize) * SubChunkBlockSize
+            (x % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize,
+            (y % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize,
+            (z % SubChunkBlockSize + SubChunkBlockSize) % SubChunkBlockSize
         );
     }
 

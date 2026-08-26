@@ -23,7 +23,7 @@ public class Chunk
         return x >= 0 && x < SubChunk.SubChunkBlockSize
             && z >= 0 && z < SubChunk.SubChunkBlockSize
             && y >= MinSubChunkIndex * SubChunk.SubChunkBlockSize
-            && y < MaxSubChunkIndex * SubChunk.SubChunkBlockSize;
+            && y < (MaxSubChunkIndex + 1) * SubChunk.SubChunkBlockSize;
     }
 
     public bool IsCorrectChunkLocalCoord(Vector3Int ChunkLocalCoord)
@@ -31,22 +31,22 @@ public class Chunk
         return ChunkLocalCoord.x >= 0 && ChunkLocalCoord.x < SubChunk.SubChunkBlockSize
             && ChunkLocalCoord.z >= 0 && ChunkLocalCoord.z < SubChunk.SubChunkBlockSize
             && ChunkLocalCoord.y >= MinSubChunkIndex * SubChunk.SubChunkBlockSize
-            && ChunkLocalCoord.y < MaxSubChunkIndex * SubChunk.SubChunkBlockSize;
+            && ChunkLocalCoord.y < (MaxSubChunkIndex + 1) * SubChunk.SubChunkBlockSize;
     }
 
     public static Vector3Int DimensionCoordToChunkLocalCoord(Vector3Int dimensionCoord)
     {
         return new Vector3Int
         (
-            (dimensionCoord.x & SubChunk.SubChunkBlockSize + SubChunk.SubChunkBlockSize) % SubChunk.SubChunkBlockSize,
+            (dimensionCoord.x % SubChunk.SubChunkBlockSize + SubChunk.SubChunkBlockSize) % SubChunk.SubChunkBlockSize,
             dimensionCoord.y,
-            (dimensionCoord.y & SubChunk.SubChunkBlockSize + SubChunk.SubChunkBlockSize) % SubChunk.SubChunkBlockSize
+            (dimensionCoord.z % SubChunk.SubChunkBlockSize + SubChunk.SubChunkBlockSize) % SubChunk.SubChunkBlockSize
         );
     }
 
-    public static int DimensionYCoordToSubChunkYIndex(int yCoord)
+    public int DimensionYCoordToSubChunkYIndex(int yCoord)
     {
-        return Mathf.FloorToInt(yCoord * 1.0f * SubChunk.SubChunkBlockSize) / SubChunk.SubChunkBlockSize;
+        return Mathf.FloorToInt(yCoord * 1.0f / SubChunk.SubChunkBlockSize) - MinSubChunkIndex;
     }
 
     public ushort GetBlockAt(Vector3Int chunkLocalCoord)
@@ -67,13 +67,20 @@ public class Chunk
 
     private SubChunk CreateNewSubChunk(int subChunkIndex)
     {
-        return new SubChunk(ChunkCoord, subChunkIndex);
+        return new SubChunk(ChunkCoord, subChunkIndex + MinSubChunkIndex);
     }
 
     public Mesh CombinedRenderMesh {get; private set;} = new();
     public bool IsRenderMeshDirty{get; private set; } = true;
 
-    public void MarkRenderMeshDirty() => IsRenderMeshDirty = true;
+    public void MarkRenderMeshDirty()
+    {
+        IsRenderMeshDirty = true;
+        // Sub meshes are cached independently; the combined mesh rebuild reuses them,
+        // so the dirty flag must cascade down or stale culling stays baked in.
+        foreach (var sub in subChunks)
+            if (sub != null) sub.MarkRenderMeshDirty();
+    }
 
     public void RebulidCombinedRenderMesh()
     {
@@ -87,6 +94,7 @@ public class Chunk
         
         foreach(var sub in subChunks)
         {
+            if(sub == null)continue;
             if(sub.IsRenderMeshDirty)sub.RebuildRenderMesh();
             Mesh subMesh = sub.RenderMesh;
             if(subMesh == null)continue;
@@ -100,6 +108,7 @@ public class Chunk
         }
 
         Mesh mesh = new();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.SetVertices(verts);
         mesh.SetColors(colors);
         mesh.SetUVs(0, uv);
@@ -110,4 +119,10 @@ public class Chunk
         IsRenderMeshDirty = false;
     }
 
+
+    public int DistanceTo(Chunk other)
+    {
+        if(other == null)return int.MaxValue;
+        return Mathf.Abs(ChunkCoord.x - other.ChunkCoord.x) + Mathf.Abs(ChunkCoord.y - other.ChunkCoord.y);
+    }
 }

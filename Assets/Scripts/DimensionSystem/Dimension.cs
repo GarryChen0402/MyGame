@@ -8,9 +8,12 @@ public class Dimension
 {
     public DimensionDefinition DimensionDefinitionInfo {get; private set;}
 
+    public DimensionGenerator Generator {get; private set;} = null;
     public Dimension(DimensionDefinition def)
     {
         DimensionDefinitionInfo = def;
+        if(!ResourceSystem.Instance.DimensionGenerator.TryGetResourceWithFullName(def.DimensionGeneratorName, out var generator))return;
+        Generator = generator.GetNewGenerator();
     }
 
     private readonly Dictionary<Vector2Int, Chunk> EnableChunks = new();
@@ -19,6 +22,8 @@ public class Dimension
     {
         //DimensionGenerator, use the Dimension Definition to generate the new chunk of the dimension
         //TODO
+        if(Generator == null)return;
+        Generator.FillNewChunk(chunk, chunk.ChunkCoord, DimensionDefinitionInfo);
     }
 
     public bool IsChunkEnabled(Vector2Int ChunkCoord) => EnableChunks.ContainsKey(ChunkCoord);
@@ -32,10 +37,63 @@ public class Dimension
             Chunk targetChunk = DisableChunks[ChunkCoord];
             DisableChunks.Remove(ChunkCoord);
             EnableChunks[ChunkCoord] = targetChunk;
+            MarkNeighborsRenderMeshDirty(ChunkCoord);
             return;
         }
+        // Create new Chunk
+        GetOrCreateChunk(ChunkCoord);
+        MarkNeighborsRenderMeshDirty(ChunkCoord);
+    }
 
+    public void UnloadChunk(Vector2Int ChunkCoord)
+    {
+        if(IsChunkDisabled(ChunkCoord))return;
+        if (IsChunkEnabled(ChunkCoord))
+        {
+            Chunk target = EnableChunks[ChunkCoord];
+            EnableChunks.Remove(ChunkCoord);
+            DisableChunks[ChunkCoord] = target;
+            // Neighbors lose a solid neighbor: their exposed faces must be re-rendered.
+            MarkNeighborsRenderMeshDirty(ChunkCoord);
+            return;
+        }
+    }
 
+    private void MarkNeighborsRenderMeshDirty(Vector2Int chunkCoord)
+    {
+        MarkDirty(chunkCoord + new Vector2Int(1, 0));
+        MarkDirty(chunkCoord + new Vector2Int(-1, 0));
+        MarkDirty(chunkCoord + new Vector2Int(0, 1));
+        MarkDirty(chunkCoord + new Vector2Int(0, -1));
+    }
+
+    private void MarkDirty(Vector2Int chunkCoord)
+    {
+        if (EnableChunks.TryGetValue(chunkCoord, out var chunk)) chunk.MarkRenderMeshDirty();
+    }
+
+    public Chunk GetOrCreateChunk(Vector2Int ChunkCoord)
+    {
+        if(IsChunkEnabled(ChunkCoord))return EnableChunks[ChunkCoord];
+        if(IsChunkDisabled(ChunkCoord))return DisableChunks[ChunkCoord];
+        Chunk chunk = new(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
+        FillNewChunk(chunk);
+        EnableChunks[ChunkCoord] = chunk;
+        return chunk;
+    }
+
+    public ushort GetBlockAt(Vector3Int dimensionCoord)
+    {
+        var chunkCoord = DimensionCoordToChunkCoord(dimensionCoord);
+        if(IsChunkDisabled(chunkCoord))return 0;
+        if(IsChunkEnabled(chunkCoord))return EnableChunks[chunkCoord].GetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord));
+        return 0;
+    }
+
+    private bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId)
+    {
+        var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
+        return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), blockId);
     }
 
     public static Vector3Int WorldPosToDimensionCoord(Vector3 worldPos)

@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
 
 public class ResourceSystem
@@ -9,8 +9,10 @@ public class ResourceSystem
     public ResourceRegistryTable<CustomModel> CustomModels {get;} = new();
     // Block Definition
     public ResourceRegistryTable<BlockDefinition> BlockDefinitions {get;} = new();
-
+    // Dimension Definiton 
     public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
+    public ResourceRegistryTable<DimensionGeneratorResource> DimensionGenerator {get;} = new();
+
 
     // Texture 
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
