@@ -22,15 +22,23 @@ public class ChunkRenderer : MonoBehaviour
 
         if (chunk.IsRenderMeshDirty)
         {
-            chunk.RebulidCombinedRenderMesh();
-            meshFilter.sharedMesh = chunk.CombinedRenderMesh;
+            // chunk.RebulidCombinedRenderMesh();
+            // meshFilter.sharedMesh = chunk.CombinedRenderMesh;
+            WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
         }
     }
 
     public void SetChunk(Chunk chunk)
     {
         this.chunk = chunk;
-        if(chunk.IsRenderMeshDirty)chunk.RebulidCombinedRenderMesh();
+        if(chunk.IsRenderMeshDirty)WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        // meshFilter.sharedMesh = chunk.CombinedRenderMesh;
+    }
+
+    public void RebuildCombinedRenderMesh()
+    {
+        chunk.RebulidCombinedRenderMesh();
         meshFilter.sharedMesh = chunk.CombinedRenderMesh;
     }
+    
 }

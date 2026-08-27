@@ -70,7 +70,7 @@ public class Chunk
         return new SubChunk(ChunkCoord, subChunkIndex + MinSubChunkIndex);
     }
 
-    public Mesh CombinedRenderMesh {get; private set;} = new();
+    public Mesh CombinedRenderMesh {get; private set;} = new(){indexFormat = UnityEngine.Rendering.IndexFormat.UInt32};
     public bool IsRenderMeshDirty{get; private set; } = true;
 
     public void MarkRenderMeshDirty()
@@ -85,7 +85,7 @@ public class Chunk
     public void RebulidCombinedRenderMesh()
     {
         if(!IsRenderMeshDirty)return;
-        if(CombinedRenderMesh != null)Object.Destroy(CombinedRenderMesh);
+        // if(CombinedRenderMesh != null)Object.Destroy(CombinedRenderMesh);
         List<Vector3> verts = new();
         List<Vector2> uv = new();
         List<Color> colors = new();
@@ -107,15 +107,16 @@ public class Chunk
             foreach(var n in subMesh.normals)normals.Add(n);
         }
 
-        Mesh mesh = new();
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.SetVertices(verts);
-        mesh.SetColors(colors);
-        mesh.SetUVs(0, uv);
-        mesh.SetNormals(normals);
-        mesh.SetTriangles(triangles, 0);
-        mesh.RecalculateBounds();
-        CombinedRenderMesh = mesh;
+        CombinedRenderMesh.Clear();
+        // Mesh mesh = new();
+        // mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        CombinedRenderMesh.SetVertices(verts);
+        CombinedRenderMesh.SetColors(colors);
+        CombinedRenderMesh.SetUVs(0, uv);
+        CombinedRenderMesh.SetNormals(normals);
+        CombinedRenderMesh.SetTriangles(triangles, 0);
+        CombinedRenderMesh.RecalculateBounds();
+        // CombinedRenderMesh = mesh;
         IsRenderMeshDirty = false;
     }
 
@@ -125,4 +126,7 @@ public class Chunk
         if(other == null)return int.MaxValue;
         return Mathf.Abs(ChunkCoord.x - other.ChunkCoord.x) + Mathf.Abs(ChunkCoord.y - other.ChunkCoord.y);
     }
+
+    public int DistanceTo(Vector2Int other)
+        => Mathf.Abs(ChunkCoord.x - other.x) + Mathf.Abs(ChunkCoord.y - other.y);
 }

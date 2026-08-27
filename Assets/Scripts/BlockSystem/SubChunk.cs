@@ -123,8 +123,8 @@ public class SubChunk
     public void RebuildRenderMesh()
     {
         if (!IsRenderMeshDirty) return;
-        if(RenderMesh != null)Object.Destroy(RenderMesh);
-        RenderMesh = SubChunkRenderMeshRebuilder.RebuildSubChunkRenderMesh(this);
+        // if(RenderMesh != null)Object.Destroy(RenderMesh);
+        SubChunkRenderMeshRebuilder.RebuildSubChunkRenderMesh(this, RenderMesh);
         IsRenderMeshDirty = false;
     }
 

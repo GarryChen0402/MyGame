@@ -69,7 +69,11 @@ public class Dimension
 
     private void MarkDirty(Vector2Int chunkCoord)
     {
-        if (EnableChunks.TryGetValue(chunkCoord, out var chunk)) chunk.MarkRenderMeshDirty();
+        if (EnableChunks.TryGetValue(chunkCoord, out var chunk))
+        {
+            chunk.MarkRenderMeshDirty();
+            WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        }
     }
 
     public Chunk GetOrCreateChunk(Vector2Int ChunkCoord)

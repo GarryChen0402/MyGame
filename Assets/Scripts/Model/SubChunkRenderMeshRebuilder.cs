@@ -4,9 +4,10 @@ using UnityEngine;
 
 public static class SubChunkRenderMeshRebuilder
 {
-    public static Mesh RebuildSubChunkRenderMesh(SubChunk sub)
+    public static Mesh RebuildSubChunkRenderMesh(SubChunk sub, Mesh mesh)
     {
         Vector3 origin = sub.GetSubChunkOrigin();
+        mesh.Clear();
         List<Vector3> verts = new();
         List<Vector2> uv = new();
         List<Color> colors= new();
@@ -39,7 +40,7 @@ public static class SubChunkRenderMeshRebuilder
                             verts, uv, colors, normals, triangles, mask, faceRects
                         );
                     }
-        Mesh mesh = new();
+        // Mesh mesh = new();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.SetVertices(verts);
         mesh.SetUVs(0, uv);
