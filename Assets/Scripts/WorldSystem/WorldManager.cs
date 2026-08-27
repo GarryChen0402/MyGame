@@ -50,19 +50,18 @@ public class WorldManager
     public void LoadChunksInDimension(Dimension dim, Vector2Int centerChunkCoord, int range)
     {
         if(dim==null)return;
-        // Load a diamond of chunks within Manhattan distance <= range
+        // Load a square of chunks with |x|, |z| <= range (Chebyshev distance)
         for(int x = -range; x <= range; x++)
-        {
-            int maxZ = range - Mathf.Abs(x);
-            for(int z = -maxZ; z <= maxZ; z++)
+            for(int z = -range; z <= range; z++)
                 dim.LoadChunk(centerChunkCoord + new Vector2Int(x, z));
-        }
 
         Chunk centerChunk = dim.GetOrCreateChunk(centerChunkCoord);
         List<Vector2Int> unloadPendingChunkCoords = new();
         foreach(var chunk in dim.GetEnableChunks())
         {
-            if(chunk.DistanceTo(centerChunk) > range)unloadPendingChunkCoords.Add(chunk.ChunkCoord);
+            Vector2Int delta = chunk.ChunkCoord - centerChunk.ChunkCoord;
+            if(Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.y)) > range)
+                unloadPendingChunkCoords.Add(chunk.ChunkCoord);
         }
 
         foreach(var coord in unloadPendingChunkCoords)dim.UnloadChunk(coord);

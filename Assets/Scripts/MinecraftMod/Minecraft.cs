@@ -8,7 +8,7 @@ public class Minecraft : IMod
     {
         modId = ModId,
         name = "test_dim",
-        MinSubChunkIndex = -1,
+        MinSubChunkIndex = -4,
         MaxSubChunkIndex = 1,
         DimensionGeneratorName = $"{ModId}:test_dim_generator"
     };

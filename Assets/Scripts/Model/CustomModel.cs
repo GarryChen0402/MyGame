@@ -10,19 +10,21 @@ public class CustomModel : ResourceType
 
     // Returns face name -> direction of the outward normal, rounded to integer axes.
     // Cached lazily because MeshData never changes after parsing.
+    // Thread-safe for concurrent first access (worker threads build the mesh):
+    // build into a local dict and publish once, so no two threads ever mutate
+    // the same Dictionary instance (a losing build is simply discarded).
     public Dictionary<string, Vector3Int> GetFaceDirections()
     {
-        if (faceDirectionsCache == null)
+        if (faceDirectionsCache != null) return faceDirectionsCache;
+        var cache = new Dictionary<string, Vector3Int>();
+        foreach (var kvp in MeshData)
         {
-            faceDirectionsCache = new Dictionary<string, Vector3Int>();
-            foreach (var kvp in MeshData)
-            {
-                Vector3 n = kvp.Value.normals.Count > 0 ? kvp.Value.normals[0] : Vector3.zero;
-                faceDirectionsCache[kvp.Key] = new Vector3Int(
-                    Mathf.RoundToInt(n.x), Mathf.RoundToInt(n.y), Mathf.RoundToInt(n.z));
-            }
+            Vector3 n = kvp.Value.normals.Count > 0 ? kvp.Value.normals[0] : Vector3.zero;
+            cache[kvp.Key] = new Vector3Int(
+                Mathf.RoundToInt(n.x), Mathf.RoundToInt(n.y), Mathf.RoundToInt(n.z));
         }
-        return faceDirectionsCache;
+        faceDirectionsCache = cache;
+        return cache;
     }
 
     // Appends vertex data of all non-occluded faces to the given lists.

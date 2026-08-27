@@ -70,6 +70,14 @@ public class Chunk
         return new SubChunk(ChunkCoord, subChunkIndex + MinSubChunkIndex);
     }
 
+    // Returns the subchunk at the given dimension subchunk index, or null when out of range.
+    public SubChunk GetSubChunk(int subChunkIndexInChunk)
+    {
+        int idx = subChunkIndexInChunk - MinSubChunkIndex;
+        if (idx < 0 || idx >= subChunks.Length) return null;
+        return subChunks[idx];
+    }
+
     public Mesh CombinedRenderMesh {get; private set;} = new(){indexFormat = UnityEngine.Rendering.IndexFormat.UInt32};
     public bool IsRenderMeshDirty{get; private set; } = true;
 
@@ -81,6 +89,8 @@ public class Chunk
         foreach (var sub in subChunks)
             if (sub != null) sub.MarkRenderMeshDirty();
     }
+
+    public void MarkRenderMeshClean() => IsRenderMeshDirty = false;
 
     public void RebulidCombinedRenderMesh()
     {

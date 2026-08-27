@@ -29,6 +29,9 @@ public class Dimension
     public bool IsChunkEnabled(Vector2Int ChunkCoord) => EnableChunks.ContainsKey(ChunkCoord);
     public bool IsChunkDisabled(Vector2Int ChunkCoord) => DisableChunks.ContainsKey(ChunkCoord);
 
+    public bool TryGetChunk(Vector2Int chunkCoord, out Chunk chunk)
+        => EnableChunks.TryGetValue(chunkCoord, out chunk);
+
     public void LoadChunk(Vector2Int ChunkCoord)
     {
         if(IsChunkEnabled(ChunkCoord))return;
@@ -37,6 +40,8 @@ public class Dimension
             Chunk targetChunk = DisableChunks[ChunkCoord];
             DisableChunks.Remove(ChunkCoord);
             EnableChunks[ChunkCoord] = targetChunk;
+            // Renderer meshes don't survive unload; force a rebuild on re-enable.
+            targetChunk.MarkRenderMeshDirty();
             MarkNeighborsRenderMeshDirty(ChunkCoord);
             return;
         }

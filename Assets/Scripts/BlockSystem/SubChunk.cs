@@ -97,6 +97,12 @@ public class SubChunk
         return blockData[index];
     }
 
+    public ushort[] CopyBlockData() => (ushort[])blockData.Clone();
+
+    // No bounds checks: caller guarantees valid subchunk-local coords.
+    public ushort GetBlockAtRaw(int x, int y, int z)
+        => blockData[x * SubChunkBlockSize * SubChunkBlockSize + y * SubChunkBlockSize + z];
+
     public bool TrySetBlockAt(Vector3Int subChunkLocalCoord, ushort blockId)
     {
         if(!IsCorrectCoord(subChunkLocalCoord))return false;
