@@ -35,19 +35,18 @@ public class Dimension
     public void LoadChunk(Vector2Int ChunkCoord)
     {
         if(IsChunkEnabled(ChunkCoord))return;
+        Chunk chunk;
         if (IsChunkDisabled(ChunkCoord))
         {
-            Chunk targetChunk = DisableChunks[ChunkCoord];
+            chunk = DisableChunks[ChunkCoord];
             DisableChunks.Remove(ChunkCoord);
-            EnableChunks[ChunkCoord] = targetChunk;
-            // Renderer meshes don't survive unload; force a rebuild on re-enable.
-            targetChunk.MarkRenderMeshDirty();
-            MarkNeighborsRenderMeshDirty(ChunkCoord);
-            return;
+            EnableChunks[ChunkCoord] = chunk;
         }
-        // Create new Chunk
-        GetOrCreateChunk(ChunkCoord);
-        MarkNeighborsRenderMeshDirty(ChunkCoord);
+        else
+        {
+            chunk = GetOrCreateChunk(ChunkCoord);
+        }
+        EventBus.Instance.Publish(new ChunkLoadedEvent(chunk));
     }
 
     public void UnloadChunk(Vector2Int ChunkCoord)
@@ -58,26 +57,8 @@ public class Dimension
             Chunk target = EnableChunks[ChunkCoord];
             EnableChunks.Remove(ChunkCoord);
             DisableChunks[ChunkCoord] = target;
-            // Neighbors lose a solid neighbor: their exposed faces must be re-rendered.
-            MarkNeighborsRenderMeshDirty(ChunkCoord);
+            EventBus.Instance.Publish(new ChunkUnloadedEvent(ChunkCoord));
             return;
-        }
-    }
-
-    private void MarkNeighborsRenderMeshDirty(Vector2Int chunkCoord)
-    {
-        MarkDirty(chunkCoord + new Vector2Int(1, 0));
-        MarkDirty(chunkCoord + new Vector2Int(-1, 0));
-        MarkDirty(chunkCoord + new Vector2Int(0, 1));
-        MarkDirty(chunkCoord + new Vector2Int(0, -1));
-    }
-
-    private void MarkDirty(Vector2Int chunkCoord)
-    {
-        if (EnableChunks.TryGetValue(chunkCoord, out var chunk))
-        {
-            chunk.MarkRenderMeshDirty();
-            WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
         }
     }
 
@@ -86,7 +67,9 @@ public class Dimension
         if(IsChunkEnabled(ChunkCoord))return EnableChunks[ChunkCoord];
         if(IsChunkDisabled(ChunkCoord))return DisableChunks[ChunkCoord];
         Chunk chunk = new(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
+        chunk.SilentMode = true;   // bulk generation: one ChunkLoadedEvent after, not 24k block events
         FillNewChunk(chunk);
+        chunk.SilentMode = false;
         EnableChunks[ChunkCoord] = chunk;
         return chunk;
     }
@@ -99,7 +82,7 @@ public class Dimension
         return 0;
     }
 
-    private bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId)
+    public bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId)
     {
         var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
         return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), blockId);

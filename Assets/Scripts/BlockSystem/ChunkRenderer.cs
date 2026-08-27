@@ -22,31 +22,47 @@ public class ChunkRenderer : MonoBehaviour
         meshRenderer.material = ResourceSystem.Instance.BlockMaterial;
         renderMeshes[0] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
         renderMeshes[1] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+
+        EventBus.Instance.Subscribe<BlockChangedEvent>(OnBlockChanged);
+        EventBus.Instance.Subscribe<ChunkLoadedEvent>(OnChunkLoaded);
+        EventBus.Instance.Subscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
     }
 
-    private void Update()
+    private void OnDestroy()
     {
-        if(chunk == null)return;
-
-        if (chunk.IsRenderMeshDirty)
-        {
-            // chunk.RebulidCombinedRenderMesh();
-            // meshFilter.sharedMesh = chunk.CombinedRenderMesh;
-            WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
-        }
+        // Unsubscribe is idempotent on multicast delegate snapshots; safe to call twice.
+        EventBus.Instance.Unsubscribe<BlockChangedEvent>(OnBlockChanged);
+        EventBus.Instance.Unsubscribe<ChunkLoadedEvent>(OnChunkLoaded);
+        EventBus.Instance.Unsubscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
     }
+
+    // A block inside this chunk changed.
+    private void OnBlockChanged(BlockChangedEvent evt)
+    {
+        if(chunk == null || evt.ChunkCoord != chunk.ChunkCoord)return;
+        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+    }
+
+    // A neighbor was loaded or unloaded: this chunk's exposed faces may change.
+    private void OnChunkLoaded(ChunkLoadedEvent evt)
+    {
+        if(chunk == null || !IsNeighbor(evt.Chunk.ChunkCoord))return;
+        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+    }
+
+    private void OnChunkUnloaded(ChunkUnloadedEvent evt)
+    {
+        if(chunk == null || !IsNeighbor(evt.ChunkCoord))return;
+        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+    }
+
+    private bool IsNeighbor(Vector2Int coord)
+        => Mathf.Abs(coord.x - chunk.ChunkCoord.x) + Mathf.Abs(coord.y - chunk.ChunkCoord.y) == 1;
 
     public void SetChunk(Chunk chunk)
     {
         this.chunk = chunk;
-        if(chunk.IsRenderMeshDirty)WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
-        // meshFilter.sharedMesh = chunk.CombinedRenderMesh;
-    }
-
-    public void RebuildCombinedRenderMesh()
-    {
-        chunk.RebulidCombinedRenderMesh();
-        meshFilter.sharedMesh = chunk.CombinedRenderMesh;
+        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
     }
 
     // Main thread only: uploads the task's computed data into the idle mesh and swaps it in.
@@ -64,5 +80,4 @@ public class ChunkRenderer : MonoBehaviour
         meshFilter.sharedMesh = mesh;
         activeMeshIndex = target;
     }
-
 }

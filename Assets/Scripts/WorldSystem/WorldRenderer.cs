@@ -11,33 +11,31 @@ public class WorldRenderer : MonoBehaviour
     private static WorldRenderer instance = null;
     public static WorldRenderer Instance => instance;
 
-    // [SerializeField]
-    // private List<ChunkRenderer> chunkRenderers = new();
-
     [SerializeField]
     private Transform playerTransform;
-    private Vector2Int playerLastChunkCoord = new(int.MaxValue, int.MaxValue);
 
     public Dimension CurrentRenderDimension {get; private set;} = null;
+
     private void Awake()
     {
         if(instance == null)instance = this;
         else Destroy(gameObject);
+
+        EventBus.Instance.Subscribe<ChunkLoadedEvent>(OnChunkLoaded);
+        EventBus.Instance.Subscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
     }
-    
+
+    private void OnDestroy()
+    {
+        EventBus.Instance.Unsubscribe<ChunkLoadedEvent>(OnChunkLoaded);
+        EventBus.Instance.Unsubscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
+    }
 
     private void Update()
     {
         if(playerTransform == null)return;
-        var currentPlayerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
-        if(currentPlayerChunkCoord != playerLastChunkCoord)
-        {
-            playerLastChunkCoord = currentPlayerChunkCoord;
-            RefreshChunkRenderers();
-        }
-        // playerLastChunkCoord = currentPlayerChunkCoord;
-        // RefreshChunkRenderers();
-
+        // View forwards the player position; chunk load/unload is the Controller's job.
+        WorldManager.Instance.OnPlayerMoved(playerTransform.position);
         ProcessRebuildChunkQueue();
     }
 
@@ -45,46 +43,62 @@ public class WorldRenderer : MonoBehaviour
     {
         if(!WorldManager.Instance.TryGetDimension(dimId, out var dim))return;
         CurrentRenderDimension = dim;
-        RefreshChunkRenderers();
+        // Old-dimension renderers are no longer valid; the new dimension's chunks
+        // (re)load through events once ForceLoadAround generates them.
+        foreach(var renderer in chunkRenderers.Values)Destroy(renderer.gameObject);
+        chunkRenderers.Clear();
+        if(playerTransform != null)
+            WorldManager.Instance.ForceLoadAround(playerTransform.position);
+        // Chunks enabled before the dimension was set never fired ChunkLoaded
+        // (the handler was still ignoring events), so sync them now.
+        SyncExistingRenderers();
     }
+
+    // View: renderer lifecycle is driven by ChunkLoaded / ChunkUnloaded events.
+    private void OnChunkLoaded(ChunkLoadedEvent evt)
+    {
+        if(CurrentRenderDimension == null)return;
+        if(!CurrentRenderDimension.IsChunkEnabled(evt.Chunk.ChunkCoord))return;   // other dimension
+        if(chunkRenderers.ContainsKey(evt.Chunk.ChunkCoord))return;
+        CreateRenderer(evt.Chunk);
+    }
+
+    // Chunks already enabled (e.g. preloaded before the render dimension was set,
+    // or re-enabled from the disabled pool) get a renderer here instead of via event.
+    private void SyncExistingRenderers()
+    {
+        if(CurrentRenderDimension == null)return;
+        foreach(var chunk in CurrentRenderDimension.GetEnableChunks())
+            if(!chunkRenderers.ContainsKey(chunk.ChunkCoord))
+                CreateRenderer(chunk);
+    }
+
+    private void CreateRenderer(Chunk chunk)
+    {
+        var go = new GameObject($"Chunk Coord : {chunk.ChunkCoord.x} : {chunk.ChunkCoord.y}");
+        go.transform.SetParent(gameObject.transform);
+        go.transform.localPosition = new Vector3(
+            chunk.ChunkCoord.x * SubChunk.SubChunkBlockSize,
+            0,
+            chunk.ChunkCoord.y * SubChunk.SubChunkBlockSize
+        );
+        var chunkRenderer = go.AddComponent<ChunkRenderer>();
+        chunkRenderer.SetChunk(chunk);
+        chunkRenderers[chunk.ChunkCoord] = chunkRenderer;
+    }
+
+    private void OnChunkUnloaded(ChunkUnloadedEvent evt)
+    {
+        if(chunkRenderers.Remove(evt.ChunkCoord, out var renderer))
+            Destroy(renderer.gameObject);
+    }
+
     private readonly Dictionary<Vector2Int, ChunkRenderer> chunkRenderers = new();
     private readonly List<Chunk> rebuildQueue = new();   // re-sorted by player distance on each dispatch
     private readonly List<ChunkMeshBuildTask> inflight = new();
     private readonly List<ChunkMeshBuildTask> ready = new();
     private const float MaxRebuildChunkCountPerFrameMs = 2f;
 
-    private void RefreshChunkRenderers()
-    {
-        if(CurrentRenderDimension == null)return;
-        WorldManager.Instance.LoadChunksInDimension(CurrentRenderDimension, 
-            Dimension.WorldPosToChunkCoord(playerTransform.position) , 8);
-
-        foreach(var coord in chunkRenderers.Keys.ToList())
-        {
-            if (!CurrentRenderDimension.IsChunkEnabled(coord))
-            {
-                Destroy(chunkRenderers[coord].gameObject);
-                chunkRenderers.Remove(coord);
-            }
-        }
-
-        foreach(var chunk in CurrentRenderDimension.GetEnableChunks())
-        {
-            if (!chunkRenderers.ContainsKey(chunk.ChunkCoord))
-            {
-                var go = new GameObject($"Chunk Coord : {chunk.ChunkCoord.x} : {chunk.ChunkCoord.y}");
-                go.transform.SetParent(gameObject.transform);
-                go.transform.localPosition = new Vector3(
-                    chunk.ChunkCoord.x * SubChunk.SubChunkBlockSize,
-                    0,
-                    chunk.ChunkCoord.y * SubChunk.SubChunkBlockSize
-                );
-                var chunkRenderer = go.AddComponent<ChunkRenderer>();
-                chunkRenderer.SetChunk(chunk);
-                chunkRenderers[chunk.ChunkCoord] = chunkRenderer;
-            }
-        }
-    }
     public void MarkChunkIntoRebuildQueue(Chunk chunk)
     {
         if(rebuildQueue.Contains(chunk))return;
@@ -94,16 +108,7 @@ public class WorldRenderer : MonoBehaviour
     public const int MaxConcurrentBuilds = 4;
     private void ProcessRebuildChunkQueue()
     {
-        // int budget = 2;
-        // // float deadLine = Time.realtimeSinceStartup + MaxRebuildChunkCountPerFrameMs / 1000f;
-        // while(rebuildQueue.Count > 0 && budget-- > 0)
-        // {
-        //     var chunk = rebuildQueue.Dequeue();
-        //     if(!chunkRenderers.ContainsKey(chunk.ChunkCoord))continue;
-        //     chunk.RebulidCombinedRenderMesh();
-        //     if(chunkRenderers.TryGetValue(chunk.ChunkCoord, out var renderer))
-        //         renderer.RebuildCombinedRenderMesh();
-        // }
+        if(CurrentRenderDimension == null)return;
         // Dispatch nearest chunks first. The list is small (<= (2r+1)^2) and the player
         // keeps moving, so re-sorting every frame is cheap and stays correct.
         Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
@@ -116,17 +121,22 @@ public class WorldRenderer : MonoBehaviour
 
         while(rebuildQueue.Count > 0 && inflight.Count < MaxConcurrentBuilds)
         {
-            var chunk = rebuildQueue[0];
-            rebuildQueue.RemoveAt(0);
+            // Skip entries whose task is already in flight or awaiting upload: their
+            // result is still to be applied, so keep them queued for a re-snapshot
+            // afterwards (a block change or neighbor event can arrive mid-flight).
+            int i = 0;
+            while(i < rebuildQueue.Count &&
+                (inflight.Exists(t => t.chunk == rebuildQueue[i]) || ready.Exists(t => t.chunk == rebuildQueue[i])))
+                i++;
+            if(i >= rebuildQueue.Count)break;
+
+            var chunk = rebuildQueue[i];
+            rebuildQueue.RemoveAt(i);
             if(!chunkRenderers.ContainsKey(chunk.ChunkCoord))continue;
-            // One task per chunk at a time; a re-dirty during flight re-enqueues after apply.
-            if(inflight.Exists(t => t.chunk == chunk) || ready.Exists(t => t.chunk == chunk))continue;
             var task = new ChunkMeshBuildTask(chunk);
             task.SnapShot();
-            chunk.MarkRenderMeshClean();   // renderer.Update won't re-enqueue while the task is in flight
             ThreadPool.QueueUserWorkItem(_ => Compute(task));
             inflight.Add(task);
-
         }
 
         for(int i=inflight.Count -1 ; i >= 0; i--)
@@ -145,7 +155,7 @@ public class WorldRenderer : MonoBehaviour
             ready.RemoveAt(0);
             if(!chunkRenderers.ContainsKey(task.chunk.ChunkCoord))
             {
-                task.chunk.MarkRenderMeshDirty();   // restore pending state for a later re-enable
+                // Renderer was destroyed (chunk unloaded); a later ChunkLoaded re-enqueues.
                 continue;
             }
             chunkRenderers[task.chunk.ChunkCoord].ApplyMeshData(task);

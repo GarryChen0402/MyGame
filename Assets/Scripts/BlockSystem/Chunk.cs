@@ -57,12 +57,19 @@ public class Chunk
         else return subChunks[subChunkIndex].GetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
     }
 
+    // Suppresses BlockChangedEvent publishing (chunk generation fills thousands of
+    // blocks at once; the renderer rebuilds once on ChunkLoaded instead).
+    public bool SilentMode { get; set; }
+
     public bool TrySetBlockAt(Vector3Int chunkLocalCoord, ushort blockId)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
         int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
         if(subChunks[subChunkIndex] == null)subChunks[subChunkIndex] = CreateNewSubChunk(subChunkIndex);
-        return subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), blockId);
+        bool ok = subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), blockId);
+        if(ok && !SilentMode)
+            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, blockId));
+        return ok;
     }
 
     private SubChunk CreateNewSubChunk(int subChunkIndex)
@@ -77,59 +84,6 @@ public class Chunk
         if (idx < 0 || idx >= subChunks.Length) return null;
         return subChunks[idx];
     }
-
-    public Mesh CombinedRenderMesh {get; private set;} = new(){indexFormat = UnityEngine.Rendering.IndexFormat.UInt32};
-    public bool IsRenderMeshDirty{get; private set; } = true;
-
-    public void MarkRenderMeshDirty()
-    {
-        IsRenderMeshDirty = true;
-        // Sub meshes are cached independently; the combined mesh rebuild reuses them,
-        // so the dirty flag must cascade down or stale culling stays baked in.
-        foreach (var sub in subChunks)
-            if (sub != null) sub.MarkRenderMeshDirty();
-    }
-
-    public void MarkRenderMeshClean() => IsRenderMeshDirty = false;
-
-    public void RebulidCombinedRenderMesh()
-    {
-        if(!IsRenderMeshDirty)return;
-        // if(CombinedRenderMesh != null)Object.Destroy(CombinedRenderMesh);
-        List<Vector3> verts = new();
-        List<Vector2> uv = new();
-        List<Color> colors = new();
-        List<Vector3> normals = new();
-        List<int> triangles = new();
-        
-        foreach(var sub in subChunks)
-        {
-            if(sub == null)continue;
-            if(sub.IsRenderMeshDirty)sub.RebuildRenderMesh();
-            Mesh subMesh = sub.RenderMesh;
-            if(subMesh == null)continue;
-            int vStart = verts.Count;
-            
-            foreach(var v in subMesh.vertices)verts.Add(v);
-            foreach(var u in subMesh.uv)uv.Add(u);
-            foreach(var t in subMesh.triangles)triangles.Add(vStart + t);
-            foreach(var c in subMesh.colors)colors.Add(c);
-            foreach(var n in subMesh.normals)normals.Add(n);
-        }
-
-        CombinedRenderMesh.Clear();
-        // Mesh mesh = new();
-        // mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        CombinedRenderMesh.SetVertices(verts);
-        CombinedRenderMesh.SetColors(colors);
-        CombinedRenderMesh.SetUVs(0, uv);
-        CombinedRenderMesh.SetNormals(normals);
-        CombinedRenderMesh.SetTriangles(triangles, 0);
-        CombinedRenderMesh.RecalculateBounds();
-        // CombinedRenderMesh = mesh;
-        IsRenderMeshDirty = false;
-    }
-
 
     public int DistanceTo(Chunk other)
     {

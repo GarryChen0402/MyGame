@@ -2,11 +2,42 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class WorldManager 
+public class WorldManager
 {
     public static WorldManager Instance {get;} = new();
 
     public readonly Dictionary<ushort, Dimension> Dimensions = new();
+
+    private Vector2Int lastPlayerChunkCoord = new(int.MaxValue, int.MaxValue);
+    private const int ChunkLoadRange = 8;
+
+    // Controller: the only place that decides which chunks are loaded. Called by the
+    // view (WorldRenderer) with the raw player position; detects chunk crossings here.
+    public void OnPlayerMoved(Vector3 worldPos)
+    {
+        Vector2Int coord = Dimension.WorldPosToChunkCoord(worldPos);
+        if(coord == lastPlayerChunkCoord)return;
+        lastPlayerChunkCoord = coord;
+        foreach(var dim in Dimensions.Values)
+            LoadChunksInDimension(dim, coord, ChunkLoadRange);
+    }
+
+    // Forces a reload around a position even if the player hasn't crossed a chunk
+    // boundary (dimension switch / initial setup).
+    public void ForceLoadAround(Vector3 worldPos)
+    {
+        lastPlayerChunkCoord = Dimension.WorldPosToChunkCoord(worldPos);
+        foreach(var dim in Dimensions.Values)
+            LoadChunksInDimension(dim, lastPlayerChunkCoord, ChunkLoadRange);
+    }
+
+    // Controller entry for player block operations. Returns false when the target
+    // position is already occupied or the dimension doesn't exist.
+    public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort blockId)
+    {
+        if(!TryGetOrGenerateDimension(dimId, out var dim))return false;
+        return dim.TrySetBlockAt(dimensionCoord, blockId);
+    }
 
     public bool IsDimensionExist(ushort dimensionId) => Dimensions.ContainsKey(dimensionId);
 
@@ -30,7 +61,7 @@ public class WorldManager
         if(!ResourceSystem.Instance.DimensionDefinitions.TryGetStringId(dimId, out var name))return false;
         return TryGetOrGenerateDimension(name, out dimension);
     }
-    
+
     public bool TryGetDimension(string dimensionName, out Dimension dim)
     {
         dim = null;

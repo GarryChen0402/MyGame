@@ -437,8 +437,6 @@ GameObject:
   - component: {fileID: 1475318944}
   - component: {fileID: 1475318943}
   - component: {fileID: 1475318942}
-  - component: {fileID: 1475318945}
-  - component: {fileID: 1475318946}
   - component: {fileID: 1475318947}
   - component: {fileID: 1475318948}
   m_Layer: 0
@@ -513,31 +511,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1475318945
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1475318940}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a6059da744c302a4288ca36a23afc245, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  SubChunkCoord: {x: 1, y: 0, z: 0}
---- !u!114 &1475318946
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1475318940}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e5d39792c1059e40b50548664a04abb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1475318947
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -562,7 +535,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7669df99ec764484dac5f0136676b3c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  chunkRenderers: []
   playerTransform: {fileID: 330585546}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

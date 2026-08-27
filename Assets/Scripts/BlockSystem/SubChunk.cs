@@ -109,7 +109,6 @@ public class SubChunk
         int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
         if(blockData[index] != 0)return false;
         blockData[index] = blockId;
-        MarkRenderMeshDirty();
         return true;
     }
 
@@ -123,17 +122,4 @@ public class SubChunk
         );
     }
 
-    public Mesh RenderMesh {  get; private set; } = new Mesh();
-    public bool IsRenderMeshDirty { get; private set; } = true;
-
-    public void RebuildRenderMesh()
-    {
-        if (!IsRenderMeshDirty) return;
-        // if(RenderMesh != null)Object.Destroy(RenderMesh);
-        SubChunkRenderMeshRebuilder.RebuildSubChunkRenderMesh(this, RenderMesh);
-        IsRenderMeshDirty = false;
-    }
-
-    public void MarkRenderMeshDirty() => IsRenderMeshDirty = true;
-    
 }
