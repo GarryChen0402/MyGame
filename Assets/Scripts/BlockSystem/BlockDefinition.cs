@@ -8,5 +8,6 @@ public class BlockDefinition : ResourceType
     // false for glass/water/plants: such blocks never hide the faces behind them.
     public bool IsOpaque = true;
 
-    // public List<AABB> AABBs = null;
+    // Block-space collision boxes relative to the block origin; null/empty = full cube.
+    public List<AABB> AABBs = null;
 }
