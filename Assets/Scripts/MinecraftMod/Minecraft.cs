@@ -47,10 +47,10 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:stone",
                 ["right"]  = $"{ModId}:stone"
             },
-            AABBs = new()
-            {
-                new AABB(0, 0, 0, 1, 1, 1)
-            }
+            // AABBs = new()
+            // {
+            //     new AABB(0, 0, 0, 1, 1, 1)
+            // }
         };
 
         BlockDefinition dirtDefinition = new()
@@ -67,10 +67,10 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:dirt",
                 ["right"]  = $"{ModId}:dirt"
             },
-            AABBs = new()
-            {
-                new AABB(0, 0, 0, 1, 1, 1)
-            }
+            // AABBs = new()
+            // {
+            //     new AABB(0, 0, 0, 1, 1, 1)
+            // }
         };
 
         BlockDefinition grassDefinition = new()
@@ -87,10 +87,10 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:grass_side",
                 ["right"]  = $"{ModId}:grass_side"
             },
-            AABBs = new()
-            {
-                new AABB(0, 0, 0, 1, 1, 1)
-            }
+            // AABBs = new()
+            // {
+            //     new AABB(0, 0, 0, 1, 1, 1)
+            // }
         };
 
         ResourceSystem.Instance.BlockDefinitions.Register(air);

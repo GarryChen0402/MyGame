@@ -8,5 +8,5 @@ public class BlockDefinition : ResourceType
     // false for glass/water/plants: such blocks never hide the faces behind them.
     public bool IsOpaque = true;
 
-    public List<AABB> AABBs = null;
+    // public List<AABB> AABBs = null;
 }
