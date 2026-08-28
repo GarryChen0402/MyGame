@@ -28,6 +28,17 @@ public class ResourceSystem
             name = name,
             Atlas = source
         });
+
+    // Lock all resource tables. Called by GameBootstrap after mod registration:
+    // run-time registration is a boot bug and would corrupt atlas UVs / lookups.
+    public void Freeze()
+    {
+        CustomModels.Freeze();
+        BlockDefinitions.Freeze();
+        DimensionDefinitions.Freeze();
+        DimensionGenerator.Freeze();
+        Textures.Freeze();
+    }
     
     public void BuildAtlas()
     {

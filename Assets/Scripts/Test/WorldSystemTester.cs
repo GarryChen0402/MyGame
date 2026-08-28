@@ -10,9 +10,7 @@ public class WorldSystemTester : MonoBehaviour
 
     private IEnumerator Run()
     {
-        new Minecraft().RegisterAllResources();
-        ResourceSystem.Instance.BuildAtlas();
-
+        // Resource registration and atlas packing are handled by GameBootstrap.
         string mod = Minecraft.ModId;
         string dimName = $"{mod}:test_dim";
         if(!ResourceSystem.Instance.DimensionDefinitions.TryGetNumberId(dimName, out ushort dimId)) yield break;
@@ -39,5 +37,8 @@ public class WorldSystemTester : MonoBehaviour
             camera.transform.position = new Vector3(0.5f, 80f, 0.5f);
             camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         }
+
+        // World is built; join the player so the game logic can start.
+        _ = Player.Instance;
     }
 }

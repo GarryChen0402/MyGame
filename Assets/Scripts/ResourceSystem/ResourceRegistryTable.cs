@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Unity.VisualScripting;
+using UnityEngine;
 
 
 public class ResourceType
@@ -19,9 +20,20 @@ public class ResourceRegistryTable<T> where T : ResourceType
     private Dictionary<ushort, T> numberIdToResourceInfo = new();
 
     private ushort nextNumber = 0;
+    private bool frozen;
+
+    // Make the table read-only. Register after freezing is a boot bug (e.g. a
+    // texture added after atlas packing would never get UVs), so it fails loudly.
+    public void Freeze() => frozen = true;
 
     public bool Register(T res)
     {
+        if(frozen)
+        {
+            Debug.LogError($"[ResourceRegistry] {typeof(T).Name} is frozen, rejected: {res.FullName}");
+            return false;
+        }
+
         string fullName = res.FullName;
         if(stringIdToNumberId.ContainsKey(fullName))return false;
         numberIdToStringId[nextNumber] = fullName;

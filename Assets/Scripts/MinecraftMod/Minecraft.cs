@@ -4,6 +4,10 @@ using UnityEngine;
 public class Minecraft : IMod
 {
     public static readonly string ModId = "Minecraft".ToLower();
+
+    string IMod.ModId => ModId;
+    public int LoadPriority => 0;
+
     private static DimensionDefinition testDi = new()
     {
         modId = ModId,

@@ -7,19 +7,9 @@ public class StoneTester : MonoBehaviour
     {
         transform.position = Vector3.zero;
 
-        // 1. 注册 mod 资源（贴图 + 方块定义）
-        new Minecraft().RegisterAllResources();
+        // Resource registration and atlas packing are handled by GameBootstrap.
         string stoneId = "minecraft:stone";
-        // 2. 模型注册（模型加载流程暂放这里，之后应移到 mod 内）
-        // CustomModel cube = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/full_cube").text);
-        // cube.modId = Minecraft.ModId;
-        // cube.name = "full_block";
-        // ResourceSystem.Instance.CustomModels.Register(cube);
-
-        // 3. 打包图集，回填每个贴图的 AtlasUVRect
-        ResourceSystem.Instance.BuildAtlas();
-
-        // 4. 解析 stone → 模型 → 贴图
+        // 解析 stone → 模型 → 贴图
         if (!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithFullName($"{stoneId}", out var stone))
         {
             Debug.LogError("stone 方块定义未注册");
@@ -36,14 +26,14 @@ public class StoneTester : MonoBehaviour
             return;
         }
 
-        // 5. 每个面对应一个图集区域
+        // 每个面对应一个图集区域
         var faceRects = new Dictionary<string, Rect>();
         foreach (var face in model.MeshData)
         {
             faceRects[face.Key] = tex.AtlasUVRect;
         }
 
-        // 6. 生成 mesh
+        // 生成 mesh
         var verts = new List<Vector3>();
         var uv = new List<Vector2>();
         var colors = new List<Color>();

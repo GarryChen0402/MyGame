@@ -12,10 +12,12 @@ public class Player : Entity
 
     private Player()
     {
+        // Spawn 40 blocks up so the player falls onto the world from above;
+        // the box pivot (Position) lands exactly on (0, 40, 0).
         AABBs.Add(new AABB()
         {
-            MinRange = new Vector3(-0.3f, 0, -0.3f),
-            MaxRange = new Vector3( 0.3f, 1.8f, 0.3f)
+            MinRange = new Vector3(-0.3f, 39.1f, -0.3f),
+            MaxRange = new Vector3( 0.3f, 40.9f, 0.3f)
         });
     }
 }
