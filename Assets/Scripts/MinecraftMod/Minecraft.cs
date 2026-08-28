@@ -46,6 +46,10 @@ public class Minecraft : IMod
                 ["back"]   = $"{ModId}:stone",
                 ["left"]   = $"{ModId}:stone",
                 ["right"]  = $"{ModId}:stone"
+            },
+            AABBs = new()
+            {
+                new AABB(0, 0, 0, 1, 1, 1)
             }
         };
 
@@ -62,6 +66,10 @@ public class Minecraft : IMod
                 ["back"]   = $"{ModId}:dirt",
                 ["left"]   = $"{ModId}:dirt",
                 ["right"]  = $"{ModId}:dirt"
+            },
+            AABBs = new()
+            {
+                new AABB(0, 0, 0, 1, 1, 1)
             }
         };
 
@@ -78,6 +86,10 @@ public class Minecraft : IMod
                 ["back"]   = $"{ModId}:grass_side",
                 ["left"]   = $"{ModId}:grass_side",
                 ["right"]  = $"{ModId}:grass_side"
+            },
+            AABBs = new()
+            {
+                new AABB(0, 0, 0, 1, 1, 1)
             }
         };
 
