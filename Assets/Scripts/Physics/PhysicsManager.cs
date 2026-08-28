@@ -135,7 +135,7 @@ public class PhysicsManager
     // Enumerate the world-space collision boxes of the block at coord, taken from
     // its BlockDefinition.AABBs (block-space, relative to the block origin).
     // Falls back to a full cube when the definition has no custom boxes.
-    private static void ForEachBlockCollisionBox(Dimension dim, Vector3Int coord, System.Action<AABB> onBox)
+    public static void ForEachBlockCollisionBox(Dimension dim, Vector3Int coord, System.Action<AABB> onBox)
     {
         ushort blockId = dim.GetBlockAt(coord);
         if(blockId == 0) return;

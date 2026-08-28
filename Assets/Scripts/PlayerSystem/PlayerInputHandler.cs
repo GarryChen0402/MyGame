@@ -14,6 +14,8 @@ public class PlayerInputHandler : MonoBehaviour
     [SerializeField]
     private float mouseSensitivity = 2f;
 
+    private const float RaycastReach = 4.5f;
+
     private void Awake()
     {
         player = Player.Instance;
@@ -35,6 +37,18 @@ public class PlayerInputHandler : MonoBehaviour
         player.yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
         player.pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
         player.pitch = Mathf.Clamp(player.pitch, -90f, 90f);
+
+        // Raycast from the eyes toward the crosshair; store the result on the player.
+        Vector3 eye = player.Position + Vector3.up * Player.EyeHeight;
+        Vector3 dir = Quaternion.Euler(player.pitch, player.yaw, 0) * Vector3.forward;
+        RaycastHit hit = default;
+        if(WorldManager.Instance.TryGetDimension(player.DimensionId, out Dimension dim))
+            hit = Raycaster.Raycast(dim, eye, dir, RaycastReach, out hit) ? hit : default;
+        player.CurrentRaycastHitResult = hit;
+        if(hit.IsHit)
+            Debug.Log($"Looking at block {hit.BlockDimensionCoord}, dist {hit.Distance:F2}, normal {hit.Normal}");
+        else
+            Debug.Log("Looking at air");
 
         Vector2 moveDir = Vector2.zero;
         int horizontalMove = 0;
