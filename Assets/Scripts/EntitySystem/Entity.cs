@@ -11,6 +11,7 @@ public class Entity // Data Class
     public float pitch = 0;
     public float yaw = 0;
     public ushort DimensionId;
+    public RaycastHit CurrentRaycastHitResult;
 
     public Entity()
     {
@@ -22,10 +23,6 @@ public class Entity // Data Class
     public void Move(Vector3 motion)
     {
         //TODO Use the Move logic like mc, get the MoveResult from PhysicsManager
-        // for(int i = 0; i < AABBs.Count; i++)
-        // {
-        //     AABBs[i] = AABBs[i].ApplyMotion(motion);
-        // }
         PhysicsManager.Instance.MoveEntity(this, motion);
     }
     

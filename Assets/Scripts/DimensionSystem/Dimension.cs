@@ -82,10 +82,16 @@ public class Dimension
         return 0;
     }
 
-    public bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId)
+    public bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId, bool fromInteraction = false)
     {
         var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
-        return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), blockId);
+        return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), blockId, fromInteraction);
+    }
+
+    public bool TryBreakBlockAt(Vector3Int dimensionCoord, bool fromInteraction = false)
+    {
+        var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
+        return chunk.TryBreakBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), fromInteraction);
     }
 
     public static Vector3Int WorldPosToDimensionCoord(Vector3 worldPos)

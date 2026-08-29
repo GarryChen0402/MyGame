@@ -1,3 +1,4 @@
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class PlayerInputHandler : MonoBehaviour
@@ -45,10 +46,10 @@ public class PlayerInputHandler : MonoBehaviour
         if(WorldManager.Instance.TryGetDimension(player.DimensionId, out Dimension dim))
             hit = Raycaster.Raycast(dim, eye, dir, RaycastReach, out hit) ? hit : default;
         player.CurrentRaycastHitResult = hit;
-        if(hit.IsHit)
-            Debug.Log($"Looking at block {hit.BlockDimensionCoord}, dist {hit.Distance:F2}, normal {hit.Normal}");
-        else
-            Debug.Log("Looking at air");
+        // if(hit.IsHit)
+        //     Debug.Log($"Looking at block {hit.BlockDimensionCoord}, dist {hit.Distance:F2}, normal {hit.Normal}");
+        // else
+        //     Debug.Log("Looking at air");
 
         Vector2 moveDir = Vector2.zero;
         int horizontalMove = 0;
@@ -61,12 +62,35 @@ public class PlayerInputHandler : MonoBehaviour
 
         float yawRad = player.yaw * Mathf.Deg2Rad;
         Vector3 moveDirection = new Vector3(Mathf.Sin(yawRad), 0, Mathf.Cos(yawRad)).normalized;
-        Vector3 right = new Vector3(Mathf.Cos(yawRad), 0, -Mathf.Sin(yawRad));   // 绕 Y 顺时针 90°
+        Vector3 right = new(Mathf.Cos(yawRad), 0, -Mathf.Sin(yawRad));   // 绕 Y 顺时针 90°
         Vector3 motion = (moveDirection * moveDir.x + right * moveDir.y) * horizontalMoveSpeed
                        + Vector3.up * horizontalMove * verticalMoveSpeed;
         motion *= Time.deltaTime;
 
         player.Move(motion);
 
+        InteractionHandler();
+
+    }
+
+    private void InteractionHandler()
+    {
+        if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithFullName("minecraft:dirt", out var itemDef))return;
+        if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(itemDef.ItemBehaivorId, out var behavior))return;
+        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(itemDef.FullName, out var itemId))return ;
+        var stack = new ItemStack()
+        {
+            itemId = itemId,
+            amount = 1
+        };
+        if(Input.GetMouseButtonDown(0) && player.CurrentRaycastHitResult.IsHit)
+        {
+            Debug.Log(WorldManager.Instance.TryBreakBlockAt(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, fromInteraction: true));
+        }
+        if(Input.GetMouseButtonDown(1) && player.CurrentRaycastHitResult.IsHit)
+        {
+            var res = behavior.OnRightUseToBlock(player, stack);
+            Debug.Log($"{res.UseSuccess} == {res.ConsumeAmount}");
+        }
     }
 }   

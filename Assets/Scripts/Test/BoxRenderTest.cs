@@ -13,7 +13,7 @@ public class BoxRenderTest : MonoBehaviour
     private void Start()
     {
         // player = new Player();
-        Player.Instance.Move(new Vector3(0, 32, 0));
+        Player.Instance.Move(new Vector3(0, 16, 0));
     }
 
 

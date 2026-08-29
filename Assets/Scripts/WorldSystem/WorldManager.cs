@@ -33,10 +33,16 @@ public class WorldManager
 
     // Controller entry for player block operations. Returns false when the target
     // position is already occupied or the dimension doesn't exist.
-    public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort blockId)
+    public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort blockId, bool fromInteraction = false)
     {
         if(!TryGetOrGenerateDimension(dimId, out var dim))return false;
-        return dim.TrySetBlockAt(dimensionCoord, blockId);
+        return dim.TrySetBlockAt(dimensionCoord, blockId, fromInteraction);
+    }
+
+    public bool TryBreakBlockAt(ushort dimId, Vector3Int dimensionCoord, bool fromInteraction = false)
+    {
+        if(!TryGetOrGenerateDimension(dimId, out var dim))return false;
+        return dim.TryBreakBlockAt(dimensionCoord, fromInteraction);
     }
 
     public bool IsDimensionExist(ushort dimensionId) => Dimensions.ContainsKey(dimensionId);

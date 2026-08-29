@@ -61,14 +61,26 @@ public class Chunk
     // blocks at once; the renderer rebuilds once on ChunkLoaded instead).
     public bool SilentMode { get; set; }
 
-    public bool TrySetBlockAt(Vector3Int chunkLocalCoord, ushort blockId)
+    public bool TrySetBlockAt(Vector3Int chunkLocalCoord, ushort blockId, bool fromInteraction = false)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
         int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
         if(subChunks[subChunkIndex] == null)subChunks[subChunkIndex] = CreateNewSubChunk(subChunkIndex);
         bool ok = subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), blockId);
         if(ok && !SilentMode)
-            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, blockId));
+            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, blockId){FromInteraction = fromInteraction});
+        return ok;
+    }
+
+    public bool TryBreakBlockAt(Vector3Int chunkLocalCoord, bool fromInteraction = false)
+    {
+        if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
+        int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
+        if(subChunks[subChunkIndex] == null)return false;
+        ushort oldBlockId = subChunks[subChunkIndex].GetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
+        bool ok = subChunks[subChunkIndex].TryBreakBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
+        if(ok && !SilentMode)
+            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, oldBlockId){FromInteraction = fromInteraction});
         return ok;
     }
 

@@ -112,6 +112,15 @@ public class SubChunk
         return true;
     }
 
+    public bool TryBreakBlockAt(Vector3Int subChunkLocalCoord)
+    {
+        if(!IsCorrectCoord(subChunkLocalCoord))return false;
+        int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
+        if(blockData[index] == 0)return false;
+        blockData[index] = 0;
+        return true;
+    }
+
     public Vector3 GetSubChunkOrigin()
     {
         return new Vector3

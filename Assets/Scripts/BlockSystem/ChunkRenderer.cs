@@ -40,7 +40,7 @@ public class ChunkRenderer : MonoBehaviour
     private void OnBlockChanged(BlockChangedEvent evt)
     {
         if(chunk == null || evt.ChunkCoord != chunk.ChunkCoord)return;
-        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk, evt.FromInteraction);
     }
 
     // A neighbor was loaded or unloaded: this chunk's exposed faces may change.

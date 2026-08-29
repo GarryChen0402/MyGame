@@ -5,7 +5,7 @@ public class BlockChangedEvent : GameEvent
     public Vector2Int ChunkCoord;
     public Vector3Int ChunkLocalCoord;
     public ushort NewBlockId;
-
+    public bool FromInteraction;
     public BlockChangedEvent(Vector2Int coord, Vector3Int localPos, ushort id)
     {
         ChunkCoord = coord;

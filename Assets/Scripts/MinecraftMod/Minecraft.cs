@@ -98,9 +98,12 @@ public class Minecraft : IMod
         };
 
         ResourceSystem.Instance.BlockDefinitions.Register(air);
-        ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
-        ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
-        ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
+        ResourceSystem.Instance.RegisterBlock(stoneDefinition);
+        ResourceSystem.Instance.RegisterBlock(dirtDefinition);
+        ResourceSystem.Instance.RegisterBlock(grassDefinition);
+        // ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
+        // ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
+        // ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
 
         DimensionGeneratorResource testGenerator = new()
         {
@@ -110,6 +113,13 @@ public class Minecraft : IMod
         };
         ResourceSystem.Instance.DimensionGenerator.Register(testGenerator);
         ResourceSystem.Instance.DimensionDefinitions.Register(testDi);
+
+
+        ResourceSystem.Instance.ItemBehaviors.Register(new UniversalBlockItemBehavior()
+        {
+            modId = "Universal",
+            name = "block_item_behavior"
+        });
         // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
     }
 }

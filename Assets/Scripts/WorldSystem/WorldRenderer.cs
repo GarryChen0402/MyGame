@@ -99,10 +99,11 @@ public class WorldRenderer : MonoBehaviour
     private readonly List<ChunkMeshBuildTask> ready = new();
     private const float MaxRebuildChunkCountPerFrameMs = 2f;
 
-    public void MarkChunkIntoRebuildQueue(Chunk chunk)
+    private readonly HashSet<Chunk> importantChunks = new();
+    public void MarkChunkIntoRebuildQueue(Chunk chunk, bool important = false)
     {
-        if(rebuildQueue.Contains(chunk))return;
-        rebuildQueue.Add(chunk);
+        if(!rebuildQueue.Contains(chunk))rebuildQueue.Add(chunk);
+        if(important)importantChunks.Add(chunk);
     }
 
     public const int MaxConcurrentBuilds = 4;
@@ -114,10 +115,13 @@ public class WorldRenderer : MonoBehaviour
         Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
         rebuildQueue.Sort((a, b) =>
         {
+            bool ia = importantChunks.Contains(a), ib = importantChunks.Contains(b);
+            if(ia != ib)return ia ? -1 : 1;
             int da = (a.ChunkCoord - playerChunkCoord).sqrMagnitude;
             int db = (b.ChunkCoord - playerChunkCoord).sqrMagnitude;
             return da.CompareTo(db);
         });
+
 
         while(rebuildQueue.Count > 0 && inflight.Count < MaxConcurrentBuilds)
         {
@@ -145,6 +149,22 @@ public class WorldRenderer : MonoBehaviour
             {
                 ready.Add(inflight[i]);
                 inflight.RemoveAt(i);
+            }
+        }
+
+        for(int i=ready.Count - 1;i >= 0; i--)
+        {
+            if (importantChunks.Contains(ready[i].chunk))
+            {
+                var task = ready[i];
+                ready.RemoveAt(i);
+                importantChunks.Remove(task.chunk);
+                if(!chunkRenderers.ContainsKey(task.chunk.ChunkCoord))
+                {
+                    // Renderer was destroyed (chunk unloaded); a later ChunkLoaded re-enqueues.
+                    continue;
+                }
+                chunkRenderers[task.chunk.ChunkCoord].ApplyMeshData(task);
             }
         }
 

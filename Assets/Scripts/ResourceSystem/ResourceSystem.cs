@@ -12,7 +12,10 @@ public class ResourceSystem
     // Dimension Definiton 
     public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
     public ResourceRegistryTable<DimensionGeneratorResource> DimensionGenerator {get;} = new();
-
+    // Item Definition
+    public ResourceRegistryTable<ItemDefinition> ItemDefinitions {get;} = new();
+    // Item Behavior Definition
+    public ResourceRegistryTable<ItemBehaivor> ItemBehaviors {get;} = new();
 
     // Texture 
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
@@ -35,6 +38,8 @@ public class ResourceSystem
     {
         CustomModels.Freeze();
         BlockDefinitions.Freeze();
+        ItemDefinitions.Freeze();
+        ItemBehaviors.Freeze();
         DimensionDefinitions.Freeze();
         DimensionGenerator.Freeze();
         Textures.Freeze();
@@ -56,5 +61,22 @@ public class ResourceSystem
         blockAtlas = packer;
         BlockMaterial.SetTexture("_BaseMap", blockAtlas);
         // Object.DontDestroyOnLoad(blockAtlas);
+    }
+
+
+    public bool RegisterBlock(BlockDefinition blockDefinition)
+    {
+        var registerRes = BlockDefinitions.Register(blockDefinition);
+        if(!registerRes)return false;
+        ItemDefinition blockItemDef = new()
+        {
+            modId = blockDefinition.modId,
+            name = blockDefinition.name,
+            MaxStack = 64,
+            BlockFullName = blockDefinition.FullName,
+            ItemBehaivorId = "Universal:block_item_behavior"
+        };
+        ItemDefinitions.Register(blockItemDef);
+        return true;
     }
 }

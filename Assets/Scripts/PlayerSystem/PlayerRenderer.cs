@@ -10,7 +10,7 @@ public class PlayerRenderer : MonoBehaviour
 
     private void Awake()
     {
-        if(player == null) player = Player.Instance;
+        player ??= Player.Instance;
         if(playerCamera == null) playerCamera = Camera.main;
     }
 
