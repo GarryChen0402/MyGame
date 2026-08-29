@@ -1,3 +1,4 @@
+using Unity.VisualScripting;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -39,8 +40,12 @@ public class ChunkRenderer : MonoBehaviour
     // A block inside this chunk changed.
     private void OnBlockChanged(BlockChangedEvent evt)
     {
-        if(chunk == null || evt.ChunkCoord != chunk.ChunkCoord)return;
-        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk, evt.FromInteraction);
+        if(chunk == null)return;
+        int xDis = chunk.ChunkCoord.x - evt.ChunkCoord.x;
+        int yDis = chunk.ChunkCoord.y - evt.ChunkCoord.y;
+        if((xDis == 1 && evt.ChunkLocalCoord.x == 15) || (xDis == -1 && evt.ChunkLocalCoord.x == 0)
+        || (yDis == 1 && evt.ChunkLocalCoord.z == 15) || (yDis == -1 && evt.ChunkLocalCoord.z == 0)
+        || (yDis == 0 && xDis == 0))WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk, evt.FromInteraction);
     }
 
     // A neighbor was loaded or unloaded: this chunk's exposed faces may change.

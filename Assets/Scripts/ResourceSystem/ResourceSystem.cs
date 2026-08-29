@@ -17,9 +17,10 @@ public class ResourceSystem
     // Item Behavior Definition
     public ResourceRegistryTable<ItemBehaivor> ItemBehaviors {get;} = new();
 
-    // Texture 
+    // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;
+    public Texture2D BlockAtlas => blockAtlas;
 
     // BlockMaterial
     public Material BlockMaterial {get;} = new Material(Shader.Find("Universal Render Pipeline/Lit"));
@@ -74,7 +75,8 @@ public class ResourceSystem
             name = blockDefinition.name,
             MaxStack = 64,
             BlockFullName = blockDefinition.FullName,
-            ItemBehaivorId = "Universal:block_item_behavior"
+            ItemBehaivorId = "Universal:block_item_behavior",
+            IsBlockItem = true
         };
         ItemDefinitions.Register(blockItemDef);
         return true;
