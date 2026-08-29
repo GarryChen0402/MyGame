@@ -9,7 +9,7 @@ public class ItemIconRenderer : MonoBehaviour
     private RawImage iconImage;
 
     [SerializeField]
-    private int iconSize = 128;
+    private int iconSize = 64;
 
     private RenderTexture rt;
     private ushort currentItemId;
@@ -44,7 +44,7 @@ public class ItemIconRenderer : MonoBehaviour
         if(rt != null)return;
         if(iconImage == null) iconImage = GetComponent<RawImage>();
         rt = new RenderTexture(iconSize, iconSize, 0, RenderTextureFormat.ARGB32);
-        rt.antiAliasing = 4;   // MSAA smooths block-edge aliasing; must be set before Create
+        // rt.antiAliasing = 4;   // MSAA smooths block-edge aliasing; must be set before Create
         rt.Create();
         if(iconImage != null) iconImage.texture = rt;
     }

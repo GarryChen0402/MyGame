@@ -29,6 +29,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "dirt", Resources.Load<Texture2D>("Textures/Blocks/dirt"));
         ResourceSystem.Instance.RegisterTexture(ModId, "grass", Resources.Load<Texture2D>("Textures/Blocks/grass"));
         ResourceSystem.Instance.RegisterTexture(ModId, "grass_side", Resources.Load<Texture2D>("Textures/Blocks/grass_side"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "diamond_sword", Resources.Load<Texture2D>("Textures/Items/diamond_sword"));
         // BlockDefinition Content
         BlockDefinition air = new ()
         {
@@ -120,6 +121,20 @@ public class Minecraft : IMod
             modId = "Universal",
             name = "block_item_behavior"
         });
+
+        ResourceSystem.Instance.ItemDefinitions.Register(new ItemDefinition()
+        {
+            modId = ModId,
+            name = "diamond_sword",
+            LayerTextures = new string[]
+            {
+                "minecraft:diamond_sword"
+            },
+            MaxStack = 1
+        });
+
+        
+
         // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
     }
 }
