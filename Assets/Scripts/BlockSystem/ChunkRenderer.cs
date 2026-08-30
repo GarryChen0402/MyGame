@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -37,28 +38,42 @@ public class ChunkRenderer : MonoBehaviour
         EventBus.Instance.Unsubscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
     }
 
-    // A block inside this chunk changed.
+    // A block inside this chunk changed: the changed block's own subchunk is dirty,
+    // plus its ±Y siblings (a block at a subchunk boundary feeds the neighbor
+    // subchunk's shared horizontal plane) and, for boundary blocks, the adjacent
+    // chunk's subchunk at the same index.
     private void OnBlockChanged(BlockChangedEvent evt)
     {
         if(chunk == null)return;
         int xDis = chunk.ChunkCoord.x - evt.ChunkCoord.x;
-        int yDis = chunk.ChunkCoord.y - evt.ChunkCoord.y;
-        if((xDis == 1 && evt.ChunkLocalCoord.x == 15) || (xDis == -1 && evt.ChunkLocalCoord.x == 0)
-        || (yDis == 1 && evt.ChunkLocalCoord.z == 15) || (yDis == -1 && evt.ChunkLocalCoord.z == 0)
-        || (yDis == 0 && xDis == 0))WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk, evt.FromInteraction);
+        int zDis = chunk.ChunkCoord.y - evt.ChunkCoord.y;
+        bool sameChunk = xDis == 0 && zDis == 0;
+        bool xBoundary = (xDis == 1 && evt.ChunkLocalCoord.x == 15) || (xDis == -1 && evt.ChunkLocalCoord.x == 0);
+        bool zBoundary = (zDis == 1 && evt.ChunkLocalCoord.z == 15) || (zDis == -1 && evt.ChunkLocalCoord.z == 0);
+        if(!sameChunk && !xBoundary && !zBoundary)return;
+
+        int subIdx = chunk.DimensionYCoordToSubChunkYIndex(evt.ChunkLocalCoord.y);
+        var dirtySubs = new HashSet<int> { subIdx };
+        if(sameChunk)
+        {
+            int yLocal = ((evt.ChunkLocalCoord.y % SubChunk.SubChunkBlockSize) + SubChunk.SubChunkBlockSize) % SubChunk.SubChunkBlockSize;
+            if(yLocal == 0)dirtySubs.Add(subIdx - 1);
+            if(yLocal == SubChunk.SubChunkBlockSize - 1)dirtySubs.Add(subIdx + 1);
+        }
+        WorldRenderer.Instance.MarkChunkRebuildSubs(chunk, dirtySubs, evt.FromInteraction);
     }
 
     // A neighbor was loaded or unloaded: this chunk's exposed faces may change.
     private void OnChunkLoaded(ChunkLoadedEvent evt)
     {
         if(chunk == null || !IsNeighbor(evt.Chunk.ChunkCoord))return;
-        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        WorldRenderer.Instance.MarkChunkRebuildFull(chunk, ChunkRebuildType.Normal);
     }
 
     private void OnChunkUnloaded(ChunkUnloadedEvent evt)
     {
         if(chunk == null || !IsNeighbor(evt.ChunkCoord))return;
-        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        WorldRenderer.Instance.MarkChunkRebuildFull(chunk, ChunkRebuildType.Normal);
     }
 
     private bool IsNeighbor(Vector2Int coord)
@@ -67,8 +82,11 @@ public class ChunkRenderer : MonoBehaviour
     public void SetChunk(Chunk chunk)
     {
         this.chunk = chunk;
-        WorldRenderer.Instance.MarkChunkIntoRebuildQueue(chunk);
+        WorldRenderer.Instance.MarkChunkRebuildFull(chunk, ChunkRebuildType.Initial);
     }
+
+    // Last applied build result; partial rebuilds copy untouched subchunks from it.
+    public ChunkMeshBuildTask AppliedTask {get; private set;}
 
     // Main thread only: uploads the task's computed data into the idle mesh and swaps it in.
     public void ApplyMeshData(ChunkMeshBuildTask task)
@@ -84,5 +102,6 @@ public class ChunkRenderer : MonoBehaviour
         mesh.RecalculateBounds();
         meshFilter.sharedMesh = mesh;
         activeMeshIndex = target;
+        AppliedTask = task;
     }
 }

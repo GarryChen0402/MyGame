@@ -6,6 +6,13 @@ using System.Threading.Tasks;
 using Unity.VisualScripting;
 using UnityEngine;
 
+// Rebuild scheduling priority, mirroring Sodium's ChunkUpdateType:
+// Important (player interaction) is dispatched first and the main thread blocks
+// on it so the edit renders within the same frame; Initial covers freshly loaded
+// chunks; Normal covers neighbor-driven changes. Initial/Normal are rate-limited
+// at upload time.
+public enum ChunkRebuildType { Normal = 0, Initial = 1, Important = 2 }
+
 public class WorldRenderer : MonoBehaviour
 {
     private static WorldRenderer instance = null;
@@ -93,95 +100,172 @@ public class WorldRenderer : MonoBehaviour
     {
         if(chunkRenderers.Remove(evt.ChunkCoord, out var renderer))
             Destroy(renderer.gameObject);
+        // Drop any pending rebuild entry for the unloaded chunk (the renderer is
+        // gone, so its dirty subchunk set can never be dispatched).
+        Chunk removed = null;
+        foreach(var key in rebuildEntries.Keys)
+            if(key.ChunkCoord == evt.ChunkCoord) { removed = key; break; }
+        if(removed != null)rebuildEntries.Remove(removed);
     }
 
     private readonly Dictionary<Vector2Int, ChunkRenderer> chunkRenderers = new();
-    private readonly List<Chunk> rebuildQueue = new();   // re-sorted by player distance on each dispatch
+    private readonly Dictionary<Chunk, RebuildEntry> rebuildEntries = new();
+    private readonly List<RebuildEntry> dispatchCandidates = new();   // reused sort buffer
     private readonly List<ChunkMeshBuildTask> inflight = new();
     private readonly List<ChunkMeshBuildTask> ready = new();
-    private const float MaxRebuildChunkCountPerFrameMs = 2f;
-
+    // Chunks whose next completed task must upload immediately (no per-frame budget).
     private readonly HashSet<Chunk> importantChunks = new();
-    public void MarkChunkIntoRebuildQueue(Chunk chunk, bool important = false)
+
+    private class RebuildEntry
     {
-        if(!rebuildQueue.Contains(chunk))rebuildQueue.Add(chunk);
-        if(important)importantChunks.Add(chunk);
+        public Chunk Chunk;
+        public ChunkRebuildType Type;
+        // Subchunk indices (relative to Chunk.MinSubChunkIndex) to recompute.
+        public readonly HashSet<int> DirtySubs = new();
+    }
+
+    // Full rebuild of every subchunk (fresh chunk, neighbor loaded/unloaded).
+    public void MarkChunkRebuildFull(Chunk chunk, ChunkRebuildType type)
+        => MarkChunkRebuild(chunk, null, type);
+
+    // Partial rebuild of the given subchunk indices; important marks a player edit,
+    // which upgrades the pending task to blocking (same-frame) priority.
+    public void MarkChunkRebuildSubs(Chunk chunk, IEnumerable<int> subIdxs, bool important)
+        => MarkChunkRebuild(chunk, subIdxs, important ? ChunkRebuildType.Important : ChunkRebuildType.Normal);
+
+    private void MarkChunkRebuild(Chunk chunk, IEnumerable<int> subIdxs, ChunkRebuildType type)
+    {
+        if(!rebuildEntries.TryGetValue(chunk, out var entry))
+        {
+            entry = new RebuildEntry { Chunk = chunk, Type = type };
+            rebuildEntries[chunk] = entry;
+        }
+        if(type > entry.Type)entry.Type = type;   // upgrade, never downgrade
+        if(subIdxs == null)
+        {
+            for(int i = 0; i <= chunk.MaxSubChunkIndex - chunk.MinSubChunkIndex; i++)
+                entry.DirtySubs.Add(i);
+        }
+        else
+        {
+            foreach(int i in subIdxs)entry.DirtySubs.Add(i);
+        }
     }
 
     public const int MaxConcurrentBuilds = 4;
+    // Bounded wait so a player edit renders within the same frame; the worker only
+    // rebuilds the touched subchunks (~0.3-1ms), so the stall is imperceptible.
+    private const float MaxImportantWaitSeconds = 0.016f;
+
     private void ProcessRebuildChunkQueue()
     {
         if(CurrentRenderDimension == null)return;
-        // Dispatch nearest chunks first. The list is small (<= (2r+1)^2) and the player
-        // keeps moving, so re-sorting every frame is cheap and stays correct.
-        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
-        rebuildQueue.Sort((a, b) =>
+        // Move completed worker tasks to the upload list.
+        for(int i = inflight.Count - 1; i >= 0; i--)
+            if(inflight[i].IsDown) { ready.Add(inflight[i]); inflight.RemoveAt(i); }
+
+        ApplyReadyTasks();
+        DispatchRebuildTasks();
+    }
+
+    // Uploads completed tasks: important ones immediately, Initial/Normal on a small
+    // per-frame budget (uploads touch the GPU, so they are rate-limited).
+    private void ApplyReadyTasks()
+    {
+        for(int i = ready.Count - 1; i >= 0; i--)
         {
-            bool ia = importantChunks.Contains(a), ib = importantChunks.Contains(b);
-            if(ia != ib)return ia ? -1 : 1;
-            int da = (a.ChunkCoord - playerChunkCoord).sqrMagnitude;
-            int db = (b.ChunkCoord - playerChunkCoord).sqrMagnitude;
+            if(!importantChunks.Contains(ready[i].chunk))continue;
+            var task = ready[i];
+            ready.RemoveAt(i);
+            ApplyTask(task);
+        }
+
+        int initialBudget = 2, normalBudget = 2;
+        for(int i = 0; i < ready.Count; i++)
+        {
+            var task = ready[i];
+            if(task.Type == ChunkRebuildType.Initial && initialBudget > 0)initialBudget--;
+            else if(task.Type == ChunkRebuildType.Normal && normalBudget > 0)normalBudget--;
+            else continue;
+            ready.RemoveAt(i);
+            i--;
+            ApplyTask(task);
+        }
+    }
+
+    private void ApplyTask(ChunkMeshBuildTask task)
+    {
+        importantChunks.Remove(task.chunk);
+        if(!chunkRenderers.TryGetValue(task.chunk.ChunkCoord, out var renderer))return;
+        renderer.ApplyMeshData(task);
+    }
+
+    private void DispatchRebuildTasks()
+    {
+        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
+        // Candidates in dispatch priority order: Important, Initial, then Normal,
+        // nearest chunks first within a type. Chunks with a task in flight or ready
+        // are skipped here and re-snapshotted once it applies, so changes arriving
+        // mid-flight are never lost.
+        dispatchCandidates.Clear();
+        foreach(var entry in rebuildEntries.Values)
+        {
+            if(inflight.Exists(t => t.chunk == entry.Chunk) || ready.Exists(t => t.chunk == entry.Chunk))continue;
+            if(!chunkRenderers.ContainsKey(entry.Chunk.ChunkCoord))continue;
+            dispatchCandidates.Add(entry);
+        }
+        dispatchCandidates.Sort((a, b) =>
+        {
+            if(a.Type != b.Type)return b.Type.CompareTo(a.Type);
+            int da = (a.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
+            int db = (b.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
             return da.CompareTo(db);
         });
 
-
-        while(rebuildQueue.Count > 0 && inflight.Count < MaxConcurrentBuilds)
+        foreach(var entry in dispatchCandidates)
         {
-            // Skip entries whose task is already in flight or awaiting upload: their
-            // result is still to be applied, so keep them queued for a re-snapshot
-            // afterwards (a block change or neighbor event can arrive mid-flight).
-            int i = 0;
-            while(i < rebuildQueue.Count &&
-                (inflight.Exists(t => t.chunk == rebuildQueue[i]) || ready.Exists(t => t.chunk == rebuildQueue[i])))
-                i++;
-            if(i >= rebuildQueue.Count)break;
+            if(inflight.Count >= MaxConcurrentBuilds)break;
+            rebuildEntries.Remove(entry.Chunk);
 
-            var chunk = rebuildQueue[i];
-            rebuildQueue.RemoveAt(i);
-            if(!chunkRenderers.ContainsKey(chunk.ChunkCoord))continue;
-            var task = new ChunkMeshBuildTask(chunk);
-            task.SnapShot();
+            var renderer = chunkRenderers[entry.Chunk.ChunkCoord];
+            // Partial rebuilds copy untouched subchunks from the last applied result;
+            // without a base there is nothing to copy from, so rebuild everything.
+            var task = new ChunkMeshBuildTask(entry.Chunk)
+            {
+                Type = entry.Type,
+                PreviousTask = renderer.AppliedTask
+            };
+            task.SnapShot(renderer.AppliedTask == null ? null : entry.DirtySubs);
             ThreadPool.QueueUserWorkItem(_ => Compute(task));
             inflight.Add(task);
-        }
 
-        for(int i=inflight.Count -1 ; i >= 0; i--)
-        {
-            if (inflight[i].IsDown)
+            if(entry.Type == ChunkRebuildType.Important)
             {
-                ready.Add(inflight[i]);
-                inflight.RemoveAt(i);
+                importantChunks.Add(entry.Chunk);
+                WaitAndApplyImportant(task);
             }
         }
+    }
 
-        for(int i=ready.Count - 1;i >= 0; i--)
+    // Blocking wait (bounded by MaxImportantWaitSeconds) so interaction edits render
+    // within the same frame. While waiting, keep uploading tasks that completed in
+    // the meantime (Sodium's performPendingUploads pattern). If the wait times out
+    // (e.g. the pool is saturated by chunk generation), the important-ready path in
+    // ApplyReadyTasks uploads it on a later frame instead.
+    private void WaitAndApplyImportant(ChunkMeshBuildTask task)
+    {
+        float deadline = Time.realtimeSinceStartup + MaxImportantWaitSeconds;
+        while(!task.IsDown)
         {
-            if (importantChunks.Contains(ready[i].chunk))
-            {
-                var task = ready[i];
-                ready.RemoveAt(i);
-                importantChunks.Remove(task.chunk);
-                if(!chunkRenderers.ContainsKey(task.chunk.ChunkCoord))
-                {
-                    // Renderer was destroyed (chunk unloaded); a later ChunkLoaded re-enqueues.
-                    continue;
-                }
-                chunkRenderers[task.chunk.ChunkCoord].ApplyMeshData(task);
-            }
+            for(int i = inflight.Count - 1; i >= 0; i--)
+                if(inflight[i].IsDown) { ready.Add(inflight[i]); inflight.RemoveAt(i); }
+            ApplyReadyTasks();
+            if(Time.realtimeSinceStartup >= deadline)break;
+            Thread.Sleep(1);
         }
-
-        int budget = 2;
-        while(ready.Count > 0 && budget-- > 0)
-        {
-            var task = ready[0];
-            ready.RemoveAt(0);
-            if(!chunkRenderers.ContainsKey(task.chunk.ChunkCoord))
-            {
-                // Renderer was destroyed (chunk unloaded); a later ChunkLoaded re-enqueues.
-                continue;
-            }
-            chunkRenderers[task.chunk.ChunkCoord].ApplyMeshData(task);
-        }
+        if(!task.IsDown)return;   // still running: the ready path applies it later
+        inflight.Remove(task);
+        ApplyTask(task);
     }
 
     // Worker thread: reads only the task snapshot and read-only resource data.
@@ -207,40 +291,67 @@ public class WorldRenderer : MonoBehaviour
         var blockDefs = ResourceSystem.Instance.BlockDefinitions;
         var models = ResourceSystem.Instance.CustomModels;
         var textures = ResourceSystem.Instance.Textures;
+        ChunkMeshBuildTask prev = task.PreviousTask;
 
-        for (int s = 0; s < task.SubChunkBlockData.Length; s++)
+        for (int s = 0; s < task.RebuildFlags.Length; s++)
         {
-            ushort[] data = task.SubChunkBlockData[s];
-            if (data == null) continue;
-            float originY = task.SubOriginY[s];
+            int startV = task.Vertices.Count;
+            int startT = task.Triangles.Count;
+            if (task.RebuildFlags[s])
+            {
+                ushort[] data = task.SubChunkBlockData[s];
+                if (data != null)
+                {
+                    float originY = task.SubOriginY[s];
 
-            for (int y = 0; y < SubChunk.SubChunkBlockSize; y++)
-                for (int x = 0; x < SubChunk.SubChunkBlockSize; x++)
-                    for (int z = 0; z < SubChunk.SubChunkBlockSize; z++)
-                    {
-                        ushort blockId = data[x * 256 + y * 16 + z];
-                        if (blockId == 0) continue;
-                        if (!blockDefs.TryGetResourceWithNumberId(blockId, out var def) || def == null) continue;
-                        if (!models.TryGetResourceWithFullName(def.ModelId, out var model) || model == null) continue;
+                    for (int y = 0; y < SubChunk.SubChunkBlockSize; y++)
+                        for (int x = 0; x < SubChunk.SubChunkBlockSize; x++)
+                            for (int z = 0; z < SubChunk.SubChunkBlockSize; z++)
+                            {
+                                ushort blockId = data[x * 256 + y * 16 + z];
+                                if (blockId == 0) continue;
+                                if (!blockDefs.TryGetResourceWithNumberId(blockId, out var def) || def == null) continue;
+                                if (!models.TryGetResourceWithFullName(def.ModelId, out var model) || model == null) continue;
 
-                        Dictionary<string, bool> mask = new();
-                        Dictionary<string, Rect> faceRects = new();
-                        foreach (var kv in model.GetFaceDirections())
-                        {
-                            Vector3Int dir = kv.Value;
-                            ushort neighborId = QueryNeighbor(task, s, x + dir.x, y + dir.y, z + dir.z);
-                            mask[kv.Key] = neighborId != 0
-                                && blockDefs.TryGetResourceWithNumberId(neighborId, out var neighborDef)
-                                && neighborDef != null && neighborDef.IsOpaque;
+                                Dictionary<string, bool> mask = new();
+                                Dictionary<string, Rect> faceRects = new();
+                                foreach (var kv in model.GetFaceDirections())
+                                {
+                                    Vector3Int dir = kv.Value;
+                                    ushort neighborId = QueryNeighbor(task, s, x + dir.x, y + dir.y, z + dir.z);
+                                    mask[kv.Key] = neighborId != 0
+                                        && blockDefs.TryGetResourceWithNumberId(neighborId, out var neighborDef)
+                                        && neighborDef != null && neighborDef.IsOpaque;
 
-                            if (textures.TryGetResourceWithFullName(def.TextureIds[kv.Key], out var rect))
-                                faceRects[kv.Key] = rect.AtlasUVRect;
-                        }
-                        model.ExtendModelMesh(
-                            new Vector3(x, y + originY, z),
-                            task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles, mask, faceRects);
-                    }
+                                    if (textures.TryGetResourceWithFullName(def.TextureIds[kv.Key], out var rect))
+                                        faceRects[kv.Key] = rect.AtlasUVRect;
+                                }
+                                model.ExtendModelMesh(
+                                    new Vector3(x, y + originY, z),
+                                    task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles, mask, faceRects);
+                            }
+                }
+            }
+            else if (prev != null && prev.SubVertexCount[s] > 0)
+            {
+                // Untouched subchunk: carry its geometry over from the last applied
+                // result verbatim instead of re-running face culling.
+                CopyRange(task.Vertices, prev.Vertices, prev.SubStartVertex[s], prev.SubVertexCount[s]);
+                CopyRange(task.Uvs, prev.Uvs, prev.SubStartVertex[s], prev.SubVertexCount[s]);
+                CopyRange(task.Colors, prev.Colors, prev.SubStartVertex[s], prev.SubVertexCount[s]);
+                CopyRange(task.Normals, prev.Normals, prev.SubStartVertex[s], prev.SubVertexCount[s]);
+                CopyRange(task.Triangles, prev.Triangles, prev.SubStartTri[s], prev.SubTriCount[s]);
+            }
+            task.SubStartVertex[s] = startV;
+            task.SubVertexCount[s] = task.Vertices.Count - startV;
+            task.SubStartTri[s] = startT;
+            task.SubTriCount[s] = task.Triangles.Count - startT;
         }
+    }
+
+    private static void CopyRange<T>(List<T> dst, List<T> src, int start, int count)
+    {
+        for (int i = 0; i < count; i++) dst.Add(src[start + i]);
     }
 
     // Interior neighbors read the subchunk copy; exterior ones read the prefetched planes.

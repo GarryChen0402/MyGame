@@ -4,14 +4,23 @@ using UnityEngine;
 // Worker-thread chunk mesh build task.
 // Input data is snapshotted on the main thread (SnapShot); the worker only reads
 // the snapshot plus read-only resource data, so no shared state is mutated off-thread.
+// RebuildFlags selects which subchunks are recomputed from block data; the rest are
+// copied verbatim from PreviousTask (the last applied result of the same chunk), so
+// the mesh stays whole-chunk merged while only the changed sections are rebuilt.
 public class ChunkMeshBuildTask
 {
     public Chunk chunk;
+    public ChunkRebuildType Type;
+    public bool[] RebuildFlags;
+    // Base for copying untouched subchunks: the last applied result of this chunk.
+    public ChunkMeshBuildTask PreviousTask;
     public ushort[][] SubChunkBlockData;
     // [subIdx, face, u, v] neighbor block ids just outside the subchunk.
     // face 0/1 (-X/+X): u=z, v=y | face 2/3 (-Y/+Y): u=x, v=z | face 4/5 (-Z/+Z): u=x, v=y
     public ushort[,,,] BoundaryPlances;
     public float[] SubOriginY;
+    // Per-subchunk ranges into the merged lists below (filled by the worker).
+    public int[] SubStartVertex, SubVertexCount, SubStartTri, SubTriCount;
 
     public List<Vector3> Vertices = new();
     public List<Vector2> Uvs = new();
@@ -24,9 +33,10 @@ public class ChunkMeshBuildTask
 
     public ChunkMeshBuildTask(Chunk chunk) => this.chunk = chunk;
 
-    // Main thread only. Copies block data and pre-fetches the 6 boundary planes
-    // so the worker never touches Dimension / Chunk / SubChunk live state.
-    public void SnapShot()
+    // Main thread only. Copies block data and pre-fetches the 6 boundary planes for
+    // the rebuilt subchunks so the worker never touches Dimension / Chunk / SubChunk
+    // live state; null rebuildSubIdxs means every subchunk (full rebuild).
+    public void SnapShot(HashSet<int> rebuildSubIdxs)
     {
         Dimension dim = WorldRenderer.Instance.CurrentRenderDimension;
         if (dim == null) return;
@@ -34,17 +44,36 @@ public class ChunkMeshBuildTask
         int subCount = chunk.MaxSubChunkIndex - chunk.MinSubChunkIndex + 1;
         SubChunkBlockData = new ushort[subCount][];
         SubOriginY = new float[subCount];
-        for (int i = 0; i < subCount; i++)
-        {
-            SubChunk sub = chunk.GetSubChunk(chunk.MinSubChunkIndex + i);
-            if (sub == null) continue;
-            SubChunkBlockData[i] = sub.CopyBlockData();
-            SubOriginY[i] = (chunk.MinSubChunkIndex + i) * SubChunk.SubChunkBlockSize;
-        }
-
+        RebuildFlags = new bool[subCount];
         BoundaryPlances = new ushort[subCount, 6, 16, 16];
-        for (int i = 0; i < subCount; i++)
-            FillBoundaryPlances(dim, i, chunk.MinSubChunkIndex + i);
+        SubStartVertex = new int[subCount];
+        SubVertexCount = new int[subCount];
+        SubStartTri = new int[subCount];
+        SubTriCount = new int[subCount];
+
+        if (rebuildSubIdxs == null)
+        {
+            for (int i = 0; i < subCount; i++)
+                SnapShotSub(dim, i);
+        }
+        else
+        {
+            foreach (int i in rebuildSubIdxs)
+                if (i >= 0 && i < subCount)
+                    SnapShotSub(dim, i);
+        }
+    }
+
+    private void SnapShotSub(Dimension dim, int subIdx)
+    {
+        // A subchunk that is null now (e.g. fully mined out) still counts as rebuilt:
+        // it must drop its stale geometry from the copy, not keep it.
+        RebuildFlags[subIdx] = true;
+        SubChunk sub = chunk.GetSubChunk(chunk.MinSubChunkIndex + subIdx);
+        if (sub == null) return;
+        SubChunkBlockData[subIdx] = sub.CopyBlockData();
+        SubOriginY[subIdx] = (chunk.MinSubChunkIndex + subIdx) * SubChunk.SubChunkBlockSize;
+        FillBoundaryPlances(dim, subIdx, chunk.MinSubChunkIndex + subIdx);
     }
 
     // Resolve the owner subchunk once per face, then read its array directly (O(1)).
