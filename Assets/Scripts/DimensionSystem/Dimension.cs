@@ -129,10 +129,10 @@ public class Dimension
         return 0;
     }
 
-    public bool TrySetBlockAt(Vector3Int dimensionCoord, ushort blockId, bool fromInteraction = false)
+    public bool TrySetBlockAt(Vector3Int dimensionCoord, ushort stateId, bool fromInteraction = false)
     {
         var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
-        return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), blockId, fromInteraction);
+        return chunk.TrySetBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), stateId, fromInteraction);
     }
 
     public bool TryBreakBlockAt(Vector3Int dimensionCoord, bool fromInteraction = false)

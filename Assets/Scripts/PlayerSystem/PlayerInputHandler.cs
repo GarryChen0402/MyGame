@@ -24,7 +24,8 @@ public class PlayerInputHandler : MonoBehaviour
         player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 0, amount = 1});
         player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 1, amount = 1});
         player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 2, amount = 1});
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 3, amount = 1});
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 3, amount = 16});
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 4, amount = 16});
     }
 
     private void Update()

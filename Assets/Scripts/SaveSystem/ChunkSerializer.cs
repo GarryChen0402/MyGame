@@ -4,9 +4,11 @@ using System.IO;
 using UnityEngine;
 
 // Serializes a Chunk to / from the JSON save format (see Docs/世界存档功能设计方案.md).
-// Palette holds the non-air string ids present in the subchunk; index 0 is
-// implicitly air, so no numeric block id ever reaches the save file. Unknown
-// string ids on load map to air (the block was removed from the registry).
+// Palette holds the non-air state strings present in the subchunk; index 0 is
+// implicitly air, so no numeric id ever reaches the save file. Blocks without
+// properties serialize as their plain full name ("minecraft:stone"), which is
+// exactly save format v1, so old files load without migration. Unknown state
+// strings on load map to air (the block was removed from the registry).
 [Serializable]
 public class ChunkSaveData
 {
@@ -26,7 +28,7 @@ public class SubChunkSaveData
 
 public static class ChunkSerializer
 {
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
     public static readonly int BlockCount = SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize;
 
     // May run on a worker thread: reads a CopyBlockData snapshot only.
@@ -51,29 +53,32 @@ public static class ChunkSerializer
     private static SubChunkSaveData SerializeSubChunk(SubChunk sub, int subIndex)
     {
         ushort[] blocks = sub.CopyBlockData();
-        // First pass: dedupe non-air block ids into a palette of string ids.
+        // First pass: dedupe non-air state ids into a palette of state strings.
         var paletteIndex = new Dictionary<ushort, int>();
         var palette = new List<string>();
         for (int i = 0; i < BlockCount; i++)
         {
-            ushort id = blocks[i];
-            if (id == 0 || paletteIndex.ContainsKey(id)) continue;
-            if (!ResourceSystem.Instance.BlockDefinitions.TryGetStringId(id, out string fullName)) continue;
-            paletteIndex[id] = palette.Count + 1;   // palette slot 0 is implicit air
-            palette.Add(fullName);
+            ushort stateId = blocks[i];
+            if (stateId == 0 || paletteIndex.ContainsKey(stateId)) continue;
+            var state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+            if (state == null) continue;
+            paletteIndex[stateId] = palette.Count + 1;   // palette slot 0 is implicit air
+            palette.Add(state.StateString);
         }
         // Second pass: write the per-block palette index.
         var blockData = new List<int>(BlockCount);
         for (int i = 0; i < BlockCount; i++)
         {
-            ushort id = blocks[i];
-            blockData.Add(id == 0 ? 0 : paletteIndex.TryGetValue(id, out int pidx) ? pidx : 0);
+            ushort stateId = blocks[i];
+            blockData.Add(stateId == 0 ? 0 : paletteIndex.TryGetValue(stateId, out int pidx) ? pidx : 0);
         }
         return new SubChunkSaveData { subIndex = subIndex, palette = palette, blockData = blockData };
     }
 
-    // Fills the chunk from save JSON; unknown string ids become air. The chunk
-    // must be empty (freshly constructed) when called.
+    // Fills the chunk from save JSON; unknown state strings become air. The chunk
+    // must be empty (freshly constructed) when called. Works for both v1 files
+    // (plain block full names) and v2 (state strings), since a block without
+    // properties serializes as its plain full name in both formats.
     public static void Deserialize(Chunk chunk, string json)
     {
         var data = JsonUtility.FromJson<ChunkSaveData>(json);
@@ -84,14 +89,14 @@ public static class ChunkSerializer
             SubChunk sub = chunk.GetOrCreateSubChunk(chunk.MinSubChunkIndex + subData.subIndex);
             if (sub == null) continue;
 
-            // palette slot 0 is implicit air; map string ids back to numeric ids.
+            // palette slot 0 is implicit air; map state strings back to state ids.
             var paletteIds = new ushort[subData.palette.Count + 1];
             for (int p = 0; p < subData.palette.Count; p++)
             {
-                if (ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(subData.palette[p], out ushort id))
-                    paletteIds[p + 1] = id;
+                if (ResourceSystem.Instance.BlockStates.TryParseStateString(subData.palette[p], out ushort stateId))
+                    paletteIds[p + 1] = stateId;
                 else
-                    Debug.LogWarning($"[ChunkSerializer] unknown block id '{subData.palette[p]}' in chunk save ({data.chunkX},{data.chunkZ}); treated as air");
+                    Debug.LogWarning($"[ChunkSerializer] unknown block state '{subData.palette[p]}' in chunk save ({data.chunkX},{data.chunkZ}); treated as air");
             }
             for (int i = 0; i < BlockCount; i++)
             {

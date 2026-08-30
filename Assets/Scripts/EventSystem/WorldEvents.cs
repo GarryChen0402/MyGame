@@ -4,13 +4,13 @@ public class BlockChangedEvent : GameEvent
 {
     public Vector2Int ChunkCoord;
     public Vector3Int ChunkLocalCoord;
-    public ushort NewBlockId;
+    public ushort NewStateId;   // global block state id (0 = air)
     public bool FromInteraction;
-    public BlockChangedEvent(Vector2Int coord, Vector3Int localPos, ushort id)
+    public BlockChangedEvent(Vector2Int coord, Vector3Int localPos, ushort stateId)
     {
         ChunkCoord = coord;
         ChunkLocalCoord = localPos;
-        NewBlockId = id;
+        NewStateId = stateId;
     }
 }
 

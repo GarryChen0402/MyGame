@@ -323,27 +323,33 @@ public class WorldRenderer : MonoBehaviour
                         for (int x = 0; x < SubChunk.SubChunkBlockSize; x++)
                             for (int z = 0; z < SubChunk.SubChunkBlockSize; z++)
                             {
-                                ushort blockId = data[x * 256 + y * 16 + z];
-                                if (blockId == 0) continue;
-                                if (!blockDefs.TryGetResourceWithNumberId(blockId, out var def) || def == null) continue;
-                                if (!models.TryGetResourceWithFullName(def.ModelId, out var model) || model == null) continue;
+                                ushort stateId = data[x * 256 + y * 16 + z];
+                                if (stateId == 0) continue;
+                                var state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+                                if (state == null) continue;
+                                BlockDefinition def = state.Block;
+                                if (!models.TryGetResourceWithFullName(state.ModelId, out var model) || model == null) continue;
 
                                 Dictionary<string, bool> mask = new();
                                 Dictionary<string, Rect> faceRects = new();
                                 foreach (var kv in model.GetFaceDirections())
                                 {
-                                    Vector3Int dir = kv.Value;
+                                    Vector3Int dir = state.RotationX != 0 || state.RotationY != 0
+                                        ? CustomModel.RotateDirection(kv.Value, state.RotationX, state.RotationY)
+                                        : kv.Value;
                                     ushort neighborId = QueryNeighbor(task, s, x + dir.x, y + dir.y, z + dir.z);
                                     mask[kv.Key] = neighborId != 0
                                         && blockDefs.TryGetResourceWithNumberId(neighborId, out var neighborDef)
                                         && neighborDef != null && neighborDef.IsOpaque;
 
-                                    if (textures.TryGetResourceWithFullName(def.TextureIds[kv.Key], out var rect))
+                                    if (def.TextureIds != null && def.TextureIds.TryGetValue(kv.Key, out string texId)
+                                        && textures.TryGetResourceWithFullName(texId, out var rect))
                                         faceRects[kv.Key] = rect.AtlasUVRect;
                                 }
                                 model.ExtendModelMesh(
                                     new Vector3(x, y + originY, z),
-                                    task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles, mask, faceRects);
+                                    task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles,
+                                    mask, faceRects, state.RotationX, state.RotationY);
                             }
                 }
             }

@@ -90,6 +90,7 @@ public class SubChunk
         return localCoord.x * SubChunkBlockSize * SubChunkBlockSize + localCoord.y * SubChunkBlockSize + localCoord.z;
     }
 
+    // Values are global block state ids (see BlockStateRegistry); 0 = air.
     public ushort GetBlockAt(Vector3Int subChunkLocalCoord)
     {
         if (!IsCorrectCoord(subChunkLocalCoord)) return 0;
@@ -100,18 +101,18 @@ public class SubChunk
     public ushort[] CopyBlockData() => (ushort[])blockData.Clone();
 
     // Bulk fill for save loading; index must be a valid 0..4095 array slot.
-    public void SetBlockAtRaw(int index, ushort blockId) => blockData[index] = blockId;
+    public void SetBlockAtRaw(int index, ushort stateId) => blockData[index] = stateId;
 
     // No bounds checks: caller guarantees valid subchunk-local coords.
     public ushort GetBlockAtRaw(int x, int y, int z)
         => blockData[x * SubChunkBlockSize * SubChunkBlockSize + y * SubChunkBlockSize + z];
 
-    public bool TrySetBlockAt(Vector3Int subChunkLocalCoord, ushort blockId)
+    public bool TrySetBlockAt(Vector3Int subChunkLocalCoord, ushort stateId)
     {
         if(!IsCorrectCoord(subChunkLocalCoord))return false;
         int index = SubChunkLocalCoordToIndex(subChunkLocalCoord);
         if(blockData[index] != 0)return false;
-        blockData[index] = blockId;
+        blockData[index] = stateId;
         return true;
     }
 

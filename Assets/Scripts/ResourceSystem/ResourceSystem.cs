@@ -9,6 +9,8 @@ public class ResourceSystem
     public ResourceRegistryTable<CustomModel> CustomModels {get;} = new();
     // Block Definition
     public ResourceRegistryTable<BlockDefinition> BlockDefinitions {get;} = new();
+    // Per-block states (built from BlockDefinition.Properties before freeze).
+    public BlockStateRegistry BlockStates {get;} = new();
     // Dimension Definiton
     public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
     public ResourceRegistryTable<DimensionGeneratorResource> DimensionGenerator {get;} = new();

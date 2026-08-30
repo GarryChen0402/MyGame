@@ -55,6 +55,7 @@ public class Chunk
         return Mathf.FloorToInt(yCoord * 1.0f / SubChunk.SubChunkBlockSize) - MinSubChunkIndex;
     }
 
+    // Returns the global block state id (0 = air); see BlockStateRegistry.
     public ushort GetBlockAt(Vector3Int chunkLocalCoord)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return 0;
@@ -67,16 +68,16 @@ public class Chunk
     // blocks at once; the renderer rebuilds once on ChunkLoaded instead).
     public bool SilentMode { get; set; }
 
-    public bool TrySetBlockAt(Vector3Int chunkLocalCoord, ushort blockId, bool fromInteraction = false)
+    public bool TrySetBlockAt(Vector3Int chunkLocalCoord, ushort stateId, bool fromInteraction = false)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
         int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
         if(subChunks[subChunkIndex] == null)subChunks[subChunkIndex] = CreateNewSubChunk(subChunkIndex);
-        bool ok = subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), blockId);
+        bool ok = subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), stateId);
         if(ok && !SilentMode)
         {
             MarkModified();
-            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, blockId){FromInteraction = fromInteraction});
+            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, stateId){FromInteraction = fromInteraction});
         }
         return ok;
     }
@@ -86,12 +87,12 @@ public class Chunk
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
         int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
         if(subChunks[subChunkIndex] == null)return false;
-        ushort oldBlockId = subChunks[subChunkIndex].GetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
+        ushort oldStateId = subChunks[subChunkIndex].GetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
         bool ok = subChunks[subChunkIndex].TryBreakBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
         if(ok && !SilentMode)
         {
             MarkModified();
-            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, oldBlockId){FromInteraction = fromInteraction});
+            EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, oldStateId){FromInteraction = fromInteraction});
         }
         return ok;
     }

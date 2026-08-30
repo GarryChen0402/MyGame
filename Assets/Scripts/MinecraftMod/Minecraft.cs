@@ -1,4 +1,5 @@
 
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Minecraft : IMod
@@ -29,6 +30,11 @@ public class Minecraft : IMod
         cube.modId = ModId;
         cube.name = "full_block";
         ResourceSystem.Instance.CustomModels.Register(cube);
+        CustomModel stairModel = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/stair").text);
+        stairModel.modId = ModId;
+        stairModel.name = "stair";
+        ResourceSystem.Instance.CustomModels.Register(stairModel);
+        var allIds = stairModel.GetAllFaceId();
         // Texture Content
         ResourceSystem.Instance.RegisterTexture(ModId, "stone", Resources.Load<Texture2D>("Textures/Blocks/stone"));
         ResourceSystem.Instance.RegisterTexture(ModId, "dirt", Resources.Load<Texture2D>("Textures/Blocks/dirt"));
@@ -109,10 +115,49 @@ public class Minecraft : IMod
             // }
         };
 
+        // Vanilla-style stairs: 4 facings x 2 halves = 8 states. The stair model
+        // faces +Z (south) in its base orientation, so facing=south has no
+        // rotation. half=top flips around X, which also mirrors the facing, so
+        // a Y=180 is added to undo the south<->north swap (rotation applies Y
+        // before X). Variants with more property entries must come first.
+        var stoneStair = new Dictionary<string, string>();
+        foreach(var id in allIds)stoneStair[id] = $"{ModId}:stone";
+        BlockDefinition stairDefinition = new()
+        {
+            modId = ModId,
+            name = "stone_stair",
+            ModelId = stairModel.FullName,
+            TextureIds = stoneStair,
+            Properties = new()
+            {
+                new BlockPropertyDefinition { Name = "facing", Values = new[] { "north", "south", "east", "west" } },
+                new BlockPropertyDefinition { Name = "half", Values = new[] { "bottom", "top" } }
+            },
+            Variants = new()
+            {
+                new BlockStateVariant { Properties = new() { ["facing"] = "south", ["half"] = "top" }, RotationX = 180, RotationY = 180 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "north", ["half"] = "top" }, RotationX = 180, RotationY = 0 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "east", ["half"] = "top" }, RotationX = 180, RotationY = 90 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "west", ["half"] = "top" }, RotationX = 180, RotationY = 270 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "south" }, RotationY = 0 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "north" }, RotationY = 180 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "east" }, RotationY = 90 },
+                new BlockStateVariant { Properties = new() { ["facing"] = "west" }, RotationY = 270 }
+            },
+            // Base (north-facing, bottom half) shape: full-height back slab plus
+            // half-height front step; top variants derive from the X=180 rotation.
+            AABBs = new()
+            {
+                new AABB(new Vector3(0, 0, 0), new Vector3(1, 1, 0.5f)),
+                new AABB(new Vector3(0, 0, 0.5f), new Vector3(1, 0.5f, 1))
+            }
+        };
+
         ResourceSystem.Instance.BlockDefinitions.Register(air);
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
         ResourceSystem.Instance.RegisterBlock(grassDefinition);
+        ResourceSystem.Instance.RegisterBlock(stairDefinition);
 
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:grass", out grassId);
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:dirt", out dirtId);
@@ -202,10 +247,14 @@ public class Minecraft : IMod
             if(density.GetDensity(x, y, z) > 0) { topY = y; break; }
         }
         if(topY < minY)return;
+        // Chunk data stores state ids; blocks without properties use their default state.
+        ushort grassState = ResourceSystem.Instance.BlockStates.GetDefaultState(grassId);
+        ushort dirtState = ResourceSystem.Instance.BlockStates.GetDefaultState(dirtId);
+        ushort stoneState = ResourceSystem.Instance.BlockStates.GetDefaultState(stoneId);
         for(int y = topY; y >= minY; y--)
         {
             if(density.GetDensity(x, y, z) <= 0)continue;
-            ushort id = y == topY ? grassId : y >= topY - 3 ? dirtId : stoneId;
+            ushort id = y == topY ? grassState : y >= topY - 3 ? dirtState : stoneState;
             chunk.TrySetBlockAt(new Vector3Int(x, y, z), id);
         }
     }
@@ -216,10 +265,11 @@ public class Minecraft : IMod
         var chunk = density.Chunk;
         int minY = density.MinY;
         int maxY = minY + density.Height;
+        ushort stoneState = ResourceSystem.Instance.BlockStates.GetDefaultState(stoneId);
         for(int y = maxY - 1; y >= minY; y--)
         {
             if(density.GetDensity(x, y, z) > 0)
-                chunk.TrySetBlockAt(new Vector3Int(x, y, z), stoneId);
+                chunk.TrySetBlockAt(new Vector3Int(x, y, z), stoneState);
         }
     }
 }

@@ -50,10 +50,13 @@ public static class ItemIconRenderSystem
     private static Mesh GetOrCreateBlockMesh(ushort itemId, ItemDefinition def)
     {
         if(blockMeshCache.TryGetValue(itemId, out var mesh))return mesh;
-        if(!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithFullName(def.BlockFullName, out var blockDef))return null;
-        if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(blockDef.ModelId, out var model))return null;
+        if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(def.BlockFullName, out ushort blockId))return null;
+        // Icons show the block's default state (vanilla behavior).
+        BlockState state = ResourceSystem.Instance.BlockStates.GetState(ResourceSystem.Instance.BlockStates.GetDefaultState(blockId));
+        if(state == null)return null;
+        if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))return null;
 
-        mesh = BuildBlockMesh(blockDef, model);
+        mesh = BuildBlockMesh(state, model);
         blockMeshCache[itemId] = mesh;
         return mesh;
     }
@@ -67,7 +70,7 @@ public static class ItemIconRenderSystem
     }
 
     // Six unoccluded faces, baked face shading (mesh colors), centered at origin.
-    private static Mesh BuildBlockMesh(BlockDefinition blockDef, CustomModel model)
+    private static Mesh BuildBlockMesh(BlockState state, CustomModel model)
     {
         var verts = new List<Vector3>();
         var uvs = new List<Vector2>();
@@ -75,11 +78,12 @@ public static class ItemIconRenderSystem
         var normals = new List<Vector3>();
         var tris = new List<int>();
         var faceRects = new Dictionary<string, Rect>();
-        foreach(var kv in blockDef.TextureIds)
+        foreach(var kv in state.Block.TextureIds)
             if(ResourceSystem.Instance.Textures.TryGetResourceWithFullName(kv.Value, out var tex))
                 faceRects[kv.Key] = tex.AtlasUVRect;
 
-        model.ExtendModelMesh(new Vector3(-0.5f, -0.5f, -0.5f), verts, uvs, colors, normals, tris, null, faceRects);
+        model.ExtendModelMesh(new Vector3(-0.5f, -0.5f, -0.5f), verts, uvs, colors, normals, tris, null, faceRects,
+            state.RotationX, state.RotationY);
 
         var mesh = new Mesh();
         mesh.SetVertices(verts);

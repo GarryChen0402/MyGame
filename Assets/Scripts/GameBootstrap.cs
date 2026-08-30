@@ -56,7 +56,8 @@ public static class GameBootstrap
         ResourceSystem.Instance.BuildAtlas();
         if(!ResourceSystem.Instance.BlockDefinitions.ContainsValue("minecraft:air"))
             Debug.LogError("[GameBootstrap] missing required block : minecraft:air");
-
+        // Block states must be built before any world code runs (state id 0 = air).
+        ResourceSystem.Instance.BlockStates.Build();
     }
 
     private static void Phase4_PublishCompleted()

@@ -120,27 +120,36 @@ public class PhysicsManager
         };
         if(!overlaps) return 1f;
 
+        // Only collide when the entity is in front of the box along the move
+        // direction; boxes already overlapped or behind are skipped (MC
+        // semantics: a player standing on a stair's low step must not be
+        // locked by the high step volume its body overlaps).
         float t = axis switch
         {
-            Axis.X => amount > 0 ? (blockBox.MinRange.x - entityBox.MaxRange.x) / amount
-                                : (blockBox.MaxRange.x - entityBox.MinRange.x) / amount,
-            Axis.Y => amount > 0 ? (blockBox.MinRange.y - entityBox.MaxRange.y) / amount
-                                : (blockBox.MaxRange.y - entityBox.MinRange.y) / amount,
-            _ => amount > 0 ? (blockBox.MinRange.z - entityBox.MaxRange.z) / amount
-                            : (blockBox.MaxRange.z - entityBox.MinRange.z) / amount,
+            Axis.X => amount > 0
+                ? (entityBox.MaxRange.x > blockBox.MinRange.x ? 1f : (blockBox.MinRange.x - entityBox.MaxRange.x) / amount)
+                : (entityBox.MinRange.x < blockBox.MaxRange.x ? 1f : (blockBox.MaxRange.x - entityBox.MinRange.x) / amount),
+            Axis.Y => amount > 0
+                ? (entityBox.MaxRange.y > blockBox.MinRange.y ? 1f : (blockBox.MinRange.y - entityBox.MaxRange.y) / amount)
+                : (entityBox.MinRange.y < blockBox.MaxRange.y ? 1f : (blockBox.MaxRange.y - entityBox.MinRange.y) / amount),
+            _ => amount > 0
+                ? (entityBox.MaxRange.z > blockBox.MinRange.z ? 1f : (blockBox.MinRange.z - entityBox.MaxRange.z) / amount)
+                : (entityBox.MinRange.z < blockBox.MaxRange.z ? 1f : (blockBox.MaxRange.z - entityBox.MinRange.z) / amount),
         };
         return Mathf.Clamp01(t);
     }
 
     // Enumerate the world-space collision boxes of the block at coord, taken from
-    // its BlockDefinition.AABBs (block-space, relative to the block origin).
-    // Falls back to a full cube when the definition has no custom boxes.
+    // its BlockState.AABBs (block-space, already rotated for the state, relative
+    // to the block origin). Falls back to a full cube when there are no custom boxes.
     public static void ForEachBlockCollisionBox(Dimension dim, Vector3Int coord, System.Action<AABB> onBox)
     {
-        ushort blockId = dim.GetBlockAt(coord);
-        if(blockId == 0) return;
+        ushort stateId = dim.GetBlockAt(coord);
+        if(stateId == 0) return;
 
-        if (!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithNumberId(blockId, out BlockDefinition def) || def.AABBs == null || def.AABBs.Count == 0)
+        BlockState state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+        List<AABB> boxes = state?.AABBs;
+        if(state == null || boxes == null || boxes.Count == 0)
         {
             Vector3 origin = new(coord.x, coord.y, coord.z);
             onBox(new AABB(origin, origin + Vector3.one));
@@ -148,7 +157,7 @@ public class PhysicsManager
         }
 
         Vector3 blockOrigin = new(coord.x, coord.y, coord.z);
-        foreach(AABB localBox in def.AABBs)
+        foreach(AABB localBox in boxes)
             onBox(new AABB(blockOrigin + localBox.MinRange, blockOrigin + localBox.MaxRange));
     }
 

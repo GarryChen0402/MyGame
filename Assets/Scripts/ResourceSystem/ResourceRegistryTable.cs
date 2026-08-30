@@ -23,6 +23,8 @@ public class ResourceRegistryTable<T> where T : ResourceType
     private ushort nextNumber = 0;
     private bool frozen;
 
+    public int Count => nextNumber;
+
     // Make the table read-only. Register after freezing is a boot bug (e.g. a
     // texture added after atlas packing would never get UVs), so it fails loudly.
     public void Freeze()

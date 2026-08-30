@@ -43,12 +43,13 @@ public class WorldManager
             LoadChunksInDimension(dim, lastPlayerChunkCoord, ChunkLoadRange);
     }
 
-    // Controller entry for player block operations. Returns false when the target
-    // position is already occupied or the dimension doesn't exist.
-    public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort blockId, bool fromInteraction = false)
+    // Controller entry for player block operations. stateId is a global block
+    // state id (see BlockStateRegistry); returns false when the target position
+    // is already occupied or the dimension doesn't exist.
+    public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort stateId, bool fromInteraction = false)
     {
         if(!TryGetOrGenerateDimension(dimId, out var dim))return false;
-        return dim.TrySetBlockAt(dimensionCoord, blockId, fromInteraction);
+        return dim.TrySetBlockAt(dimensionCoord, stateId, fromInteraction);
     }
 
     public bool TryBreakBlockAt(ushort dimId, Vector3Int dimensionCoord, bool fromInteraction = false)
