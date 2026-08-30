@@ -18,5 +18,7 @@ public class Player : Entity
             MinRange = new Vector3(-0.3f, 39.1f, -0.3f),
             MaxRange = new Vector3( 0.3f, 40.9f, 0.3f)
         });
+
+        inventory = new Inventory(36, false);
     }
 }

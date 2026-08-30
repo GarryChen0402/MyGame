@@ -113,3 +113,5 @@ Docs/
 .claude/
 *.fbx
 *.mat
+# TextMesh Pro documentation (no runtime value)
+/Assets/TextMesh Pro/Documentation/

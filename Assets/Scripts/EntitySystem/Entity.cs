@@ -7,7 +7,7 @@ public class Entity // Data Class
     public AABB MainBox => AABBs[0];
     
     public Vector3 Position => MainBox.Pivot;
-
+    public Inventory inventory;
     public float pitch = 0;
     public float yaw = 0;
     public ushort DimensionId;

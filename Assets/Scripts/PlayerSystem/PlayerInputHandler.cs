@@ -16,10 +16,15 @@ public class PlayerInputHandler : MonoBehaviour
     private float mouseSensitivity = 2f;
 
     private const float RaycastReach = 4.5f;
-
+    private int CurrentSelectedSlotIndex = 0;
     private void Awake()
     {
         player = Player.Instance;
+
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 0, amount = 1});
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 1, amount = 1});
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 2, amount = 1});
+        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 3, amount = 1});
     }
 
     private void Update()
@@ -35,6 +40,13 @@ public class PlayerInputHandler : MonoBehaviour
             Cursor.lockState = CursorLockMode.Locked;
         }
 
+        
+        MoveHandler();
+        InteractionHandler();
+
+    }
+    private void MoveHandler()
+    {
         player.yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
         player.pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
         player.pitch = Mathf.Clamp(player.pitch, -90f, 90f);
@@ -68,28 +80,39 @@ public class PlayerInputHandler : MonoBehaviour
         motion *= Time.deltaTime;
 
         player.Move(motion);
-
-        InteractionHandler();
-
     }
 
     private void InteractionHandler()
     {
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithFullName("minecraft:dirt", out var itemDef))return;
-        if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(itemDef.ItemBehaivorId, out var behavior))return;
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(itemDef.FullName, out var itemId))return ;
-        var stack = new ItemStack()
+        // Mouse wheel cycles the selected inventory slot (wraps around).
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if(scroll != 0f && player.inventory.itemStacks.Count > 0)
         {
-            itemId = itemId,
-            amount = 1
-        };
+            CurrentSelectedSlotIndex += scroll > 0f ? 1 : -1;
+            int count = player.inventory.itemStacks.Count;
+            CurrentSelectedSlotIndex = ((CurrentSelectedSlotIndex % count) + count) % count;
+
+            // Log the item now selected in the new slot.
+            ItemStack selected = player.inventory.GetItemStackAt(CurrentSelectedSlotIndex);
+            if(selected != null && !selected.IsEmpty() &&
+               ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(selected.itemId, out var selectedDef))
+                Debug.Log($"Slot {CurrentSelectedSlotIndex}: {selectedDef.FullName} x{selected.amount}");
+            else
+                Debug.Log($"Slot {CurrentSelectedSlotIndex}: (empty)");
+        }
+
         if(Input.GetMouseButtonDown(0) && player.CurrentRaycastHitResult.IsHit)
         {
             Debug.Log(WorldManager.Instance.TryBreakBlockAt(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, fromInteraction: true));
         }
         if(Input.GetMouseButtonDown(1) && player.CurrentRaycastHitResult.IsHit)
         {
+            ItemStack stack = player.inventory.GetItemStackAt(CurrentSelectedSlotIndex);
+            if(stack == null || stack.IsEmpty())return;
+            if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(stack.itemId, out var itemDef))return;
+            if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(itemDef.ItemBehaivorId, out var behavior))return;
             var res = behavior.OnRightUseToBlock(player, stack);
+            if(res.UseSuccess)player.inventory.TryConsumeItemAt(CurrentSelectedSlotIndex, res.ConsumeAmount);
             Debug.Log($"{res.UseSuccess} == {res.ConsumeAmount}");
         }
     }
