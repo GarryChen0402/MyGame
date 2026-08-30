@@ -82,8 +82,24 @@ public static class ItemIconRenderSystem
             if(ResourceSystem.Instance.Textures.TryGetResourceWithFullName(kv.Value, out var tex))
                 faceRects[kv.Key] = tex.AtlasUVRect;
 
+        // Icons always show the block facing the camera (+z, south): drop the
+        // default state's facing rotation (shape flips on X/Z stay) so stairs
+        // etc. show their front face instead of their back.
         model.ExtendModelMesh(new Vector3(-0.5f, -0.5f, -0.5f), verts, uvs, colors, normals, tris, null, faceRects,
-            state.RotationX, state.RotationY, state.RotationZ);
+            state.RotationX, 0, state.RotationZ);
+
+        // MC-style baked face shading: the icon scene has no lights, so shade
+        // each vertex by its rotated face direction (top brightest, sides mid,
+        // bottom darkest) to make the block's faces read clearly.
+        for(int i = 0; i < normals.Count; i++)
+        {
+            float shade = Mathf.Abs(normals[i].y) > 0.9f
+                ? (normals[i].y > 0f ? 1f : 0.55f)
+                : 0.78f;
+            Color c = colors[i];
+            c.r *= shade; c.g *= shade; c.b *= shade;
+            colors[i] = c;
+        }
 
         var mesh = new Mesh();
         mesh.SetVertices(verts);
