@@ -126,6 +126,7 @@ public class Minecraft : IMod
         {
             modId = ModId,
             name = "stone_stair",
+            IsFullCube = false,
             TextureIds = stoneStair,
             Properties = new()
             {

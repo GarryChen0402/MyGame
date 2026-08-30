@@ -6,6 +6,9 @@ public class BlockDefinition : ResourceType
     public Dictionary<string, string> TextureIds;
     // false for glass/water/plants: such blocks never hide the faces behind them.
     public bool IsOpaque = true;
+    // false for stairs/slabs etc.: such shapes never fully cover a neighbor's
+    // face, so faces behind them must stay visible (conservative culling).
+    public bool IsFullCube = true;
 
     // Block-space collision boxes relative to the block origin; null/empty = full cube.
     public List<AABB> AABBs = null;

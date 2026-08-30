@@ -338,10 +338,12 @@ public class WorldRenderer : MonoBehaviour
                                         : kv.Value;
                                     ushort neighborId = QueryNeighbor(task, s, x + dir.x, y + dir.y, z + dir.z);
                                     // neighborId is a global state id; resolve it to the block's
-                                    // opaque flag via the state registry (block ids only work for
+                                    // flags via the state registry (block ids only work for
                                     // single-state blocks, which is why the old lookup misfired).
+                                    // IsFullCube: non-full shapes (stairs) leave part of a
+                                    // neighbor's face visible, so they never hide it.
                                     mask[kv.Key] = neighborId != 0
-                                        && ResourceSystem.Instance.BlockStates.GetState(neighborId)?.Block is { IsOpaque: true };
+                                        && ResourceSystem.Instance.BlockStates.GetState(neighborId)?.Block is { IsOpaque: true, IsFullCube: true };
 
                                     if (def.TextureIds != null && def.TextureIds.TryGetValue(kv.Key, out string texId)
                                         && textures.TryGetResourceWithFullName(texId, out var rect))
