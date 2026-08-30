@@ -1,0 +1,53 @@
+{
+  "modId": "minecraft",
+  "name": "player_walk",
+  "duration": 1,
+  "looping": true,
+  "keyframes": [
+    {
+      "t": 0,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "right_leg", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_leg", "rotation": { "x": 0, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 0.25,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 45, "y": 0, "z": 0 } },
+        { "stringId": "left_arm", "rotation": { "x": -45, "y": 0, "z": 0 } },
+        { "stringId": "right_leg", "rotation": { "x": -45, "y": 0, "z": 0 } },
+        { "stringId": "left_leg", "rotation": { "x": 45, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 0.5,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "right_leg", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_leg", "rotation": { "x": 0, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 0.75,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": -45, "y": 0, "z": 0 } },
+        { "stringId": "left_arm", "rotation": { "x": 45, "y": 0, "z": 0 } },
+        { "stringId": "right_leg", "rotation": { "x": 45, "y": 0, "z": 0 } },
+        { "stringId": "left_leg", "rotation": { "x": -45, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 1,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_arm", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "right_leg", "rotation": { "x": 0, "y": 0, "z": 0 } },
+        { "stringId": "left_leg", "rotation": { "x": 0, "y": 0, "z": 0 } }
+      ]
+    }
+  ]
+}

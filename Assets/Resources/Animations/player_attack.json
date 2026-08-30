@@ -1,0 +1,26 @@
+{
+  "modId": "minecraft",
+  "name": "player_attack",
+  "duration": 0.5,
+  "looping": false,
+  "keyframes": [
+    {
+      "t": 0,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 0, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 0.5,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": -120, "y": 0, "z": 0 } }
+      ]
+    },
+    {
+      "t": 1,
+      "parts": [
+        { "stringId": "right_arm", "rotation": { "x": 0, "y": 0, "z": 0 } }
+      ]
+    }
+  ]
+}

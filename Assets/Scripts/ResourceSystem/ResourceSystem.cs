@@ -17,6 +17,10 @@ public class ResourceSystem
     // Item Behavior Definition
     public ResourceRegistryTable<ItemBehaivor> ItemBehaviors {get;} = new();
 
+    // Entity model & animation
+    public ResourceRegistryTable<EntityModel> EntityModels {get;} = new();
+    public ResourceRegistryTable<EntityAnimation> EntityAnimations {get;} = new();
+
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;
@@ -43,6 +47,8 @@ public class ResourceSystem
         ItemBehaviors.Freeze();
         DimensionDefinitions.Freeze();
         DimensionGenerator.Freeze();
+        EntityModels.Freeze();
+        EntityAnimations.Freeze();
         Textures.Freeze();
     }
     

@@ -30,6 +30,12 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "grass", Resources.Load<Texture2D>("Textures/Blocks/grass"));
         ResourceSystem.Instance.RegisterTexture(ModId, "grass_side", Resources.Load<Texture2D>("Textures/Blocks/grass_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "diamond_sword", Resources.Load<Texture2D>("Textures/Items/diamond_sword"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "firefly", Resources.Load<Texture2D>("Textures/Entities/firefly"));
+        // EntityModel & EntityAnimation Content
+        EntityModel playerModel = EntityModelParser.Parse(Resources.Load<TextAsset>("Models/entity/player").text);
+        ResourceSystem.Instance.EntityModels.Register(playerModel);
+        ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_walk").text));
+        ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_attack").text));
         // BlockDefinition Content
         BlockDefinition air = new ()
         {
