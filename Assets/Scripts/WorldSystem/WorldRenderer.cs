@@ -36,6 +36,8 @@ public class WorldRenderer : MonoBehaviour
         if(playerTransform == null)return;
         // View forwards the player position; chunk load/unload is the Controller's job.
         WorldManager.Instance.OnPlayerMoved(playerTransform.position);
+        // Register finished worker-generated chunks (events need the main thread).
+        WorldManager.Instance.ProcessChunkGeneration();
         ProcessRebuildChunkQueue();
     }
 

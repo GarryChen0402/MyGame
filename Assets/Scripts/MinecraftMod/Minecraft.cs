@@ -8,13 +8,18 @@ public class Minecraft : IMod
     string IMod.ModId => ModId;
     public int LoadPriority => 0;
 
+    // Cached block ids used by biome fill columns.
+    private static ushort grassId, dirtId, stoneId;
+
     private static DimensionDefinition testDi = new()
     {
         modId = ModId,
         name = "test_dim",
         MinSubChunkIndex = -4,
-        MaxSubChunkIndex = 1,
-        DimensionGeneratorName = $"{ModId}:test_dim_generator"
+        // Biome surfaces reach up to ~106 (mountains 92 + scale 14); the chunk
+        // range must cover them or the world renders as a flat cap at y=32.
+        MaxSubChunkIndex = 7,
+        DimensionGeneratorName = $"{ModId}:biome_dim_generator"
     };
 
     public void RegisterAllResources()
@@ -108,6 +113,10 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
         ResourceSystem.Instance.RegisterBlock(grassDefinition);
+
+        ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:grass", out grassId);
+        ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:dirt", out dirtId);
+        ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:stone", out stoneId);
         // ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
         // ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
         // ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
@@ -119,7 +128,44 @@ public class Minecraft : IMod
             GetNewGenerator = ()=> new TestDimensionGenerator()
         };
         ResourceSystem.Instance.DimensionGenerator.Register(testGenerator);
+        DimensionGeneratorResource biomeGenerator = new()
+        {
+            modId = ModId,
+            name = "biome_dim_generator",
+            GetNewGenerator = () => new BiomeDimensionGenerator()
+        };
+        ResourceSystem.Instance.DimensionGenerator.Register(biomeGenerator);
         ResourceSystem.Instance.DimensionDefinitions.Register(testDi);
+
+        // Biome Definitions
+        ResourceSystem.Instance.BiomeDefinitions.Register(new BiomeDefinition()
+        {
+            modId = ModId,
+            name = "plains",
+            DimensionId = testDi.FullName,
+            SpawnRange = 96f,
+            SpawnProbability = 1f,
+            BaseHeight = 67f,
+            Scale = 3f,
+            MinGradientMagnitude = 0.4f,
+            MaxGradientMagnitude = 0.8f,
+            TerrainLayerStrength = 0.15f,
+            FillColumn = FillPlainsColumn
+        });
+        ResourceSystem.Instance.BiomeDefinitions.Register(new BiomeDefinition()
+        {
+            modId = ModId,
+            name = "mountains",
+            DimensionId = testDi.FullName,
+            SpawnRange = 128f,
+            SpawnProbability = 1f,
+            BaseHeight = 92f,
+            Scale = 14f,
+            MinGradientMagnitude = 0.8f,
+            MaxGradientMagnitude = 1.4f,
+            TerrainLayerStrength = 0.35f,
+            FillColumn = FillMountainsColumn
+        });
 
 
         ResourceSystem.Instance.ItemBehaviors.Register(new UniversalBlockItemBehavior()
@@ -142,5 +188,38 @@ public class Minecraft : IMod
         
 
         // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
+    }
+
+    // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。
+    private static void FillPlainsColumn(DensityField density, Vector2Int chunkCoord, int x, int z)
+    {
+        var chunk = density.Chunk;
+        int minY = density.MinY;
+        int maxY = minY + density.Height;
+        int topY = -1;
+        for(int y = maxY - 1; y >= minY; y--)
+        {
+            if(density.GetDensity(x, y, z) > 0) { topY = y; break; }
+        }
+        if(topY < minY)return;
+        for(int y = topY; y >= minY; y--)
+        {
+            if(density.GetDensity(x, y, z) <= 0)continue;
+            ushort id = y == topY ? grassId : y >= topY - 3 ? dirtId : stoneId;
+            chunk.TrySetBlockAt(new Vector3Int(x, y, z), id);
+        }
+    }
+
+    // 山地填充:全部石头。
+    private static void FillMountainsColumn(DensityField density, Vector2Int chunkCoord, int x, int z)
+    {
+        var chunk = density.Chunk;
+        int minY = density.MinY;
+        int maxY = minY + density.Height;
+        for(int y = maxY - 1; y >= minY; y--)
+        {
+            if(density.GetDensity(x, y, z) > 0)
+                chunk.TrySetBlockAt(new Vector3Int(x, y, z), stoneId);
+        }
     }
 }

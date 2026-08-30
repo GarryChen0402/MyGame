@@ -9,9 +9,11 @@ public class ResourceSystem
     public ResourceRegistryTable<CustomModel> CustomModels {get;} = new();
     // Block Definition
     public ResourceRegistryTable<BlockDefinition> BlockDefinitions {get;} = new();
-    // Dimension Definiton 
+    // Dimension Definiton
     public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
     public ResourceRegistryTable<DimensionGeneratorResource> DimensionGenerator {get;} = new();
+    // Biome Definition
+    public ResourceRegistryTable<BiomeDefinition> BiomeDefinitions {get;} = new();
     // Item Definition
     public ResourceRegistryTable<ItemDefinition> ItemDefinitions {get;} = new();
     // Item Behavior Definition
@@ -47,6 +49,7 @@ public class ResourceSystem
         ItemBehaviors.Freeze();
         DimensionDefinitions.Freeze();
         DimensionGenerator.Freeze();
+        BiomeDefinitions.Freeze();
         EntityModels.Freeze();
         EntityAnimations.Freeze();
         Textures.Freeze();

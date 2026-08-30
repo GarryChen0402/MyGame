@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 public class Dimension
@@ -18,6 +19,11 @@ public class Dimension
 
     private readonly Dictionary<Vector2Int, Chunk> EnableChunks = new();
     private readonly Dictionary<Vector2Int, Chunk> DisableChunks = new();
+
+    // Chunks whose generation is running on a worker thread: present but not yet
+    // registered in EnableChunks, so queries treat them as not loaded.
+    private readonly Dictionary<Vector2Int, Chunk> GeneratingChunks = new();
+
     public virtual void FillNewChunk(Chunk chunk)
     {
         //DimensionGenerator, use the Dimension Definition to generate the new chunk of the dimension
@@ -28,6 +34,7 @@ public class Dimension
 
     public bool IsChunkEnabled(Vector2Int ChunkCoord) => EnableChunks.ContainsKey(ChunkCoord);
     public bool IsChunkDisabled(Vector2Int ChunkCoord) => DisableChunks.ContainsKey(ChunkCoord);
+    public bool IsChunkGenerating(Vector2Int ChunkCoord) => GeneratingChunks.ContainsKey(ChunkCoord);
 
     public bool TryGetChunk(Vector2Int chunkCoord, out Chunk chunk)
         => EnableChunks.TryGetValue(chunkCoord, out chunk);
@@ -44,7 +51,14 @@ public class Dimension
         }
         else
         {
-            chunk = GetOrCreateChunk(ChunkCoord);
+            if(IsChunkGenerating(ChunkCoord))return;   // already queued / running
+            chunk = new Chunk(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
+            chunk.SilentMode = true;   // suppress block events during bulk fill
+            GeneratingChunks[ChunkCoord] = chunk;
+            // Async: the worker fills the chunk; ChunkLoaded fires on the main
+            // thread once WorldManager registers it (see ProcessChunkGeneration).
+            WorldManager.Instance.SubmitChunkGeneration(this, chunk);
+            return;
         }
         EventBus.Instance.Publish(new ChunkLoadedEvent(chunk));
     }
@@ -66,6 +80,15 @@ public class Dimension
     {
         if(IsChunkEnabled(ChunkCoord))return EnableChunks[ChunkCoord];
         if(IsChunkDisabled(ChunkCoord))return DisableChunks[ChunkCoord];
+        if(IsChunkGenerating(ChunkCoord))
+        {
+            // The worker fills the chunk, but registration happens on the main
+            // thread, so the wait must keep pumping the completion queue or it
+            // deadlocks (the queue is drained in WorldManager.ProcessChunkGeneration).
+            WorldManager.Instance.WaitForChunkGenerated(this, ChunkCoord);
+            if(IsChunkEnabled(ChunkCoord))return EnableChunks[ChunkCoord];
+            // Generation failed: fall through to a fresh synchronous fill.
+        }
         Chunk chunk = new(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
         chunk.SilentMode = true;   // bulk generation: one ChunkLoadedEvent after, not 24k block events
         FillNewChunk(chunk);
@@ -73,6 +96,19 @@ public class Dimension
         EnableChunks[ChunkCoord] = chunk;
         return chunk;
     }
+
+    // Main thread only (from WorldManager.ProcessChunkGeneration): moves a
+    // finished worker chunk into the enabled set and announces it.
+    public void RegisterGeneratedChunk(Chunk chunk)
+    {
+        chunk.SilentMode = false;
+        EnableChunks[chunk.ChunkCoord] = chunk;
+        EventBus.Instance.Publish(new ChunkLoadedEvent(chunk));
+    }
+
+    // Main thread only: forgets a chunk whose generation finished (success or
+    // failure) so LoadChunk can re-enqueue it and GetOrCreateChunk stops waiting.
+    public void MarkGenerationDone(Vector2Int ChunkCoord) => GeneratingChunks.Remove(ChunkCoord);
 
     public ushort GetBlockAt(Vector3Int dimensionCoord)
     {
