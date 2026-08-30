@@ -25,7 +25,7 @@ public class UniversalBlockItemBehavior : ItemBehaivor
             Dim = dim,
             ClickedBlockCoord = raycastRes.BlockDimensionCoord,
             ClickedFaceNormal = normal,
-            HitPoint = raycastRes.HitPoint,
+            HitFace = ClassifyFace(normal, raycastRes.HitPoint, raycastRes.BlockDimensionCoord),
             PlayerYaw = owner.yaw
         });
         return new ItemUseResult()
@@ -34,5 +34,14 @@ public class UniversalBlockItemBehavior : ItemBehaivor
             ConsumeAmount = 1,
             ReplaceWith = null
         };
+    }
+
+    // Top/bottom by the face normal; side hits split into upper/lower by the
+    // hit point's y offset within the clicked block (0.5 = half-way).
+    private static FaceHitType ClassifyFace(Vector3Int normal, Vector3 hitPoint, Vector3Int blockCoord)
+    {
+        if (normal.y > 0) return FaceHitType.Top;
+        if (normal.y < 0) return FaceHitType.Bottom;
+        return hitPoint.y - blockCoord.y > 0.5f ? FaceHitType.SideUpper : FaceHitType.SideLower;
     }
 }

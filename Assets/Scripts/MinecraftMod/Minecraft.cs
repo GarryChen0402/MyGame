@@ -52,14 +52,13 @@ public class Minecraft : IMod
         {
             modId = ModId,
             name = "air",
-            ModelId = cube.FullName,
-            TextureIds = new(){}
+            TextureIds = new(){},
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } }
         };
         BlockDefinition stoneDefinition = new()
         {
             modId = ModId,
             name = "stone",
-            ModelId = cube.FullName,
             TextureIds = new()
             {
                 ["top"]    = $"{ModId}:stone",
@@ -69,6 +68,7 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:stone",
                 ["right"]  = $"{ModId}:stone"
             },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)
@@ -79,7 +79,6 @@ public class Minecraft : IMod
         {
             modId = ModId,
             name = "dirt",
-            ModelId = cube.FullName,
             TextureIds = new()
             {
                 ["top"]    = $"{ModId}:dirt",
@@ -89,6 +88,7 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:dirt",
                 ["right"]  = $"{ModId}:dirt"
             },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)
@@ -99,7 +99,6 @@ public class Minecraft : IMod
         {
             modId = ModId,
             name = "grass",
-            ModelId = cube.FullName,
             TextureIds = new()
             {
                 ["top"]    = $"{ModId}:grass",
@@ -109,40 +108,52 @@ public class Minecraft : IMod
                 ["left"]   = $"{ModId}:grass_side",
                 ["right"]  = $"{ModId}:grass_side"
             },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)
             // }
         };
 
-        // Vanilla-style stairs: 4 facings x 2 halves = 8 states. The stair model
-        // faces +Z (south) in its base orientation, so facing=south has no
-        // rotation. half=top flips around X, which also mirrors the facing, so
-        // a Y=180 is added to undo the south<->north swap (rotation applies Y
-        // before X). Variants with more property entries must come first.
+        // Vanilla-style stairs: 4 facings x 4 halves = 16 states. The stair model
+        // faces +Z (south) in its base orientation. half=top/upper flip around X
+        // (step on top), which also mirrors the facing, so a Y=180 is added to
+        // undo the south<->north swap (rotation applies Y before X). Variants
+        // with more property entries must come first.
         var stoneStair = new Dictionary<string, string>();
         foreach(var id in allIds)stoneStair[id] = $"{ModId}:stone";
         BlockDefinition stairDefinition = new()
         {
             modId = ModId,
             name = "stone_stair",
-            ModelId = stairModel.FullName,
             TextureIds = stoneStair,
             Properties = new()
             {
                 new BlockPropertyDefinition { Name = "facing", Values = new[] { "north", "south", "east", "west" } },
-                new BlockPropertyDefinition { Name = "half", Values = new[] { "bottom", "top" } }
+                new BlockPropertyDefinition { Name = "half", Values = new[] { "top", "lower", "upper", "bottom" } }
             },
             Variants = new()
             {
-                new BlockStateVariant { Properties = new() { ["facing"] = "south", ["half"] = "top" }, RotationX = 180, RotationY = 180 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "north", ["half"] = "top" }, RotationX = 180, RotationY = 0 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "east", ["half"] = "top" }, RotationX = 180, RotationY = 90 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "west", ["half"] = "top" }, RotationX = 180, RotationY = 270 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "south" }, RotationY = 0 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "north" }, RotationY = 180 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "east" }, RotationY = 90 },
-                new BlockStateVariant { Properties = new() { ["facing"] = "west" }, RotationY = 270 }
+                // half = top / upper: step on top (X=180 flips the bottom shape up)
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "south", ["half"] = "top" }, RotationY = 0   },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "north", ["half"] = "top" }, RotationY = 180 },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "east", ["half"] = "top" },  RotationY = 90  },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "west", ["half"] = "top" },  RotationY = 270 },
+
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "south", ["half"] = "upper" }, RotationZ = 180, RotationY = 0   },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "north", ["half"] = "upper" }, RotationZ = 180, RotationY = 180 },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "east", ["half"] = "upper" },  RotationZ = 180, RotationY = 90  },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "west", ["half"] = "upper" },  RotationZ = 180, RotationY = 270 },
+                // half = bottom / lower: step on bottom (base shape, no X flip)
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "south", ["half"] = "bottom" }, RotationY = 0   , RotationZ = 180},
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "north", ["half"] = "bottom" }, RotationY = 180 , RotationZ = 180},
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "east", ["half"] = "bottom" },  RotationY = 90  , RotationZ = 180},
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "west", ["half"] = "bottom" },  RotationY = 270 , RotationZ = 180},
+
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "south", ["half"] = "lower" }, RotationZ = 0, RotationY = 0   },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "north", ["half"] = "lower" }, RotationZ = 0, RotationY = 180 },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "east", ["half"] = "lower" },  RotationZ = 0, RotationY = 90  },
+                new BlockStateVariant { ModelId = stairModel.FullName, Properties = new() { ["facing"] = "west", ["half"] = "lower" },  RotationZ = 0, RotationY = 270 }
             },
             // Base (north-facing, bottom half) shape: full-height back slab plus
             // half-height front step; top variants derive from the X=180 rotation.

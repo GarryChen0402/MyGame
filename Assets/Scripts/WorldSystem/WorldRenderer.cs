@@ -303,7 +303,6 @@ public class WorldRenderer : MonoBehaviour
 
     private static void BuildMeshData(ChunkMeshBuildTask task)
     {
-        var blockDefs = ResourceSystem.Instance.BlockDefinitions;
         var models = ResourceSystem.Instance.CustomModels;
         var textures = ResourceSystem.Instance.Textures;
         ChunkMeshBuildTask prev = task.PreviousTask;
@@ -334,13 +333,15 @@ public class WorldRenderer : MonoBehaviour
                                 Dictionary<string, Rect> faceRects = new();
                                 foreach (var kv in model.GetFaceDirections())
                                 {
-                                    Vector3Int dir = state.RotationX != 0 || state.RotationY != 0
-                                        ? CustomModel.RotateDirection(kv.Value, state.RotationX, state.RotationY)
+                                    Vector3Int dir = state.RotationX != 0 || state.RotationY != 0 || state.RotationZ != 0
+                                        ? CustomModel.RotateDirection(kv.Value, state.RotationX, state.RotationY, state.RotationZ)
                                         : kv.Value;
                                     ushort neighborId = QueryNeighbor(task, s, x + dir.x, y + dir.y, z + dir.z);
+                                    // neighborId is a global state id; resolve it to the block's
+                                    // opaque flag via the state registry (block ids only work for
+                                    // single-state blocks, which is why the old lookup misfired).
                                     mask[kv.Key] = neighborId != 0
-                                        && blockDefs.TryGetResourceWithNumberId(neighborId, out var neighborDef)
-                                        && neighborDef != null && neighborDef.IsOpaque;
+                                        && ResourceSystem.Instance.BlockStates.GetState(neighborId)?.Block is { IsOpaque: true };
 
                                     if (def.TextureIds != null && def.TextureIds.TryGetValue(kv.Key, out string texId)
                                         && textures.TryGetResourceWithFullName(texId, out var rect))
@@ -349,7 +350,7 @@ public class WorldRenderer : MonoBehaviour
                                 model.ExtendModelMesh(
                                     new Vector3(x, y + originY, z),
                                     task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles,
-                                    mask, faceRects, state.RotationX, state.RotationY);
+                                    mask, faceRects, state.RotationX, state.RotationY, state.RotationZ);
                             }
                 }
             }
@@ -361,7 +362,10 @@ public class WorldRenderer : MonoBehaviour
                 CopyRange(task.Uvs, prev.Uvs, prev.SubStartVertex[s], prev.SubVertexCount[s]);
                 CopyRange(task.Colors, prev.Colors, prev.SubStartVertex[s], prev.SubVertexCount[s]);
                 CopyRange(task.Normals, prev.Normals, prev.SubStartVertex[s], prev.SubVertexCount[s]);
-                CopyRange(task.Triangles, prev.Triangles, prev.SubStartTri[s], prev.SubTriCount[s]);
+                // Triangle indices are absolute in the previous mesh; rebase them
+                // onto this task's copy (the subchunk now starts at startV).
+                for (int i = 0; i < prev.SubTriCount[s]; i++)
+                    task.Triangles.Add(prev.Triangles[prev.SubStartTri[s] + i] - prev.SubStartVertex[s] + startV);
             }
             task.SubStartVertex[s] = startV;
             task.SubVertexCount[s] = task.Vertices.Count - startV;

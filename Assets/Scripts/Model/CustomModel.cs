@@ -31,15 +31,15 @@ public class CustomModel : ResourceType
     // Appends vertex data of all non-occluded faces to the given lists.
     // occlusionMask: face name -> whether a neighbor blocks that direction; faces occluded and
     //   canBeOccluded are skipped. faceRects: face name -> atlas region for UV mapping.
-    // rotX/rotY (0/90/180/270): rotate the model around the block center (0.5,0.5,0.5);
-    // Y is applied before X (Unity Euler order). Vertices and normals rotate;
-    // UVs and face names stay.
+    // rotX/rotY/rotZ (0/90/180/270): rotate the model around the block center
+    // (0.5,0.5,0.5) via Quaternion.Euler(rotX, rotY, rotZ) (Unity order: Z, then
+    // X, then Y). Vertices and normals rotate; UVs and face names stay.
     public void ExtendModelMesh(Vector3 origin, List<Vector3> verts, List<Vector2> uv, List<Color> colors,
         List<Vector3> normals, List<int> triangles, Dictionary<string, bool> occlusionMask = null,
-        Dictionary<string, Rect> faceRects = null, int rotX = 0, int rotY = 0)
+        Dictionary<string, Rect> faceRects = null, int rotX = 0, int rotY = 0, int rotZ = 0)
     {
-        bool rotated = rotX != 0 || rotY != 0;
-        Quaternion rot = rotated ? Quaternion.Euler(rotX, rotY, 0) : Quaternion.identity;
+        bool rotated = rotX != 0 || rotY != 0 || rotZ != 0;
+        Quaternion rot = rotated ? Quaternion.Euler(rotX, rotY, rotZ) : Quaternion.identity;
         Vector3 center = new(0.5f, 0.5f, 0.5f);
         foreach (var kvp in MeshData)
         {
@@ -65,10 +65,10 @@ public class CustomModel : ResourceType
     }
 
     // Rotates a face direction by the same convention as ExtendModelMesh.
-    public static Vector3Int RotateDirection(Vector3Int dir, int rotX, int rotY)
+    public static Vector3Int RotateDirection(Vector3Int dir, int rotX, int rotY, int rotZ = 0)
     {
-        if (rotX == 0 && rotY == 0) return dir;
-        Vector3 d = Quaternion.Euler(rotX, rotY, 0) * (Vector3)dir;
+        if (rotX == 0 && rotY == 0 && rotZ == 0) return dir;
+        Vector3 d = Quaternion.Euler(rotX, rotY, rotZ) * (Vector3)dir;
         return new Vector3Int(Mathf.RoundToInt(d.x), Mathf.RoundToInt(d.y), Mathf.RoundToInt(d.z));
     }
 

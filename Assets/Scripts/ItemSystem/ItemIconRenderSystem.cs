@@ -83,7 +83,7 @@ public static class ItemIconRenderSystem
                 faceRects[kv.Key] = tex.AtlasUVRect;
 
         model.ExtendModelMesh(new Vector3(-0.5f, -0.5f, -0.5f), verts, uvs, colors, normals, tris, null, faceRects,
-            state.RotationX, state.RotationY);
+            state.RotationX, state.RotationY, state.RotationZ);
 
         var mesh = new Mesh();
         mesh.SetVertices(verts);

@@ -36,7 +36,7 @@ public static class BlockModelParser
             var v0 = f.verts[f.triangles[0]];
             var v1 = f.verts[f.triangles[1]];
             var v2 = f.verts[f.triangles[2]];
-            normal = Vector3.Cross(v1 -v0, v2 - v0);
+            normal = Vector3.Cross(v1 -v0, v2 - v0).normalized;
         }
         for(int i = 0; i < f.verts.Count; i++)
         {

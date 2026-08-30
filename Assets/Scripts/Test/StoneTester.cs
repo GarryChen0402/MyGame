@@ -15,9 +15,12 @@ public class StoneTester : MonoBehaviour
             Debug.LogError("stone 方块定义未注册");
             return;
         }
-        if (!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName($"{stone.ModelId}", out var model))
+        if (!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(stoneId, out ushort stoneBlockId)) return;
+        BlockState state = ResourceSystem.Instance.BlockStates.GetState(ResourceSystem.Instance.BlockStates.GetDefaultState(stoneBlockId));
+        if (state == null) return;
+        if (!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))
         {
-            Debug.LogError($"模型 {Minecraft.ModId}:{stone.ModelId} 未注册");
+            Debug.LogError($"模型 {state.ModelId} 未注册");
             return;
         }
         if (!ResourceSystem.Instance.Textures.TryGetResourceWithFullName($"{Minecraft.ModId}:stone", out var tex))

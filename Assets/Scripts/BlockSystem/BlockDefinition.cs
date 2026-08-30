@@ -3,7 +3,6 @@ using UnityEngine;
 
 public class BlockDefinition : ResourceType
 {
-    public string ModelId;
     public Dictionary<string, string> TextureIds;
     // false for glass/water/plants: such blocks never hide the faces behind them.
     public bool IsOpaque = true;
@@ -20,13 +19,14 @@ public class BlockDefinition : ResourceType
     // rules: clicking a side face faces the block the way that face points
     // (the back leans against the clicked block); clicking top/bottom uses the
     // player's horizontal facing. "half" is top when clicking the top face or
-    // the upper half of a side face (hit point offset > 0.5). Complex blocks
-    // can override.
+    // the upper half of a side face. Complex blocks can override.
     //
     // Our models define "facing" as the direction the step points, while the
     // vanilla rule yields the backing direction, so a top/bottom click must
     // aim the step back at the player (yaw + 180). Side clicks already point
     // the step at the player: the clicked face normal faces the player.
+    // Facing steps follow the property's value list: 8 directions (diagonals)
+    // are binned every 45 degrees, plain axes every 90 degrees.
     public virtual ushort GetStateForPlacement(BlockPlacementContext ctx)
     {
         var states = ResourceSystem.Instance.BlockStates;
@@ -36,20 +36,24 @@ public class BlockDefinition : ResourceType
             return states.GetDefaultState(blockId);
         }
         var indices = new int[Properties.Count];
-        bool sideClick = ctx.ClickedFaceNormal.y == 0;
+        bool sideClick = ctx.HitFace is FaceHitType.SideUpper or FaceHitType.SideLower;
         for (int i = 0; i < Properties.Count; i++)
         {
             var prop = Properties[i];
             if (prop.Name == "facing" && HasDirections(prop, new[] { "north", "south", "east", "west" }))
                 indices[i] = prop.IndexOfValue(sideClick
                     ? FacingNameFromNormal(ctx.ClickedFaceNormal)
-                    : FacingName(ctx.PlayerYaw + 180f));
+                    : FacingName(ctx.PlayerYaw + 180f, prop.Values));
             else if (prop.Name == "axis" && HasDirections(prop, new[] { "x", "y", "z" }))
                 indices[i] = prop.IndexOfValue(AxisName(ctx.ClickedFaceNormal));
-            else if (prop.Name == "half" && prop.IndexOfValue("top") >= 0 && prop.IndexOfValue("bottom") >= 0)
-                indices[i] = prop.IndexOfValue(ctx.ClickedFaceNormal.y > 0
-                    || (sideClick && ctx.HitPoint.y - ctx.ClickedBlockCoord.y > 0.5f)
-                        ? "top" : "bottom");
+            else if (prop.Name == "half" && HasDirections(prop, new[] { "top", "lower", "upper", "bottom" }))
+                indices[i] = prop.IndexOfValue(ctx.HitFace switch
+                {
+                    FaceHitType.Top => "top",
+                    FaceHitType.SideUpper => "upper",
+                    FaceHitType.SideLower => "lower",
+                    _ => "bottom"
+                });
             else
                 indices[i] = 0;
         }
@@ -73,14 +77,26 @@ public class BlockDefinition : ResourceType
         return true;
     }
 
-    // Unity: forward = +Z at yaw 0, +X at yaw 90 (counterclockwise viewed from above).
-    private static string FacingName(float yaw)
+    private static bool Contains(string[] values, string name)
+        => System.Array.IndexOf(values, name) >= 0;
+
+    // Unity: forward = +Z at yaw 0, +X at yaw 90 (counterclockwise viewed from
+    // above). Bins the yaw into the values' directions: diagonals (north_east
+    // etc.) step every 45°, plain axes every 90°. The bin centers sit on the
+    // axes/diagonals, boundaries halfway between them.
+    private static string FacingName(float yaw, string[] values)
     {
-        float a = Mathf.Repeat(yaw, 360f);
-        if (a >= 45f && a < 135f) return "east";
-        if (a >= 135f && a < 225f) return "north";
-        if (a >= 225f && a < 315f) return "west";
-        return "south";
+        bool diagonals = Contains(values, "north_east") && Contains(values, "south_east")
+            && Contains(values, "south_west") && Contains(values, "north_west");
+        int dirs = diagonals ? 8 : 4;
+        string[] order = diagonals
+            ? new[] { "south", "south_east", "east", "north_east", "north", "north_west", "west", "south_west" }
+            : new[] { "south", "east", "north", "west" };
+        float step = 360f / dirs;
+        int idx = Mathf.FloorToInt(Mathf.Repeat(yaw + step / 2f, 360f) / step);
+        string name = order[idx % dirs];
+        int pos = System.Array.IndexOf(values, name);
+        return pos >= 0 ? values[pos] : values[0];
     }
 
     private static string AxisName(Vector3Int normal)

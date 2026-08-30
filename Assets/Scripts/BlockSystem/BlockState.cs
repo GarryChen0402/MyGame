@@ -21,9 +21,10 @@ public class BlockPropertyDefinition
 public class BlockStateVariant
 {
     public Dictionary<string, string> Properties = new();
-    public string ModelId;      // defaults to BlockDefinition.ModelId
-    public int RotationX;       // 0/90/180/270, applied before RotationY
+    public string ModelId;      // required: model for this variant
+    public int RotationX;       // 0/90/180/270, combined via Quaternion.Euler(rotX, rotY, rotZ)
     public int RotationY;
+    public int RotationZ;
     public List<AABB> AABBs;    // block-space; defaults to BlockDefinition.AABBs
 }
 
@@ -38,17 +39,23 @@ public class BlockState
     public string ModelId;
     public int RotationX;
     public int RotationY;
+    public int RotationZ;
     public List<AABB> AABBs;            // block-space, already rotated; null = full cube
     public string StateString;          // "minecraft:oak_stairs[facing=north,half=bottom]"
 }
 
+// Normalized classification of a raycast face hit: top/bottom come from the
+// face normal, side hits split into upper/lower by the hit point's y offset.
+public enum FaceHitType { Top, Bottom, SideUpper, SideLower }
+
 // Inputs for GetStateForPlacement; PlayerYaw is the horizontal facing angle.
+// ClickedFaceNormal stays because axis and side-facing still need the side direction.
 public struct BlockPlacementContext
 {
     public Dimension Dim;
     public Vector3Int ClickedBlockCoord;  // the block that was clicked
     public Vector3Int ClickedFaceNormal;  // face normal of the clicked side
-    public Vector3 HitPoint;              // world position where the ray hit the face
+    public FaceHitType HitFace;           // normalized face classification
     public float PlayerYaw;
 }
 
@@ -85,9 +92,14 @@ public class BlockStateRegistry
 
     private void BuildStatesFor(BlockDefinition def, ushort blockId)
     {
+        if (def.Variants == null || def.Variants.Count == 0)
+        {
+            Debug.LogError($"[BlockStateRegistry] {def.FullName} has no variants (every block needs at least one; put the model there)");
+            return;
+        }
         if (def.Properties == null || def.Properties.Count == 0)
         {
-            CreateState(def, blockId, new int[0], null);
+            CreateState(def, blockId, new int[0], def.Variants[0]);
             return;
         }
         int total = 1;
@@ -108,7 +120,13 @@ public class BlockStateRegistry
         for (int combo = 0; combo < total; combo++)
         {
             int[] indices = DecodeCombo(def, combo);
-            CreateState(def, blockId, indices, MatchVariant(def, indices));
+            BlockStateVariant v = MatchVariant(def, indices);
+            if (v == null)
+            {
+                Debug.LogError($"[BlockStateRegistry] {def.FullName} state combo {string.Join(",", indices)} matches no variant; using the first one");
+                v = def.Variants[0];
+            }
+            CreateState(def, blockId, indices, v);
         }
     }
 
@@ -151,13 +169,14 @@ public class BlockStateRegistry
             Block = def,
             LocalStateId = states.Count - offsetByBlockId[blockId],
             PropertyValueIndices = indices,
-            ModelId = variant != null && !string.IsNullOrEmpty(variant.ModelId) ? variant.ModelId : def.ModelId,
+            ModelId = variant.ModelId,
             RotationX = variant?.RotationX ?? 0,
             RotationY = variant?.RotationY ?? 0,
+            RotationZ = variant?.RotationZ ?? 0,
             AABBs = variant?.AABBs ?? def.AABBs,
             StateString = BuildStateString(def, indices)
         };
-        state.AABBs = RotateAABBs(state.AABBs, state.RotationX, state.RotationY);
+        state.AABBs = RotateAABBs(state.AABBs, state.RotationX, state.RotationY, state.RotationZ);
         states.Add(state);
     }
 
@@ -177,10 +196,10 @@ public class BlockStateRegistry
 
     // Rotates the boxes around the block center; boxes stay axis-aligned because
     // the rotations are 90-degree multiples. Returns null when boxes are null.
-    private static List<AABB> RotateAABBs(List<AABB> boxes, int rotX, int rotY)
+    private static List<AABB> RotateAABBs(List<AABB> boxes, int rotX, int rotY, int rotZ)
     {
-        if (boxes == null || boxes.Count == 0 || (rotX == 0 && rotY == 0)) return boxes;
-        Quaternion rot = Quaternion.Euler(rotX, rotY, 0);   // X before Y, same order as model rotation
+        if (boxes == null || boxes.Count == 0 || (rotX == 0 && rotY == 0 && rotZ == 0)) return boxes;
+        Quaternion rot = Quaternion.Euler(rotX, rotY, rotZ);   // same quaternion as the model rotation
         Vector3 center = new(0.5f, 0.5f, 0.5f);
         var result = new List<AABB>(boxes.Count);
         foreach (var b in boxes)
