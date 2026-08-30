@@ -37,6 +37,7 @@ public static class GameBootstrap
         _ = PhysicsManager.Instance;
         _ = ResourceSystem.Instance;
         _ = WorldManager.Instance;
+        WorldSaveManager.Instance.Initialize();   // caches persistentDataPath (main thread only)
     }
 
     private static void Phase2_LoadMods()

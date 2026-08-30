@@ -55,9 +55,13 @@ public class Dimension
             chunk = new Chunk(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
             chunk.SilentMode = true;   // suppress block events during bulk fill
             GeneratingChunks[ChunkCoord] = chunk;
-            // Async: the worker fills the chunk; ChunkLoaded fires on the main
+            // Async: the worker fills the chunk from the save file when one
+            // exists, otherwise generates it; ChunkLoaded fires on the main
             // thread once WorldManager registers it (see ProcessChunkGeneration).
-            WorldManager.Instance.SubmitChunkGeneration(this, chunk);
+            if(WorldSaveManager.Instance.HasChunkSave(DimensionDefinitionInfo.FullName, ChunkCoord))
+                WorldManager.Instance.SubmitChunkLoad(this, chunk);
+            else
+                WorldManager.Instance.SubmitChunkGeneration(this, chunk);
             return;
         }
         EventBus.Instance.Publish(new ChunkLoadedEvent(chunk));
@@ -72,6 +76,10 @@ public class Dimension
             EnableChunks.Remove(ChunkCoord);
             DisableChunks[ChunkCoord] = target;
             EventBus.Instance.Publish(new ChunkUnloadedEvent(ChunkCoord));
+            // Player-modified chunks must persist: queue the save now so the
+            // data is on disk even if the app quits without an autosave tick.
+            if(target.IsModified && !target.IsSavedToDisk)
+                WorldSaveManager.Instance.EnqueueChunkSave(this, target);
             return;
         }
     }
@@ -91,7 +99,10 @@ public class Dimension
         }
         Chunk chunk = new(ChunkCoord, DimensionDefinitionInfo.MinSubChunkIndex, DimensionDefinitionInfo.MaxSubChunkIndex);
         chunk.SilentMode = true;   // bulk generation: one ChunkLoadedEvent after, not 24k block events
-        FillNewChunk(chunk);
+        // Synchronous load path (player's own chunk): restore from the save
+        // file when one exists, otherwise generate in place.
+        if(!WorldSaveManager.Instance.TryLoadChunkFromDisk(this, chunk))
+            FillNewChunk(chunk);
         chunk.SilentMode = false;
         EnableChunks[ChunkCoord] = chunk;
         return chunk;
@@ -150,4 +161,5 @@ public class Dimension
         );
 
     public IEnumerable<Chunk> GetEnableChunks() => EnableChunks.Values;
+    public IEnumerable<Chunk> GetDisableChunks() => DisableChunks.Values;
 }

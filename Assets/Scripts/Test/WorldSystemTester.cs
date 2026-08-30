@@ -11,6 +11,10 @@ public class WorldSystemTester : MonoBehaviour
     private IEnumerator Run()
     {
         // Resource registration and atlas packing are handled by GameBootstrap.
+        // Restore world seed and player state before the world builds around them.
+        WorldSaveManager.Instance.LoadWorldMeta();
+        WorldSaveManager.Instance.LoadPlayer();
+
         string mod = Minecraft.ModId;
         string dimName = $"{mod}:test_dim";
         if(!ResourceSystem.Instance.DimensionDefinitions.TryGetNumberId(dimName, out ushort dimId)) yield break;
@@ -28,6 +32,8 @@ public class WorldSystemTester : MonoBehaviour
 
         var wr = Object.FindFirstObjectByType<WorldRenderer>(FindObjectsInactive.Exclude);
         if(wr == null) yield break;
+        // A restored player position must become the chunk-loading center.
+        wr.SetPlayerPosition(Player.Instance.Position);
         wr.SetRenderDimension(dimId);
 
         // Move the camera above the world for a clear overview

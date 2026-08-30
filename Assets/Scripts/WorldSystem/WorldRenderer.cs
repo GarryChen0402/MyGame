@@ -46,6 +46,21 @@ public class WorldRenderer : MonoBehaviour
         // Register finished worker-generated chunks (events need the main thread).
         WorldManager.Instance.ProcessChunkGeneration();
         ProcessRebuildChunkQueue();
+        WorldSaveManager.Instance.Tick(Time.deltaTime);
+    }
+
+    private void OnApplicationQuit()
+    {
+        // Block until every dirty chunk, the player and the world metadata are
+        // on disk; the main thread has nothing left to do at this point.
+        WorldSaveManager.Instance.SaveAllOnQuit();
+    }
+
+    // Makes the chunk-loading center follow a restored player position (the
+    // scene transform keeps its authored position otherwise).
+    public void SetPlayerPosition(Vector3 worldPos)
+    {
+        if(playerTransform != null) playerTransform.position = worldPos;
     }
 
     public void SetRenderDimension(ushort dimId)

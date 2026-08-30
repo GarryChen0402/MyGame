@@ -1,11 +1,17 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Chunk 
+public class Chunk
 {
     public Vector2Int ChunkCoord {get; private set;}
     public int MinSubChunkIndex {get; private set;}
     public int MaxSubChunkIndex {get; private set;}
+
+    // Save tracking: IsModified marks player edits (generation fills run in
+    // SilentMode and never set it); IsSavedToDisk tracks whether the current
+    // content is already on disk, so a dirty chunk is only saved once per edit.
+    public bool IsModified {get; private set;}
+    public bool IsSavedToDisk {get; private set;}
 
     private readonly SubChunk[] subChunks;
 
@@ -68,7 +74,10 @@ public class Chunk
         if(subChunks[subChunkIndex] == null)subChunks[subChunkIndex] = CreateNewSubChunk(subChunkIndex);
         bool ok = subChunks[subChunkIndex].TrySetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), blockId);
         if(ok && !SilentMode)
+        {
+            MarkModified();
             EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, blockId){FromInteraction = fromInteraction});
+        }
         return ok;
     }
 
@@ -80,8 +89,29 @@ public class Chunk
         ushort oldBlockId = subChunks[subChunkIndex].GetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
         bool ok = subChunks[subChunkIndex].TryBreakBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord));
         if(ok && !SilentMode)
+        {
+            MarkModified();
             EventBus.Instance.Publish(new BlockChangedEvent(ChunkCoord, chunkLocalCoord, oldBlockId){FromInteraction = fromInteraction});
+        }
         return ok;
+    }
+
+    // Player edit: the chunk content now differs from disk and needs a save.
+    private void MarkModified()
+    {
+        IsModified = true;
+        IsSavedToDisk = false;
+    }
+
+    // Set by the save manager once the current content was written to disk.
+    public void MarkSavedToDisk() => IsSavedToDisk = true;
+
+    // Restored from a save file: content matches disk, no rewrite needed unless
+    // the player edits it again.
+    public void MarkLoadedFromDisk()
+    {
+        IsModified = true;
+        IsSavedToDisk = true;
     }
 
     private SubChunk CreateNewSubChunk(int subChunkIndex)
@@ -94,6 +124,15 @@ public class Chunk
     {
         int idx = subChunkIndexInChunk - MinSubChunkIndex;
         if (idx < 0 || idx >= subChunks.Length) return null;
+        return subChunks[idx];
+    }
+
+    // Creates the subchunk if missing (used when loading a save file).
+    public SubChunk GetOrCreateSubChunk(int subChunkIndexInChunk)
+    {
+        int idx = subChunkIndexInChunk - MinSubChunkIndex;
+        if (idx < 0 || idx >= subChunks.Length) return null;
+        if (subChunks[idx] == null) subChunks[idx] = CreateNewSubChunk(idx);
         return subChunks[idx];
     }
 

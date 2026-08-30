@@ -131,6 +131,13 @@ public class WorldManager
         genQueue.Enqueue(new ChunkGenTask { Dimension = dim, Chunk = chunk });
     }
 
+    // Main thread: enqueue a chunk for async load from the save file. Same
+    // lifecycle as generation; on failure the worker falls back to generation.
+    public void SubmitChunkLoad(Dimension dim, Chunk chunk)
+    {
+        genQueue.Enqueue(new ChunkGenTask { Dimension = dim, Chunk = chunk, LoadFromDisk = true });
+    }
+
     // Main thread: blocks until the chunk's worker finished and registered it.
     // The wait pumps the completion queue, since draining it is what clears the
     // generating state (see ProcessChunkGeneration) — a plain sleep would deadlock.
@@ -169,7 +176,17 @@ public class WorldManager
         var task = (ChunkGenTask)state;
         try
         {
-            task.Dimension.FillNewChunk(task.Chunk);
+            // Save-backed chunks load from disk; a missing or corrupt file falls
+            // back to deterministic generation.
+            if(task.LoadFromDisk)
+            {
+                if(!WorldSaveManager.Instance.TryLoadChunkFromDisk(task.Dimension, task.Chunk))
+                    task.Dimension.FillNewChunk(task.Chunk);
+            }
+            else
+            {
+                task.Dimension.FillNewChunk(task.Chunk);
+            }
         }
         catch(System.Exception e)
         {
@@ -196,11 +213,13 @@ public class WorldManager
 }
 
 // One async chunk generation unit: a worker fills Chunk, the main thread then
-// registers it (see WorldManager.ProcessChunkGeneration).
+// registers it (see WorldManager.ProcessChunkGeneration). LoadFromDisk tasks
+// restore the chunk from the save file instead of generating it.
 public class ChunkGenTask
 {
     public Dimension Dimension;
     public Chunk Chunk;
+    public bool LoadFromDisk;
     public volatile bool IsDown;
     public bool Failed;
 }

@@ -99,6 +99,9 @@ public class SubChunk
 
     public ushort[] CopyBlockData() => (ushort[])blockData.Clone();
 
+    // Bulk fill for save loading; index must be a valid 0..4095 array slot.
+    public void SetBlockAtRaw(int index, ushort blockId) => blockData[index] = blockId;
+
     // No bounds checks: caller guarantees valid subchunk-local coords.
     public ushort GetBlockAtRaw(int x, int y, int z)
         => blockData[x * SubChunkBlockSize * SubChunkBlockSize + y * SubChunkBlockSize + z];
