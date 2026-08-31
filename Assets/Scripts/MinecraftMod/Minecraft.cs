@@ -42,6 +42,13 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "grass_side", Resources.Load<Texture2D>("Textures/Blocks/grass_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "diamond_sword", Resources.Load<Texture2D>("Textures/Items/diamond_sword"));
         ResourceSystem.Instance.RegisterTexture(ModId, "firefly", Resources.Load<Texture2D>("Textures/Entities/firefly"));
+        // Furnace textures use the "furance" spelling on disk.
+        ResourceSystem.Instance.RegisterTexture(ModId, "cobblestone", Resources.Load<Texture2D>("Textures/Blocks/cobblestone"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "furance_front_nowork", Resources.Load<Texture2D>("Textures/Blocks/furance_front_nowork"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "furance_front_working", Resources.Load<Texture2D>("Textures/Blocks/furance_front_working"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "furance_side", Resources.Load<Texture2D>("Textures/Blocks/furance_side"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "furance_top_bottom", Resources.Load<Texture2D>("Textures/Blocks/furance_top_bottom"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "coal", Resources.Load<Texture2D>("Textures/Items/coal"));
         // EntityModel & EntityAnimation Content
         EntityModel playerModel = EntityModelParser.Parse(Resources.Load<TextAsset>("Models/entity/player").text);
         ResourceSystem.Instance.EntityModels.Register(playerModel);
@@ -165,11 +172,49 @@ public class Minecraft : IMod
             }
         };
 
+        BlockDefinition cobblestoneDefinition = new()
+        {
+            modId = ModId,
+            name = "cobblestone",
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:cobblestone",
+                ["bottom"] = $"{ModId}:cobblestone",
+                ["front"]  = $"{ModId}:cobblestone",
+                ["back"]   = $"{ModId}:cobblestone",
+                ["left"]   = $"{ModId}:cobblestone",
+                ["right"]  = $"{ModId}:cobblestone"
+            },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } }
+        };
+
+        // Furnace: static block rendering + a BlockEntity (input/fuel/output
+        // inventories + processing module) declared in the BE definition below.
+        BlockDefinition furnaceDefinition = new()
+        {
+            modId = ModId,
+            name = "furnace",
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:furance_top_bottom",
+                ["bottom"] = $"{ModId}:furance_top_bottom",
+                ["front"]  = $"{ModId}:furance_front_nowork",
+                ["back"]   = $"{ModId}:furance_side",
+                ["left"]   = $"{ModId}:furance_side",
+                ["right"]  = $"{ModId}:furance_side"
+            },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
+            HasBlockEntity = true,
+            BlockEntityDefinitionFullName = $"{ModId}:furnace"
+        };
+
         ResourceSystem.Instance.BlockDefinitions.Register(air);
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
         ResourceSystem.Instance.RegisterBlock(grassDefinition);
         ResourceSystem.Instance.RegisterBlock(stairDefinition);
+        ResourceSystem.Instance.RegisterBlock(cobblestoneDefinition);
+        ResourceSystem.Instance.RegisterBlock(furnaceDefinition);
 
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:grass", out grassId);
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:dirt", out dirtId);
@@ -242,9 +287,70 @@ public class Minecraft : IMod
             MaxStack = 1
         });
 
-        
+        // Coal: fuel-tagged item, accepted by the furnace fuel slot filter.
+        ResourceSystem.Instance.ItemDefinitions.Register(new ItemDefinition()
+        {
+            modId = ModId,
+            name = "coal",
+            LayerTextures = new string[] { $"{ModId}:coal" },
+            MaxStack = 64,
+            Tags = new() { "fuel" }
+        });
 
-        // ResourceSystem.Instance.Textures.Register("stone",  Resources.Load<Texture2D>("Textures/Blocks/stone"))
+        // Module types: shared behaviors (global), instantiated per BE with the
+        // parameters embedded in each BlockEntityDefinition.Modules entry.
+        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
+        {
+            modId = "Universal",
+            name = "inventory",
+            Factory = md => new InventoryModule(md)
+        });
+        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
+        {
+            modId = "Universal",
+            name = "processing",
+            Factory = md => new ProcessingModule(md)
+        });
+        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
+        {
+            modId = "Universal",
+            name = "crafting",
+            Factory = md => new CraftingModule(md)
+        });
+
+        // Recipe category + the minimal furnace recipe: 1 cobblestone -> 1 stone.
+        ResourceSystem.Instance.RecipeTypes.Register(new RecipeType { modId = ModId, name = "furance" });
+        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
+        {
+            modId = ModId,
+            name = "smelt_cobblestone",
+            RecipeTypeFullName = $"{ModId}:furance",
+            Inputs = new() { new ItemStackAmount { itemId = $"{ModId}:cobblestone", amount = 1 } },
+            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:stone", amount = 1 } },
+            ProcessingTime = 1f   // short for validation
+        });
+
+        // Furnace BE: 1 input slot, 1 fuel slot (fuel-tagged only, module-extract
+        // only), 1 output slot (module-insert only) + a processing module that
+        // references them by name and processes the furance recipe category.
+        ResourceSystem.Instance.BlockEntityDefinitions.Register(new BlockEntityDefinition
+        {
+            modId = ModId,
+            name = "furnace",
+            RenderMode = BlockEntityRenderMode.StaticBlock,
+            BlockId = $"{ModId}:furnace",
+            Modules = new()
+            {
+                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "input", Capacity = 1 },
+                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "fuel", Capacity = 1,
+                                       AllowedTags = new() { "fuel" }, ExtractPolicy = InventoryAccess.Module },
+                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "output", Capacity = 1,
+                                       InsertPolicy = InventoryAccess.Module, ExtractPolicy = InventoryAccess.Any },
+                new ModuleDefinition { ModuleTypeFullName = "Universal:processing",
+                                       RecipeType = $"{ModId}:furance",
+                                       InputInventory = "input", FuelInventory = "fuel", OutputInventory = "output" }
+            }
+        });
     }
 
     // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。

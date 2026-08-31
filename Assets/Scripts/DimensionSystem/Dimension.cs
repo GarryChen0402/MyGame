@@ -75,7 +75,7 @@ public class Dimension
             Chunk target = EnableChunks[ChunkCoord];
             EnableChunks.Remove(ChunkCoord);
             DisableChunks[ChunkCoord] = target;
-            EventBus.Instance.Publish(new ChunkUnloadedEvent(ChunkCoord));
+            EventBus.Instance.Publish(new ChunkUnloadedEvent(target));
             // Player-modified chunks must persist: queue the save now so the
             // data is on disk even if the app quits without an autosave tick.
             if(target.IsModified && !target.IsSavedToDisk)

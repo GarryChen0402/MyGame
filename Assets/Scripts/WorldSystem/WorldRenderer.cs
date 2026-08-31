@@ -47,6 +47,7 @@ public class WorldRenderer : MonoBehaviour
         WorldManager.Instance.ProcessChunkGeneration();
         ProcessRebuildChunkQueue();
         WorldSaveManager.Instance.Tick(Time.deltaTime);
+        BlockEntityManager.Instance.Update(Time.deltaTime);
     }
 
     private void OnApplicationQuit()

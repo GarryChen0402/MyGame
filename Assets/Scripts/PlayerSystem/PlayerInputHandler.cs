@@ -21,11 +21,21 @@ public class PlayerInputHandler : MonoBehaviour
     {
         player = Player.Instance;
 
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 0, amount = 1});
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 1, amount = 1});
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 2, amount = 1});
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 3, amount = 16});
-        player.inventory.TryAddItemAsMax(new ItemStack(){itemId = 4, amount = 16});
+        // Test items resolved by full name: numeric ids depend on registration order.
+        Give("minecraft:stone", 1);
+        Give("minecraft:dirt", 1);
+        Give("minecraft:grass", 1);
+        Give("minecraft:stone_stair", 16);
+        Give("minecraft:diamond_sword", 1);
+        Give("minecraft:cobblestone", 16);
+        Give("minecraft:coal", 16);
+        Give("minecraft:furnace", 1);
+    }
+
+    private void Give(string fullName, int amount)
+    {
+        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(fullName, out ushort itemId))return;
+        player.inventory.TryAddItemAsMax(new ItemStack { itemId = itemId, amount = amount });
     }
 
     private void Update()
@@ -108,6 +118,9 @@ public class PlayerInputHandler : MonoBehaviour
         }
         if(Input.GetMouseButtonDown(1) && player.CurrentRaycastHitResult.IsHit)
         {
+            // Block entity interaction takes precedence over block placement
+            // (vanilla containers open instead of placing against them).
+            if(BlockEntityManager.Instance.TryInteract(player, player.CurrentRaycastHitResult.BlockDimensionCoord))return;
             ItemStack stack = player.inventory.GetItemStackAt(CurrentSelectedSlotIndex);
             if(stack == null || stack.IsEmpty())return;
             if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(stack.itemId, out var itemDef))return;

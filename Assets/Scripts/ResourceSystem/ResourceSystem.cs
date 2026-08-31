@@ -25,6 +25,14 @@ public class ResourceSystem
     public ResourceRegistryTable<EntityModel> EntityModels {get;} = new();
     public ResourceRegistryTable<EntityAnimation> EntityAnimations {get;} = new();
 
+    // Block entity definitions (render mode + module params) & module types (factories)
+    public ResourceRegistryTable<BlockEntityDefinition> BlockEntityDefinitions {get;} = new();
+    public ResourceRegistryTable<BlockEntityModuleDefinition> BlockEntityModuleDefinitions {get;} = new();
+
+    // Recipes: categories + concrete recipes
+    public ResourceRegistryTable<RecipeType> RecipeTypes {get;} = new();
+    public ResourceRegistryTable<RecipeDefinition> Recipes {get;} = new();
+
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;
@@ -55,6 +63,10 @@ public class ResourceSystem
         EntityModels.Freeze();
         EntityAnimations.Freeze();
         Textures.Freeze();
+        BlockEntityDefinitions.Freeze();
+        BlockEntityModuleDefinitions.Freeze();
+        RecipeTypes.Freeze();
+        Recipes.Freeze();
     }
     
     public void BuildAtlas()

@@ -41,15 +41,17 @@ public class WorldSaveManager
     // ---- chunk saves ----
 
     // Serializes the chunk snapshot on a worker, then queues the file write.
-    // Calling thread must be the main thread (checks IsSavedToDisk).
+    // Calling thread must be the main thread (checks IsSavedToDisk; the block
+    // entity snapshot is main-thread-owned data, captured here before handoff).
     public void EnqueueChunkSave(Dimension dim, Chunk chunk)
     {
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         string path = ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord);
+        var beSnapshot = chunk.BuildBlockEntitySaveSnapshot();
         ThreadPool.QueueUserWorkItem(_ =>
         {
             string json;
-            try { json = ChunkSerializer.Serialize(chunk); }
+            try { json = ChunkSerializer.Serialize(chunk, beSnapshot); }
             catch(Exception e)
             {
                 Debug.LogError($"[WorldSaveManager] serialize chunk ({chunk.ChunkCoord}) failed: {e}");
@@ -170,7 +172,9 @@ public class WorldSaveManager
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         try
         {
-            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord), ChunkSerializer.Serialize(chunk));
+            // Main thread (OnApplicationQuit): safe to snapshot BEs here.
+            var beSnapshot = chunk.BuildBlockEntitySaveSnapshot();
+            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord), ChunkSerializer.Serialize(chunk, beSnapshot));
             chunk.MarkSavedToDisk();
         }
         catch(Exception e)

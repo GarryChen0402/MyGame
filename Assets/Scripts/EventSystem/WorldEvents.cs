@@ -2,13 +2,15 @@ using UnityEngine;
 
 public class BlockChangedEvent : GameEvent
 {
+    public Chunk Chunk;
     public Vector2Int ChunkCoord;
     public Vector3Int ChunkLocalCoord;
-    public ushort NewStateId;   // global block state id (0 = air)
+    public ushort NewStateId;   // global block state id (0 = air, i.e. broken)
     public bool FromInteraction;
-    public BlockChangedEvent(Vector2Int coord, Vector3Int localPos, ushort stateId)
+    public BlockChangedEvent(Chunk chunk, Vector3Int localPos, ushort stateId)
     {
-        ChunkCoord = coord;
+        Chunk = chunk;
+        ChunkCoord = chunk.ChunkCoord;
         ChunkLocalCoord = localPos;
         NewStateId = stateId;
     }
@@ -26,6 +28,11 @@ public class ChunkLoadedEvent : GameEvent
 // destroyed; neighbors rebuild exposed faces.
 public class ChunkUnloadedEvent : GameEvent
 {
+    public Chunk Chunk;
     public Vector2Int ChunkCoord;
-    public ChunkUnloadedEvent(Vector2Int coord) { ChunkCoord = coord; }
+    public ChunkUnloadedEvent(Chunk chunk)
+    {
+        Chunk = chunk;
+        ChunkCoord = chunk.ChunkCoord;
+    }
 }

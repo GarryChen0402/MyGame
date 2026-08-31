@@ -16,6 +16,7 @@ public class ChunkSaveData
     public int chunkX;
     public int chunkZ;
     public List<SubChunkSaveData> subchunks = new();
+    public List<BlockEntitySaveData> blockEntities;
 }
 
 [Serializable]
@@ -26,19 +27,41 @@ public class SubChunkSaveData
     public List<int> blockData = new();
 }
 
+// One block entity in a chunk save. x/y/z are chunk-local (x/z mod 16,
+// y = dimension y); type is the BlockEntityDefinition full name. Modules are
+// per-module JSON strings in declaration order, matched back by index on load.
+[Serializable]
+public class BlockEntitySaveData
+{
+    public int x;
+    public int y;
+    public int z;
+    public string type;
+    public List<ModuleSaveData> modules = new();
+}
+
+[Serializable]
+public class ModuleSaveData
+{
+    public string module;   // module name (informational)
+    public string data;     // the module's own JSON
+}
+
 public static class ChunkSerializer
 {
-    public const int FormatVersion = 2;
+    public const int FormatVersion = 3;
     public static readonly int BlockCount = SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize;
 
-    // May run on a worker thread: reads a CopyBlockData snapshot only.
-    public static string Serialize(Chunk chunk)
+    // May run on a worker thread: reads a CopyBlockData snapshot only. The
+    // blockEntities snapshot is captured on the main thread by the caller.
+    public static string Serialize(Chunk chunk, List<BlockEntitySaveData> blockEntities = null)
     {
         var data = new ChunkSaveData
         {
             version = FormatVersion,
             chunkX = chunk.ChunkCoord.x,
-            chunkZ = chunk.ChunkCoord.y
+            chunkZ = chunk.ChunkCoord.y,
+            blockEntities = blockEntities
         };
         int subCount = chunk.MaxSubChunkIndex - chunk.MinSubChunkIndex + 1;
         for (int i = 0; i < subCount; i++)
@@ -105,6 +128,9 @@ public static class ChunkSerializer
                 sub.SetBlockAtRaw(i, paletteIds[idx]);
             }
         }
+        // BE data is handed to BlockEntityManager on ChunkLoadedEvent (worker
+        // thread only parses strings; instance creation stays on the main thread).
+        chunk.PendingBlockEntities = data.blockEntities;
     }
 
     // Atomic write: write a temp file, then replace the target. File.Replace is

@@ -18,6 +18,11 @@ public class BlockDefinition : ResourceType
     public List<BlockPropertyDefinition> Properties = null;
     public List<BlockStateVariant> Variants = null;
 
+    // Block entity linkage: true + a BlockEntityDefinition full name means this
+    // block hosts dynamic data (inventory etc.) created on placement.
+    public bool HasBlockEntity = false;
+    public string BlockEntityDefinitionFullName = null;
+
     // Initial state when the player places this block. Vanilla 1.16+ stair
     // rules: clicking a side face faces the block the way that face points
     // (the back leans against the clicked block); clicking top/bottom uses the
