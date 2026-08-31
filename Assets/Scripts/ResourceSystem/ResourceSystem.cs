@@ -33,6 +33,9 @@ public class ResourceSystem
     public ResourceRegistryTable<RecipeType> RecipeTypes {get;} = new();
     public ResourceRegistryTable<RecipeDefinition> Recipes {get;} = new();
 
+    // UI Register
+    public ResourceRegistryTable<UIDefinition> UIDefinitions {get;} = new();
+
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;

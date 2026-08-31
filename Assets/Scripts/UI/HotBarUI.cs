@@ -1,7 +1,8 @@
 using System.Collections.Generic;
+using Unity.Burst.Intrinsics;
 using UnityEngine;
 
-public class HotBarUI : MonoBehaviour
+public class HotBarUI : UIBehavior
 {
     private static HotBarUI instance = null;
     public static HotBarUI Instance => instance;
@@ -16,6 +17,10 @@ public class HotBarUI : MonoBehaviour
     {
         if(instance == null)instance = this;
         else Destroy(gameObject);
+        var rt = gameObject.AddComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0);   // screen center
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0, 50);
 
         for(int i = 0; i < 9; i++)
         {
@@ -25,6 +30,9 @@ public class HotBarUI : MonoBehaviour
             slotGo.transform.localPosition = new Vector3(-400 + i * 100, 0, 0);
             itemIcons.Add(slotUI);
         }
+
+        // rt.sizeDelta = new Vector2(30, 30);   // 15px texture doubled for visibility
+
     }
 
     private void Update()
@@ -42,4 +50,17 @@ public class HotBarUI : MonoBehaviour
             itemIcons[i].SetItemStack(stack);
         }
     }
+
+    public static UIDefinition hotbarDefinition = new()
+    {
+        modId = "minecraft",
+        name = "hotbar",
+        OpenWithPlayerInventory = false,
+        Factory = () =>
+        {
+            var hotBarGo = new GameObject("HotBar");
+            hotBarGo.AddComponent<HotBarUI>();
+            return hotBarGo;
+        }
+    };
 }

@@ -11,10 +11,10 @@ public class SlotUI : MonoBehaviour
     private void Awake()
     {   
         var bg_image = gameObject.AddComponent<Image>();
-        bg_image.sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_bg");
-        var edgeGo = new GameObject("edge");
-        edgeGo.transform.SetParent(gameObject.transform);
-        edgeGo.AddComponent<Image>().sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_edge");
+        bg_image.sprite = Resources.Load<Sprite>("Textures/UI/slot");
+        // var edgeGo = new GameObject("edge");
+        // edgeGo.transform.SetParent(gameObject.transform);
+        // edgeGo.AddComponent<Image>().sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_edge");
 
         var iconGo = new GameObject("Icon");
         iconGo.transform.SetParent(gameObject.transform, false);
@@ -24,7 +24,7 @@ public class SlotUI : MonoBehaviour
 
         var textGo = new GameObject("Text");
         textGo.transform.SetParent(gameObject.transform, false);
-        textGo.transform.localPosition = new Vector3(0, -25, 0);
+        textGo.transform.localPosition = new Vector3(-2, -25, 0);
         textGo.AddComponent<RectTransform>();
 
         Text = textGo.AddComponent<TextMeshProUGUI>();

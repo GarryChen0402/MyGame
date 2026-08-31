@@ -16,6 +16,10 @@ public class Inventory
         {
             Capacity = MaxSlotCount
         };
+        for(int i=0;i<MaxSlotCount;i++)
+        {
+            itemStacks.Add(new ItemStack());
+        }
     }
     private bool IsCorrectSlotIndex(int index)
     {

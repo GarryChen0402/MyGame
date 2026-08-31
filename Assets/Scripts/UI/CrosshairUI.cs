@@ -4,7 +4,7 @@ using UnityEngine.UI;
 // Vanilla-MC style crosshair: a 15x15 pixel texture (1px black cross with a
 // white outline and a transparent 3x3 center gap) rendered at screen center.
 // Attach to the Canvas GameObject.
-public class CrosshairUI : MonoBehaviour
+public class CrosshairUI : UIBehavior
 {
     private static CrosshairUI instance;
     public static CrosshairUI Instance => instance;
@@ -14,15 +14,16 @@ public class CrosshairUI : MonoBehaviour
         if(instance != null) { Destroy(gameObject); return; }
         instance = this;
 
-        var go = new GameObject("Crosshair");
-        go.transform.SetParent(transform, false);
-        var rt = go.AddComponent<RectTransform>();
+        // var go = new GameObject("Crosshair");
+        // go.transform.SetParent(transform, false);
+        var rt = gameObject.AddComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // screen center
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(30, 30);   // 15px texture doubled for visibility
 
-        var img = go.AddComponent<Image>();
+        var img = gameObject.AddComponent<Image>();
         img.sprite = Sprite.Create(BuildCrosshairTexture(), new Rect(0, 0, 15, 15), new Vector2(0.5f, 0.5f), 15f);
+
     }
 
     // 15x15: black cross (3px wide incl. white outline) with a transparent 3x3
@@ -55,4 +56,18 @@ public class CrosshairUI : MonoBehaviour
         tex.Apply();
         return tex;
     }
+
+    public static UIDefinition CrosshairUIDefinition = new()
+    {
+        modId = "minecraft",
+        name = "crosshair",
+        Kind = UIKind.HUD,
+        OpenWithPlayerInventory = false,
+        Factory = () =>{
+            var crossHairGo = new GameObject("Cross hai1r");
+            crossHairGo.AddComponent<CrosshairUI>();
+            return crossHairGo;
+        }
+
+    };
 }
