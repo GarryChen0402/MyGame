@@ -22,14 +22,14 @@ public class PlayerInputHandler : MonoBehaviour
         player = Player.Instance;
 
         // Test items resolved by full name: numeric ids depend on registration order.
-        Give("minecraft:stone", 1);
-        Give("minecraft:dirt", 1);
-        Give("minecraft:grass", 1);
-        Give("minecraft:stone_stair", 16);
-        Give("minecraft:diamond_sword", 1);
-        Give("minecraft:cobblestone", 16);
-        Give("minecraft:coal", 16);
-        Give("minecraft:furnace", 1);
+        // Give("minecraft:stone", 1);
+        // Give("minecraft:dirt", 1);
+        // Give("minecraft:grass", 1);
+        // Give("minecraft:stone_stair", 16);
+        // Give("minecraft:diamond_sword", 1);
+        // Give("minecraft:cobblestone", 16);
+        // Give("minecraft:coal", 16);
+        // Give("minecraft:furnace", 1);
     }
 
     private void Give(string fullName, int amount)

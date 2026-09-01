@@ -14,7 +14,8 @@ public class PlayerInventoryUI : UIBehavior
         rt.anchorMax = new Vector2(0.5f, 0.25f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(920, 420);
-
+        rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+        rt.localPosition += new Vector3(0, 50, 0);
 
         var bgGo = new GameObject("Background");
         bgGo.transform.SetParent(transform, false);
@@ -56,4 +57,13 @@ public class PlayerInventoryUI : UIBehavior
             return go;
         }
     };
+
+    private void OnEnable()
+    {
+        // foreach(var slot in slots)slot.Refresh();
+        for(int i = 0; i < 36; i++)
+        {
+            slots[i].SetItemStack(Player.Instance.inventory.GetItemStackAt(i));
+        }
+    }
 }

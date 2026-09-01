@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -43,7 +44,23 @@ public class SlotUI : MonoBehaviour
     public void SetItemStack(ItemStack stack)
     {
         itemStack = stack;
-        if(stack == null || stack.IsEmpty())
+        // if(stack == null || stack.IsEmpty())
+        // {
+        //     Icon.gameObject.SetActive(false);
+        //     Text.text = "";
+        //     return;
+        // }
+
+        // Icon.gameObject.SetActive(true);
+        // Icon.SetItem(stack.itemId);
+        // Text.text = stack.amount > 1 ? stack.amount.ToString() : "";
+        Refresh();
+    }
+
+    public void Refresh()
+    {
+        if(itemStack == null)return;
+        if(itemStack == null || itemStack.IsEmpty())
         {
             Icon.gameObject.SetActive(false);
             Text.text = "";
@@ -51,7 +68,7 @@ public class SlotUI : MonoBehaviour
         }
 
         Icon.gameObject.SetActive(true);
-        Icon.SetItem(stack.itemId);
-        Text.text = stack.amount > 1 ? stack.amount.ToString() : "";
+        Icon.SetItem(itemStack.itemId);
+        Text.text = itemStack.amount > 1 ? itemStack.amount.ToString() : "";
     }
 }
