@@ -356,6 +356,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.UIDefinitions.Register(CrosshairUI.CrosshairUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HotBarUI.hotbarDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(PlayerInventoryUI.playerInvUIDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(FurnaceUI.furanceUIDefinition);
     }
 
     // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。

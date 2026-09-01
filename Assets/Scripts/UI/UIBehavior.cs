@@ -7,4 +7,6 @@ public class UIBehavior : MonoBehaviour
 
     public void Open() => gameObject.SetActive(true);
     public void Close() => gameObject.SetActive(false);
+
+    public virtual void Refresh() {}
 }
