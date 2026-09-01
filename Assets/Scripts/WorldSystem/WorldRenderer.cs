@@ -7,10 +7,10 @@ using Unity.VisualScripting;
 using UnityEngine;
 
 // Rebuild scheduling priority, mirroring Sodium's ChunkUpdateType:
-// Important (player interaction) is dispatched first and the main thread blocks
-// on it so the edit renders within the same frame; Initial covers freshly loaded
-// chunks; Normal covers neighbor-driven changes. Initial/Normal are rate-limited
-// at upload time.
+// Important (player interaction) is rebuilt synchronously on the main thread so
+// the edit renders within the same frame; Initial covers freshly loaded chunks;
+// Normal covers neighbor-driven changes. Initial/Normal are built on the thread
+// pool and rate-limited at upload time.
 public enum ChunkRebuildType { Normal = 0, Initial = 1, Important = 2 }
 
 public class WorldRenderer : MonoBehaviour
@@ -129,8 +129,6 @@ public class WorldRenderer : MonoBehaviour
     private readonly List<RebuildEntry> dispatchCandidates = new();   // reused sort buffer
     private readonly List<ChunkMeshBuildTask> inflight = new();
     private readonly List<ChunkMeshBuildTask> ready = new();
-    // Chunks whose next completed task must upload immediately (no per-frame budget).
-    private readonly HashSet<Chunk> importantChunks = new();
 
     private class RebuildEntry
     {
@@ -169,9 +167,6 @@ public class WorldRenderer : MonoBehaviour
     }
 
     public const int MaxConcurrentBuilds = 4;
-    // Bounded wait so a player edit renders within the same frame; the worker only
-    // rebuilds the touched subchunks (~0.3-1ms), so the stall is imperceptible.
-    private const float MaxImportantWaitSeconds = 0.016f;
 
     private void ProcessRebuildChunkQueue()
     {
@@ -184,18 +179,11 @@ public class WorldRenderer : MonoBehaviour
         DispatchRebuildTasks();
     }
 
-    // Uploads completed tasks: important ones immediately, Initial/Normal on a small
-    // per-frame budget (uploads touch the GPU, so they are rate-limited).
+    // Uploads completed worker tasks on a small per-frame budget (uploads touch
+    // the GPU, so they are rate-limited). Important tasks never reach this list:
+    // they are built and applied synchronously in DispatchRebuildTasks.
     private void ApplyReadyTasks()
     {
-        for(int i = ready.Count - 1; i >= 0; i--)
-        {
-            if(!importantChunks.Contains(ready[i].chunk))continue;
-            var task = ready[i];
-            ready.RemoveAt(i);
-            ApplyTask(task);
-        }
-
         int initialBudget = 2, normalBudget = 2;
         for(int i = 0; i < ready.Count; i++)
         {
@@ -211,9 +199,22 @@ public class WorldRenderer : MonoBehaviour
 
     private void ApplyTask(ChunkMeshBuildTask task)
     {
-        importantChunks.Remove(task.chunk);
         if(!chunkRenderers.TryGetValue(task.chunk.ChunkCoord, out var renderer))return;
         renderer.ApplyMeshData(task);
+        // A rebuild marked while this task was in flight can now snapshot the
+        // current block data; dispatch it right away instead of waiting for the
+        // next frame's queue pass, so edits during a rebuild render same-frame.
+        DispatchPendingEntry(task.chunk);
+    }
+
+    // The chunk just applied a new mesh, so a pending rebuild entry for it can
+    // finally snapshot the latest block data. Important entries build and apply
+    // synchronously here (same frame); Initial/Normal go to the thread pool.
+    private void DispatchPendingEntry(Chunk chunk)
+    {
+        if(inflight.Count >= MaxConcurrentBuilds)return;
+        if(!rebuildEntries.Remove(chunk, out var entry))return;
+        DispatchEntry(chunk, entry);
     }
 
     private void DispatchRebuildTasks()
@@ -221,8 +222,9 @@ public class WorldRenderer : MonoBehaviour
         Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
         // Candidates in dispatch priority order: Important, Initial, then Normal,
         // nearest chunks first within a type. Chunks with a task in flight or ready
-        // are skipped here and re-snapshotted once it applies, so changes arriving
-        // mid-flight are never lost.
+        // are skipped here; the entry stays queued and DispatchPendingEntry
+        // re-dispatches it (fresh snapshot) the moment the task applies, so changes
+        // arriving mid-flight render without waiting for the next frame.
         dispatchCandidates.Clear();
         foreach(var entry in rebuildEntries.Values)
         {
@@ -242,46 +244,47 @@ public class WorldRenderer : MonoBehaviour
         {
             if(inflight.Count >= MaxConcurrentBuilds)break;
             rebuildEntries.Remove(entry.Chunk);
-
-            var renderer = chunkRenderers[entry.Chunk.ChunkCoord];
-            // Partial rebuilds copy untouched subchunks from the last applied result;
-            // without a base there is nothing to copy from, so rebuild everything.
-            var task = new ChunkMeshBuildTask(entry.Chunk)
-            {
-                Type = entry.Type,
-                PreviousTask = renderer.AppliedTask
-            };
-            task.SnapShot(renderer.AppliedTask == null ? null : entry.DirtySubs);
-            ThreadPool.QueueUserWorkItem(_ => Compute(task));
-            inflight.Add(task);
-
-            if(entry.Type == ChunkRebuildType.Important)
-            {
-                importantChunks.Add(entry.Chunk);
-                WaitAndApplyImportant(task);
-            }
+            DispatchEntry(entry.Chunk, entry);
         }
     }
 
-    // Blocking wait (bounded by MaxImportantWaitSeconds) so interaction edits render
-    // within the same frame. While waiting, keep uploading tasks that completed in
-    // the meantime (Sodium's performPendingUploads pattern). If the wait times out
-    // (e.g. the pool is saturated by chunk generation), the important-ready path in
-    // ApplyReadyTasks uploads it on a later frame instead.
-    private void WaitAndApplyImportant(ChunkMeshBuildTask task)
+    // Builds one rebuild entry and, for Important, applies it immediately. The
+    // entry must already be removed from rebuildEntries so re-entrant dispatches
+    // (DispatchPendingEntry) can never run it twice.
+    private void DispatchEntry(Chunk chunk, RebuildEntry entry)
     {
-        float deadline = Time.realtimeSinceStartup + MaxImportantWaitSeconds;
-        while(!task.IsDown)
+        var renderer = chunkRenderers[chunk.ChunkCoord];
+        // Partial rebuilds copy untouched subchunks from the last applied result;
+        // without a base there is nothing to copy from, so rebuild everything.
+        var task = new ChunkMeshBuildTask(chunk)
         {
-            for(int i = inflight.Count - 1; i >= 0; i--)
-                if(inflight[i].IsDown) { ready.Add(inflight[i]); inflight.RemoveAt(i); }
-            ApplyReadyTasks();
-            if(Time.realtimeSinceStartup >= deadline)break;
-            Thread.Sleep(1);
+            Type = entry.Type,
+            PreviousTask = renderer.AppliedTask
+        };
+        task.SnapShot(renderer.AppliedTask == null ? null : entry.DirtySubs);
+
+        if(entry.Type == ChunkRebuildType.Important)
+        {
+            // Player edits build synchronously on the main thread (only the
+            // touched subchunks, ~1-3ms) so the change renders within the same
+            // frame - no thread-pool contention with chunk generation, no
+            // timeout fallback. A full rebuild (no applied base yet) is rare
+            // and still correct; it only costs one longer frame.
+            try
+            {
+                BuildMeshData(task);
+            }
+            catch(System.Exception e)
+            {
+                Debug.LogError($"Chunk mesh build failed ({task.chunk.ChunkCoord}): {e}");
+            }
+            ApplyTask(task);
         }
-        if(!task.IsDown)return;   // still running: the ready path applies it later
-        inflight.Remove(task);
-        ApplyTask(task);
+        else
+        {
+            ThreadPool.QueueUserWorkItem(_ => Compute(task));
+            inflight.Add(task);
+        }
     }
 
     // Worker thread: reads only the task snapshot and read-only resource data.
@@ -330,8 +333,8 @@ public class WorldRenderer : MonoBehaviour
                                 BlockDefinition def = state.Block;
                                 if (!models.TryGetResourceWithFullName(state.ModelId, out var model) || model == null) continue;
 
-                                Dictionary<string, bool> mask = new();
-                                Dictionary<string, Rect> faceRects = new();
+                                task.Mask.Clear();
+                                task.FaceRects.Clear();
                                 foreach (var kv in model.GetFaceDirections())
                                 {
                                     Vector3Int dir = state.RotationX != 0 || state.RotationY != 0 || state.RotationZ != 0
@@ -343,17 +346,17 @@ public class WorldRenderer : MonoBehaviour
                                     // single-state blocks, which is why the old lookup misfired).
                                     // IsFullCube: non-full shapes (stairs) leave part of a
                                     // neighbor's face visible, so they never hide it.
-                                    mask[kv.Key] = neighborId != 0
+                                    task.Mask[kv.Key] = neighborId != 0
                                         && ResourceSystem.Instance.BlockStates.GetState(neighborId)?.Block is { IsOpaque: true, IsFullCube: true };
 
                                     if (def.TextureIds != null && def.TextureIds.TryGetValue(kv.Key, out string texId)
                                         && textures.TryGetResourceWithFullName(texId, out var rect))
-                                        faceRects[kv.Key] = rect.AtlasUVRect;
+                                        task.FaceRects[kv.Key] = rect.AtlasUVRect;
                                 }
                                 model.ExtendModelMesh(
                                     new Vector3(x, y + originY, z),
                                     task.Vertices, task.Uvs, task.Colors, task.Normals, task.Triangles,
-                                    mask, faceRects, state.RotationX, state.RotationY, state.RotationZ);
+                                    task.Mask, task.FaceRects, state.RotationX, state.RotationY, state.RotationZ);
                             }
                 }
             }

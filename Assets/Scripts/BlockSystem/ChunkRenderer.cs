@@ -2,29 +2,31 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 
-[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+// Renders one chunk as one mesh per subchunk (vanilla-style sections): a block
+// edit rebuilds and uploads only the affected subchunk meshes instead of the
+// whole chunk, and each subchunk is frustum-culled independently.
+// Meshes are double-buffered per subchunk: upload writes the idle mesh, then
+// swaps the sharedMesh reference, so the mesh being rendered is never mutated.
 public class ChunkRenderer : MonoBehaviour
 {
     [SerializeField]
     private Chunk chunk = null;
 
-    private MeshFilter meshFilter = null;
-    private MeshRenderer meshRenderer = null;
+    // Per-subchunk render state; index s maps to chunk subchunk index
+    // MinSubChunkIndex + s (task geometry is built at that subchunk's world Y).
+    private class SubChunkRenderer
+    {
+        public MeshFilter Filter;
+        public readonly Mesh[] Meshes = new Mesh[2];
+        public int ActiveIndex = 0;
+    }
 
-    // Double-buffered meshes: upload writes the idle mesh, then swaps the sharedMesh
-    // reference, so the mesh being rendered is never mutated in place.
-    // Meshes are created in Awake: Unity objects can't be built in field initializers.
-    private readonly Mesh[] renderMeshes = new Mesh[2];
-    private int activeMeshIndex = 0;
+    private readonly List<SubChunkRenderer> subRenderers = new();
+    // Reused when rebasing a subchunk's triangle indices to its local vertex range.
+    private readonly List<int> scratchTriangles = new();
 
     private void Awake()
     {
-        meshFilter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
-        meshRenderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
-        meshRenderer.material = ResourceSystem.Instance.BlockMaterial;
-        renderMeshes[0] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-        renderMeshes[1] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-
         EventBus.Instance.Subscribe<BlockChangedEvent>(OnBlockChanged);
         EventBus.Instance.Subscribe<ChunkLoadedEvent>(OnChunkLoaded);
         EventBus.Instance.Subscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
@@ -36,6 +38,9 @@ public class ChunkRenderer : MonoBehaviour
         EventBus.Instance.Unsubscribe<BlockChangedEvent>(OnBlockChanged);
         EventBus.Instance.Unsubscribe<ChunkLoadedEvent>(OnChunkLoaded);
         EventBus.Instance.Unsubscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
+        foreach(var sub in subRenderers)
+            foreach(var mesh in sub.Meshes)
+                if(mesh != null)Destroy(mesh);
     }
 
     // A block inside this chunk changed: the changed block's own subchunk is dirty,
@@ -82,26 +87,65 @@ public class ChunkRenderer : MonoBehaviour
     public void SetChunk(Chunk chunk)
     {
         this.chunk = chunk;
+        // One child renderer per subchunk, positioned at the subchunk's world Y
+        // (geometry is built relative to the chunk origin). sharedMaterial keeps
+        // a single material instance for every subchunk renderer.
+        int subCount = chunk.MaxSubChunkIndex - chunk.MinSubChunkIndex + 1;
+        for(int s = 0; s < subCount; s++)
+        {
+            var go = new GameObject($"SubChunk {chunk.MinSubChunkIndex + s}");
+            go.transform.SetParent(transform, false);
+            // Vertices are built with their world Y already applied (SubOriginY),
+            // so the subchunk renderer sits at the chunk origin like the old
+            // merged mesh - offsetting it here would double the Y shift.
+            go.transform.localPosition = Vector3.zero;
+            var sub = new SubChunkRenderer();
+            sub.Filter = go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = ResourceSystem.Instance.BlockMaterial;
+            sub.Meshes[0] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            sub.Meshes[1] = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            subRenderers.Add(sub);
+        }
         WorldRenderer.Instance.MarkChunkRebuildFull(chunk, ChunkRebuildType.Initial);
     }
 
     // Last applied build result; partial rebuilds copy untouched subchunks from it.
     public ChunkMeshBuildTask AppliedTask {get; private set;}
 
-    // Main thread only: uploads the task's computed data into the idle mesh and swaps it in.
+    // Main thread only: uploads each rebuilt subchunk's range into its idle mesh
+    // and swaps it in. Untouched subchunks (RebuildFlags false) keep the mesh from
+    // the previous apply, so an edit uploads only the affected sections.
     public void ApplyMeshData(ChunkMeshBuildTask task)
     {
-        int target = 1 - activeMeshIndex;
-        Mesh mesh = renderMeshes[target];
-        mesh.Clear();
-        mesh.SetVertices(task.Vertices);
-        mesh.SetTriangles(task.Triangles, 0);
-        mesh.SetUVs(0, task.Uvs);
-        mesh.SetNormals(task.Normals);
-        mesh.SetColors(task.Colors);
-        mesh.RecalculateBounds();
-        meshFilter.sharedMesh = mesh;
-        activeMeshIndex = target;
+        for(int s = 0; s < subRenderers.Count; s++)
+        {
+            if(!task.RebuildFlags[s])continue;
+            var sub = subRenderers[s];
+            int target = 1 - sub.ActiveIndex;
+            Mesh mesh = sub.Meshes[target];
+            mesh.Clear();
+            // Clear() resets subMeshCount to 0, so re-create submesh 0 explicitly.
+            mesh.subMeshCount = 1;
+            if(task.SubVertexCount[s] > 0)
+            {
+                mesh.SetVertices(task.Vertices, task.SubStartVertex[s], task.SubVertexCount[s]);
+                mesh.SetUVs(0, task.Uvs, task.SubStartVertex[s], task.SubVertexCount[s]);
+                mesh.SetNormals(task.Normals, task.SubStartVertex[s], task.SubVertexCount[s]);
+                mesh.SetColors(task.Colors, task.SubStartVertex[s], task.SubVertexCount[s]);
+                // Task triangle indices are absolute in the merged chunk list;
+                // rebase them onto this subchunk's local vertex range.
+                scratchTriangles.Clear();
+                int startTri = task.SubStartTri[s];
+                int baseVertex = task.SubStartVertex[s];
+                for(int i = 0; i < task.SubTriCount[s]; i++)
+                    scratchTriangles.Add(task.Triangles[startTri + i] - baseVertex);
+                mesh.SetTriangles(scratchTriangles, 0);
+            }
+            mesh.RecalculateBounds();
+            sub.Filter.sharedMesh = mesh;
+            sub.ActiveIndex = target;
+        }
         AppliedTask = task;
     }
 }

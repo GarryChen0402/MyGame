@@ -28,6 +28,13 @@ public class ChunkMeshBuildTask
     public List<Vector3> Normals = new();
     public List<int> Triangles = new();
 
+    // Scratch dicts reused for every block in this build (one build owns the
+    // task, so workers and the main thread never share them). Builds on the main
+    // thread (Important edits) previously allocated a fresh Dictionary per block
+    // (~8k per subchunk), which caused GC hitches while rapidly breaking blocks.
+    public readonly Dictionary<string, bool> Mask = new();
+    public readonly Dictionary<string, Rect> FaceRects = new();
+
     // Memory barrier: worker writes last, main thread reads.
     public volatile bool IsDown;
 

@@ -1,6 +1,9 @@
 using Unity.VisualScripting;
 using UnityEngine;
 
+// Runs before WorldRenderer.Update so a block edit marks its chunk rebuild in
+// the same frame, letting the Important rebuild dispatch and render immediately.
+[DefaultExecutionOrder(-100)]
 public class PlayerInputHandler : MonoBehaviour
 {
     [SerializeField]
