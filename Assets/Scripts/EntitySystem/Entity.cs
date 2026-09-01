@@ -12,6 +12,9 @@ public class Entity // Data Class
     public float yaw = 0;
     public ushort DimensionId;
     public RaycastHit CurrentRaycastHitResult;
+    // Inventory slot this entity currently holds (drives IsHoldingItem and
+    // item use; updated by the input layer).
+    public int SelectedSlotIndex;
 
     public Entity()
     {
@@ -25,5 +28,7 @@ public class Entity // Data Class
         //TODO Use the Move logic like mc, get the MoveResult from PhysicsManager
         PhysicsManager.Instance.MoveEntity(this, motion);
     }
+
+    public virtual bool IsHoldingItem() => false;
     
 }

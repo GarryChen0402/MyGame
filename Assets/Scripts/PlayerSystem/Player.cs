@@ -54,4 +54,10 @@ public class Player : Entity
             inventory.itemStacks.Add(new ItemStack { itemId = itemId, amount = entry.amount });
         }
     }
+
+    public override bool IsHoldingItem()
+    {
+        var stack = inventory.GetItemStackAt(SelectedSlotIndex);
+        return stack != null && !stack.IsEmpty();
+    }
 }

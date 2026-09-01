@@ -19,7 +19,6 @@ public class PlayerInputHandler : MonoBehaviour
     private float mouseSensitivity = 2f;
 
     private const float RaycastReach = 4.5f;
-    private int CurrentSelectedSlotIndex = 0;
     private void Awake()
     {
         player = Player.Instance;
@@ -102,35 +101,65 @@ public class PlayerInputHandler : MonoBehaviour
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if(scroll != 0f && player.inventory.itemStacks.Count > 0)
         {
-            CurrentSelectedSlotIndex += scroll > 0f ? 1 : -1;
-            int count = player.inventory.itemStacks.Count;
-            CurrentSelectedSlotIndex = ((CurrentSelectedSlotIndex % count) + count) % count;
+            player.SelectedSlotIndex += scroll > 0f ? 1 : -1;
+            // int count = player.inventory.itemStacks.Count;
+            int count = 9;
+            player.SelectedSlotIndex = ((player.SelectedSlotIndex % count) + count) % count;
 
             // Log the item now selected in the new slot.
-            ItemStack selected = player.inventory.GetItemStackAt(CurrentSelectedSlotIndex);
+            ItemStack selected = player.inventory.GetItemStackAt(player.SelectedSlotIndex);
             if(selected != null && !selected.IsEmpty() &&
                ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(selected.itemId, out var selectedDef))
-                Debug.Log($"Slot {CurrentSelectedSlotIndex}: {selectedDef.FullName} x{selected.amount}");
+                Debug.Log($"Slot {player.SelectedSlotIndex}: {selectedDef.FullName} x{selected.amount}");
             else
-                Debug.Log($"Slot {CurrentSelectedSlotIndex}: (empty)");
+                Debug.Log($"Slot {player.SelectedSlotIndex}: (empty)");
         }
 
-        if(Input.GetMouseButtonDown(0) && player.CurrentRaycastHitResult.IsHit)
+        if (Input.GetMouseButtonDown(1))
         {
-            Debug.Log(WorldManager.Instance.TryBreakBlockAt(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, fromInteraction: true));
-        }
-        if(Input.GetMouseButtonDown(1) && player.CurrentRaycastHitResult.IsHit)
-        {
-            // Block entity interaction takes precedence over block placement
-            // (vanilla containers open instead of placing against them).
-            if(BlockEntityManager.Instance.TryInteract(player, player.CurrentRaycastHitResult.BlockDimensionCoord))return;
-            ItemStack stack = player.inventory.GetItemStackAt(CurrentSelectedSlotIndex);
-            if(stack == null || stack.IsEmpty())return;
-            if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(stack.itemId, out var itemDef))return;
-            if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(itemDef.ItemBehaivorId, out var behavior))return;
-            var res = behavior.OnRightUseToBlock(player, stack);
-            if(res.UseSuccess)player.inventory.TryConsumeItemAt(CurrentSelectedSlotIndex, res.ConsumeAmount);
-            Debug.Log($"{res.UseSuccess} == {res.ConsumeAmount}");
+            if (player.IsHoldingItem())
+            {
+                ItemUseResult result = new();
+                ItemStack currentHoldingItemStack = player.inventory.GetItemStackAt(player.SelectedSlotIndex);
+                if (player.CurrentRaycastHitResult.IsHit)
+                {
+                    if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
+                    var blockId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
+                    if(!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithNumberId(blockId, out var blockDef))return;
+                    if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(currentHoldingItemStack.itemId, out var itemDef))return;
+                    var evt = new UseItemOnStaticBlock()
+                    {
+                        entity = player,
+                        HoldingItem = currentHoldingItemStack,
+                        HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                        HitNormal = player.CurrentRaycastHitResult.Normal,
+                        ItemDef = itemDef,
+                        BlockId = blockId,
+                        BlockDef = blockDef
+                    };
+                    EventBus.Instance.Publish(evt);
+                    result = evt.Result;
+                    if(result.UseSuccess)currentHoldingItemStack.TryConsumeItem(result.ConsumeAmount);
+                }
+            }
+            else
+            {
+                if (player.CurrentRaycastHitResult.IsHit)
+                {
+                    if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
+                    var blockId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
+                    if(!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithNumberId(blockId, out var blockDef))return;
+                    var evt = new InteractWithStaticBlock()
+                    {
+                        entity = player,
+                        HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                        HitNormal = player.CurrentRaycastHitResult.Normal,
+                        BlockId = blockId,
+                        BlockDef = blockDef
+                    };
+                    EventBus.Instance.Publish(evt);
+                }
+            }
         }
     }
 }   
