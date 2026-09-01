@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 public class FurnaceUI : UIBehavior
 {
-    private BlockEntity targetFurance = null;
+    // private BlockEntity targetFurance = null;
 
     private void Awake()
     {
@@ -31,8 +31,8 @@ public class FurnaceUI : UIBehavior
 
     public override void SetData(object data)
     {
-        if (data is not BlockEntity be) return;
-        targetFurance = be;
+        // if (data is not BlockEntity be) return;
+        // targetFurance = be;
     }
 
     public static UIDefinition furanceUIDefinition = new()

@@ -108,36 +108,11 @@ public class Chunk
     // the chunk content still differs from disk, so expose the same dirty mark.
     public void MarkModifiedByBlockEntity() => MarkModified();
 
-    // Block entities bound to this chunk, keyed by chunk-local coord. Kept in
-    // memory across unload (chunks are pooled, not destroyed), so re-enabled
-    // chunks restore their BEs without a disk round-trip.
-    public Dictionary<Vector3Int, BlockEntity> BlockEntities { get; } = new();
-
+    
     // BE save data parsed by the worker during load; consumed (and cleared) by
     // BlockEntityManager on ChunkLoadedEvent. Null when not loaded from disk.
     public List<BlockEntitySaveData> PendingBlockEntities { get; set; } = null;
 
-    // Main thread only: snapshots every BE's module data (BE data is
-    // main-thread-owned; the worker only assembles these strings into JSON).
-    public List<BlockEntitySaveData> BuildBlockEntitySaveSnapshot()
-    {
-        if(BlockEntities.Count == 0)return null;
-        var list = new List<BlockEntitySaveData>(BlockEntities.Count);
-        foreach(var kv in BlockEntities)
-        {
-            var be = kv.Value;
-            if(be.Removed)continue;
-            list.Add(new BlockEntitySaveData
-            {
-                x = kv.Key.x,
-                y = kv.Key.y,
-                z = kv.Key.z,
-                type = be.Definition.FullName,
-                modules = be.BuildModuleSaveData()
-            });
-        }
-        return list.Count == 0 ? null : list;
-    }
 
     // Set by the save manager once the current content was written to disk.
     public void MarkSavedToDisk() => IsSavedToDisk = true;

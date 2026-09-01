@@ -297,26 +297,7 @@ public class Minecraft : IMod
             Tags = new() { "fuel" }
         });
 
-        // Module types: shared behaviors (global), instantiated per BE with the
-        // parameters embedded in each BlockEntityDefinition.Modules entry.
-        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
-        {
-            modId = "Universal",
-            name = "inventory",
-            Factory = md => new InventoryModule(md)
-        });
-        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
-        {
-            modId = "Universal",
-            name = "processing",
-            Factory = md => new ProcessingModule(md)
-        });
-        ResourceSystem.Instance.BlockEntityModuleDefinitions.Register(new BlockEntityModuleDefinition
-        {
-            modId = "Universal",
-            name = "crafting",
-            Factory = md => new CraftingModule(md)
-        });
+        
 
         // Recipe category + the minimal furnace recipe: 1 cobblestone -> 1 stone.
         ResourceSystem.Instance.RecipeTypes.Register(new RecipeType { modId = ModId, name = "furance" });
@@ -328,28 +309,6 @@ public class Minecraft : IMod
             Inputs = new() { new ItemStackAmount { itemId = $"{ModId}:cobblestone", amount = 1 } },
             Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:stone", amount = 1 } },
             ProcessingTime = 1f   // short for validation
-        });
-
-        // Furnace BE: 1 input slot, 1 fuel slot (fuel-tagged only, module-extract
-        // only), 1 output slot (module-insert only) + a processing module that
-        // references them by name and processes the furance recipe category.
-        ResourceSystem.Instance.BlockEntityDefinitions.Register(new BlockEntityDefinition
-        {
-            modId = ModId,
-            name = "furnace",
-            RenderMode = BlockEntityRenderMode.StaticBlock,
-            BlockId = $"{ModId}:furnace",
-            Modules = new()
-            {
-                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "input", Capacity = 1 },
-                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "fuel", Capacity = 1,
-                                       AllowedTags = new() { "fuel" }, ExtractPolicy = InventoryAccess.Module },
-                new ModuleDefinition { ModuleTypeFullName = "Universal:inventory", Name = "output", Capacity = 1,
-                                       InsertPolicy = InventoryAccess.Module, ExtractPolicy = InventoryAccess.Any },
-                new ModuleDefinition { ModuleTypeFullName = "Universal:processing",
-                                       RecipeType = $"{ModId}:furance",
-                                       InputInventory = "input", FuelInventory = "fuel", OutputInventory = "output" }
-            }
         });
 
 

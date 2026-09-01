@@ -11,15 +11,15 @@ public class WorldSaveManager
 {
     public static WorldSaveManager Instance {get;} = new();
 
-    // Cached on the main thread: Application.persistentDataPath throws when read
-    // from a worker (chunk load tasks run off the main thread).
+    // Cached on the main thread: Application.dataPath throws when read from a
+    // worker (chunk load tasks run off the main thread).
     private string worldRootPath;
     public string WorldRootPath => worldRootPath;
 
     public void Initialize()
     {
         if (worldRootPath == null)
-            worldRootPath = Path.Combine(Application.persistentDataPath, "worlds");
+            worldRootPath = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Saves");
     }
 
     private const float AutosaveIntervalSeconds = 60f;
@@ -41,17 +41,15 @@ public class WorldSaveManager
     // ---- chunk saves ----
 
     // Serializes the chunk snapshot on a worker, then queues the file write.
-    // Calling thread must be the main thread (checks IsSavedToDisk; the block
-    // entity snapshot is main-thread-owned data, captured here before handoff).
+    // Calling thread must be the main thread (checks IsSavedToDisk).
     public void EnqueueChunkSave(Dimension dim, Chunk chunk)
     {
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         string path = ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord);
-        var beSnapshot = chunk.BuildBlockEntitySaveSnapshot();
         ThreadPool.QueueUserWorkItem(_ =>
         {
             string json;
-            try { json = ChunkSerializer.Serialize(chunk, beSnapshot); }
+            try { json = ChunkSerializer.Serialize(chunk); }
             catch(Exception e)
             {
                 Debug.LogError($"[WorldSaveManager] serialize chunk ({chunk.ChunkCoord}) failed: {e}");
@@ -172,9 +170,7 @@ public class WorldSaveManager
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         try
         {
-            // Main thread (OnApplicationQuit): safe to snapshot BEs here.
-            var beSnapshot = chunk.BuildBlockEntitySaveSnapshot();
-            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord), ChunkSerializer.Serialize(chunk, beSnapshot));
+            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord), ChunkSerializer.Serialize(chunk));
             chunk.MarkSavedToDisk();
         }
         catch(Exception e)
