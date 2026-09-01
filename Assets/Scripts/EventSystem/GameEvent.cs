@@ -1,1 +1,4 @@
-public class GameEvent{}
+public class GameEvent
+{
+    public bool IsCanceled = false;
+}
