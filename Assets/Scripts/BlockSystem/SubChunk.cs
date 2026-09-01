@@ -90,7 +90,7 @@ public class SubChunk
         return localCoord.x * SubChunkBlockSize * SubChunkBlockSize + localCoord.y * SubChunkBlockSize + localCoord.z;
     }
 
-    // Values are global block state ids (see BlockStateRegistry); 0 = air.
+    // Values are global block state ids (see ResourceSystem.BlockStates); 0 = air.
     public ushort GetBlockAt(Vector3Int subChunkLocalCoord)
     {
         if (!IsCorrectCoord(subChunkLocalCoord)) return 0;

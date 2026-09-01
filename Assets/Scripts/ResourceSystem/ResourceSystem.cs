@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 public class ResourceSystem
@@ -9,8 +9,9 @@ public class ResourceSystem
     public ResourceRegistryTable<CustomModel> CustomModels {get;} = new();
     // Block Definition
     public ResourceRegistryTable<BlockDefinition> BlockDefinitions {get;} = new();
-    // Per-block states (built from BlockDefinition.Properties before freeze).
-    public BlockStateRegistry BlockStates {get;} = new();
+    // Per-block states, built from BlockDefinition.Properties inside Freeze;
+    // the registry number id is the global state id (0 = air).
+    public ResourceRegistryTable<BlockState> BlockStates {get;} = new();
     // Dimension Definiton
     public ResourceRegistryTable<DimensionDefinition> DimensionDefinitions {get;} = new();
     public ResourceRegistryTable<DimensionGeneratorResource> DimensionGenerator {get;} = new();
@@ -44,6 +45,10 @@ public class ResourceSystem
     // BlockMaterial
     public Material BlockMaterial {get;} = new Material(Shader.Find("Universal Render Pipeline/Lit"));
 
+    // blockId -> first global state id / default state id; filled by BuildAllBlockStates.
+    private ushort[] offsetByBlockId;
+    private ushort[] defaultStateByBlockId;
+
     public bool RegisterTexture(string modId, string name, Texture2D source)
         => Textures.Register(new TextureResource
         {
@@ -54,6 +59,8 @@ public class ResourceSystem
 
     // Lock all resource tables. Called by GameBootstrap after mod registration:
     // run-time registration is a boot bug and would corrupt atlas UVs / lookups.
+    // Block states are built here, from the now-frozen block definitions, and
+    // their own table is frozen last so the registration inside isn't rejected.
     public void Freeze()
     {
         CustomModels.Freeze();
@@ -70,8 +77,10 @@ public class ResourceSystem
         BlockEntityModuleDefinitions.Freeze();
         RecipeTypes.Freeze();
         Recipes.Freeze();
+        BuildAllBlockStates();
+        BlockStates.Freeze();
     }
-    
+
     public void BuildAtlas()
     {
         var all = new List<Texture2D>();
@@ -106,5 +115,196 @@ public class ResourceSystem
         };
         ItemDefinitions.Register(blockItemDef);
         return true;
+    }
+
+    // ---- block state queries (read-only after Freeze) ----
+
+    public BlockState GetState(ushort stateId)
+        => BlockStates.TryGetResourceWithNumberId(stateId, out var s) ? s : null;
+
+    public ushort GetDefaultState(ushort blockId)
+        => blockId < defaultStateByBlockId.Length ? defaultStateByBlockId[blockId] : (ushort)0;
+
+    // State id of the given property value combination (little-endian encoding).
+    public ushort GetStateId(BlockDefinition def, int[] propertyValueIndices)
+    {
+        int combo = 0, stride = 1;
+        for (int i = 0; i < propertyValueIndices.Length; i++)
+        {
+            combo += propertyValueIndices[i] * stride;
+            stride *= def.Properties[i].Values.Length;
+        }
+        if (!BlockDefinitions.TryGetNumberId(def.FullName, out ushort blockId)) return 0;
+        return (ushort)(offsetByBlockId[blockId] + combo);
+    }
+
+    // "minecraft:oak_stairs[facing=north,half=bottom]" -> state id. Blocks
+    // without properties are plain full names (compatible with save format v1).
+    // Unknown block -> false (caller treats it as air); unknown/missing
+    // property values fall back to the block default with a warning.
+    public bool TryParseStateString(string stateString, out ushort stateId)
+    {
+        stateId = 0;
+        if (BlockStates.TryGetResourceWithFullName(stateString, out var state))
+        {
+            stateId = state.StateId;
+            return true;
+        }
+        // Legacy v1 saves hold plain block names; unknown property values fall
+        // back to the default state. Either way the block must exist.
+        int br = stateString.IndexOf('[');
+        string blockName = br >= 0 ? stateString[..br] : stateString;
+        if (!BlockDefinitions.TryGetNumberId(blockName, out ushort blockId)) return false;
+        if (br >= 0)
+            Debug.LogWarning($"[ResourceSystem] state string '{stateString}' has unknown or missing properties; defaults used");
+        stateId = GetDefaultState(blockId);
+        return true;
+    }
+
+    // ---- state expansion (once, at the end of Freeze) ----
+
+    // Expands every block definition into its state list. Requires that
+    // minecraft:air was registered first (it becomes state id 0).
+    private void BuildAllBlockStates()
+    {
+        int blockCount = BlockDefinitions.Count;
+        offsetByBlockId = new ushort[blockCount];
+        defaultStateByBlockId = new ushort[blockCount];
+        for (ushort blockId = 0; blockId < blockCount; blockId++)
+        {
+            if (!BlockDefinitions.TryGetResourceWithNumberId(blockId, out var def)) continue;
+            offsetByBlockId[blockId] = (ushort)BlockStates.Count;
+            BuildStatesFor(def, blockId);
+            defaultStateByBlockId[blockId] = offsetByBlockId[blockId];
+        }
+        if (BlockStates.Count > 0
+            && BlockStates.TryGetResourceWithNumberId(0, out var s0) && s0.BlockId != 0)
+            Debug.LogError("[ResourceSystem] state id 0 must be minecraft:air (register it first)");
+    }
+
+    private void BuildStatesFor(BlockDefinition def, ushort blockId)
+    {
+        if (def.Variants == null || def.Variants.Count == 0)
+        {
+            Debug.LogError($"[ResourceSystem] {def.FullName} has no variants (every block needs at least one; put the model there)");
+            return;
+        }
+        if (def.Properties == null || def.Properties.Count == 0)
+        {
+            CreateState(def, blockId, new int[0], def.Variants[0]);
+            return;
+        }
+        int total = 1;
+        foreach (var p in def.Properties)
+        {
+            if (p.Values == null || p.Values.Length == 0)
+            {
+                Debug.LogError($"[ResourceSystem] property '{p.Name}' of {def.FullName} has no values");
+                return;
+            }
+            total *= p.Values.Length;
+        }
+        if ((long)BlockStates.Count + total > ushort.MaxValue)
+        {
+            Debug.LogError($"[ResourceSystem] {def.FullName}: state count exceeds ushort range, block skipped");
+            return;
+        }
+        for (int combo = 0; combo < total; combo++)
+        {
+            int[] indices = DecodeCombo(def, combo);
+            BlockStateVariant v = MatchVariant(def, indices);
+            if (v == null)
+            {
+                Debug.LogError($"[ResourceSystem] {def.FullName} state combo {string.Join(",", indices)} matches no variant; using the first one");
+                v = def.Variants[0];
+            }
+            CreateState(def, blockId, indices, v);
+        }
+    }
+
+    // Little-endian combo encoding: property 0 is the least significant digit.
+    private static int[] DecodeCombo(BlockDefinition def, int combo)
+    {
+        var indices = new int[def.Properties.Count];
+        for (int i = 0; i < def.Properties.Count; i++)
+        {
+            indices[i] = combo % def.Properties[i].Values.Length;
+            combo /= def.Properties[i].Values.Length;
+        }
+        return indices;
+    }
+
+    private static BlockStateVariant MatchVariant(BlockDefinition def, int[] indices)
+    {
+        if (def.Variants == null) return null;
+        foreach (var v in def.Variants)
+        {
+            bool match = true;
+            foreach (var kv in v.Properties)
+            {
+                int pIdx = -1;
+                for (int i = 0; i < def.Properties.Count; i++)
+                    if (def.Properties[i].Name == kv.Key) { pIdx = i; break; }
+                if (pIdx < 0 || def.Properties[pIdx].IndexOfValue(kv.Value) != indices[pIdx]) { match = false; break; }
+            }
+            if (match) return v;
+        }
+        return null;
+    }
+
+    private void CreateState(BlockDefinition def, ushort blockId, int[] indices, BlockStateVariant variant)
+    {
+        string stateString = BuildStateString(def, indices);
+        var state = new BlockState
+        {
+            modId = def.modId,
+            name = stateString[(def.modId.Length + 1)..],
+            StateId = (ushort)BlockStates.Count,
+            BlockId = blockId,
+            Block = def,
+            LocalStateId = BlockStates.Count - offsetByBlockId[blockId],
+            PropertyValueIndices = indices,
+            ModelId = variant.ModelId,
+            RotationX = variant?.RotationX ?? 0,
+            RotationY = variant?.RotationY ?? 0,
+            RotationZ = variant?.RotationZ ?? 0,
+            AABBs = variant?.AABBs ?? def.AABBs
+        };
+        state.AABBs = RotateAABBs(state.AABBs, state.RotationX, state.RotationY, state.RotationZ);
+        if (!BlockStates.Register(state))
+            Debug.LogError($"[ResourceSystem] duplicate block state '{state.FullName}'");
+    }
+
+    private static string BuildStateString(BlockDefinition def, int[] indices)
+    {
+        if (def.Properties == null || def.Properties.Count == 0) return def.FullName;
+        var sb = new StringBuilder(def.FullName);
+        sb.Append('[');
+        for (int i = 0; i < def.Properties.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append(def.Properties[i].Name).Append('=').Append(def.Properties[i].Values[indices[i]]);
+        }
+        sb.Append(']');
+        return sb.ToString();
+    }
+
+    // Rotates the boxes around the block center; boxes stay axis-aligned because
+    // the rotations are 90-degree multiples. Returns null when boxes are null.
+    private static List<AABB> RotateAABBs(List<AABB> boxes, int rotX, int rotY, int rotZ)
+    {
+        if (boxes == null || boxes.Count == 0 || (rotX == 0 && rotY == 0 && rotZ == 0)) return boxes;
+        Quaternion rot = Quaternion.Euler(rotX, rotY, rotZ);   // same quaternion as the model rotation
+        Vector3 center = new(0.5f, 0.5f, 0.5f);
+        var result = new List<AABB>(boxes.Count);
+        foreach (var b in boxes)
+        {
+            Vector3 min = rot * (b.MinRange - center) + center;
+            Vector3 max = rot * (b.MaxRange - center) + center;
+            result.Add(new AABB(
+                new Vector3(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y), Mathf.Min(min.z, max.z)),
+                new Vector3(Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y), Mathf.Max(min.z, max.z))));
+        }
+        return result;
     }
 }

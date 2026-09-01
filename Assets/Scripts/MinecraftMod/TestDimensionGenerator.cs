@@ -16,7 +16,7 @@ public class TestDimensionGenerator : DimensionGenerator
         foreach(var name in blockNames)
         {
             if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(name, out var id))continue;
-            stateIds.Add(ResourceSystem.Instance.BlockStates.GetDefaultState(id));
+            stateIds.Add(ResourceSystem.Instance.GetDefaultState(id));
         }
 
         for(int ycoord = dimDefinition.MinSubChunkIndex; ycoord <= dimDefinition.MaxSubChunkIndex; ycoord++)

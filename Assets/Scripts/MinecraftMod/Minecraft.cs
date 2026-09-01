@@ -372,9 +372,9 @@ public class Minecraft : IMod
         }
         if(topY < minY)return;
         // Chunk data stores state ids; blocks without properties use their default state.
-        ushort grassState = ResourceSystem.Instance.BlockStates.GetDefaultState(grassId);
-        ushort dirtState = ResourceSystem.Instance.BlockStates.GetDefaultState(dirtId);
-        ushort stoneState = ResourceSystem.Instance.BlockStates.GetDefaultState(stoneId);
+        ushort grassState = ResourceSystem.Instance.GetDefaultState(grassId);
+        ushort dirtState = ResourceSystem.Instance.GetDefaultState(dirtId);
+        ushort stoneState = ResourceSystem.Instance.GetDefaultState(stoneId);
         for(int y = topY; y >= minY; y--)
         {
             if(density.GetDensity(x, y, z) <= 0)continue;
@@ -389,7 +389,7 @@ public class Minecraft : IMod
         var chunk = density.Chunk;
         int minY = density.MinY;
         int maxY = minY + density.Height;
-        ushort stoneState = ResourceSystem.Instance.BlockStates.GetDefaultState(stoneId);
+        ushort stoneState = ResourceSystem.Instance.GetDefaultState(stoneId);
         for(int y = maxY - 1; y >= minY; y--)
         {
             if(density.GetDensity(x, y, z) > 0)

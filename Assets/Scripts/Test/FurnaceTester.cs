@@ -17,7 +17,7 @@ public class FurnaceTester : MonoBehaviour
     private void Run()
     {
         if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId("minecraft:furnace", out ushort furnaceBlockId)) { Fail("furnace 方块未注册"); return; }
-        ushort furnaceState = ResourceSystem.Instance.BlockStates.GetDefaultState(furnaceBlockId);
+        ushort furnaceState = ResourceSystem.Instance.GetDefaultState(furnaceBlockId);
         ushort cobblestoneItem = ResolveItem("minecraft:cobblestone");
         ushort coalItem = ResolveItem("minecraft:coal");
         ushort stoneItem = ResolveItem("minecraft:stone");

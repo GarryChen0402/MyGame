@@ -147,7 +147,7 @@ public class PhysicsManager
         ushort stateId = dim.GetBlockAt(coord);
         if(stateId == 0) return;
 
-        BlockState state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+        BlockState state = ResourceSystem.Instance.GetState(stateId);
         List<AABB> boxes = state?.AABBs;
         if(state == null || boxes == null || boxes.Count == 0)
         {

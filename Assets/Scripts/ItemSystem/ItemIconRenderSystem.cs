@@ -52,7 +52,7 @@ public static class ItemIconRenderSystem
         if(blockMeshCache.TryGetValue(itemId, out var mesh))return mesh;
         if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(def.BlockFullName, out ushort blockId))return null;
         // Icons show the block's default state (vanilla behavior).
-        BlockState state = ResourceSystem.Instance.BlockStates.GetState(ResourceSystem.Instance.BlockStates.GetDefaultState(blockId));
+        BlockState state = ResourceSystem.Instance.GetState(ResourceSystem.Instance.GetDefaultState(blockId));
         if(state == null)return null;
         if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))return null;
 

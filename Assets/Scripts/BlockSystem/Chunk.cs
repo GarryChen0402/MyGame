@@ -55,7 +55,7 @@ public class Chunk
         return Mathf.FloorToInt(yCoord * 1.0f / SubChunk.SubChunkBlockSize) - MinSubChunkIndex;
     }
 
-    // Returns the global block state id (0 = air); see BlockStateRegistry.
+    // Returns the global block state id (0 = air); see ResourceSystem.BlockStates.
     public ushort GetBlockAt(Vector3Int chunkLocalCoord)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return 0;

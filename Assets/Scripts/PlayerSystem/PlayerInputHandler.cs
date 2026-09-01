@@ -147,8 +147,10 @@ public class PlayerInputHandler : MonoBehaviour
                 if (player.CurrentRaycastHitResult.IsHit)
                 {
                     if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
-                    var blockId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
-                    if(!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithNumberId(blockId, out var blockDef))return;
+                    var stateId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
+                    if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var def))return;
+                    var blockDef = def.Block;
+                    var blockId = def.BlockId;
                     var evt = new InteractWithStaticBlock()
                     {
                         entity = player,

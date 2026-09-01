@@ -37,11 +37,11 @@ public class BlockDefinition : ResourceType
     // are binned every 45 degrees, plain axes every 90 degrees.
     public virtual ushort GetStateForPlacement(BlockPlacementContext ctx)
     {
-        var states = ResourceSystem.Instance.BlockStates;
+        var rs = ResourceSystem.Instance;
         if (Properties == null || Properties.Count == 0)
         {
-            if (!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(FullName, out ushort blockId)) return 0;
-            return states.GetDefaultState(blockId);
+            if (!rs.BlockDefinitions.TryGetNumberId(FullName, out ushort blockId)) return 0;
+            return rs.GetDefaultState(blockId);
         }
         var indices = new int[Properties.Count];
         bool sideClick = ctx.HitFace is FaceHitType.SideUpper or FaceHitType.SideLower;
@@ -65,7 +65,7 @@ public class BlockDefinition : ResourceType
             else
                 indices[i] = 0;
         }
-        return states.GetStateId(this, indices);
+        return rs.GetStateId(this, indices);
     }
 
     // Direction the clicked face points: +Z=south, -Z=north, +X=east, -X=west.

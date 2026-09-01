@@ -16,7 +16,7 @@ public class StoneTester : MonoBehaviour
             return;
         }
         if (!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(stoneId, out ushort stoneBlockId)) return;
-        BlockState state = ResourceSystem.Instance.BlockStates.GetState(ResourceSystem.Instance.BlockStates.GetDefaultState(stoneBlockId));
+        BlockState state = ResourceSystem.Instance.GetState(ResourceSystem.Instance.GetDefaultState(stoneBlockId));
         if (state == null) return;
         if (!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))
         {

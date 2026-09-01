@@ -83,10 +83,10 @@ public static class ChunkSerializer
         {
             ushort stateId = blocks[i];
             if (stateId == 0 || paletteIndex.ContainsKey(stateId)) continue;
-            var state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+            var state = ResourceSystem.Instance.GetState(stateId);
             if (state == null) continue;
             paletteIndex[stateId] = palette.Count + 1;   // palette slot 0 is implicit air
-            palette.Add(state.StateString);
+            palette.Add(state.FullName);
         }
         // Second pass: write the per-block palette index.
         var blockData = new List<int>(BlockCount);
@@ -116,7 +116,7 @@ public static class ChunkSerializer
             var paletteIds = new ushort[subData.palette.Count + 1];
             for (int p = 0; p < subData.palette.Count; p++)
             {
-                if (ResourceSystem.Instance.BlockStates.TryParseStateString(subData.palette[p], out ushort stateId))
+                if (ResourceSystem.Instance.TryParseStateString(subData.palette[p], out ushort stateId))
                     paletteIds[p + 1] = stateId;
                 else
                     Debug.LogWarning($"[ChunkSerializer] unknown block state '{subData.palette[p]}' in chunk save ({data.chunkX},{data.chunkZ}); treated as air");

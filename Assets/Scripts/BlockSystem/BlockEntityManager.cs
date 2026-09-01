@@ -63,7 +63,7 @@ public class BlockEntityManager
     // definition's factory chain and hang it on the chunk.
     private void CreateBlockEntity(BlockChangedEvent evt)
     {
-        var state = ResourceSystem.Instance.BlockStates.GetState(evt.NewStateId);
+        var state = ResourceSystem.Instance.GetState(evt.NewStateId);
         var blockDef = state?.Block;
         if (blockDef == null || !blockDef.HasBlockEntity || string.IsNullOrEmpty(blockDef.BlockEntityDefinitionFullName)) return;
         if (evt.Chunk == null) return;

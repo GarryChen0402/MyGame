@@ -328,7 +328,7 @@ public class WorldRenderer : MonoBehaviour
                             {
                                 ushort stateId = data[x * 256 + y * 16 + z];
                                 if (stateId == 0) continue;
-                                var state = ResourceSystem.Instance.BlockStates.GetState(stateId);
+                                var state = ResourceSystem.Instance.GetState(stateId);
                                 if (state == null) continue;
                                 BlockDefinition def = state.Block;
                                 if (!models.TryGetResourceWithFullName(state.ModelId, out var model) || model == null) continue;
@@ -347,7 +347,7 @@ public class WorldRenderer : MonoBehaviour
                                     // IsFullCube: non-full shapes (stairs) leave part of a
                                     // neighbor's face visible, so they never hide it.
                                     task.Mask[kv.Key] = neighborId != 0
-                                        && ResourceSystem.Instance.BlockStates.GetState(neighborId)?.Block is { IsOpaque: true, IsFullCube: true };
+                                        && ResourceSystem.Instance.GetState(neighborId)?.Block is { IsOpaque: true, IsFullCube: true };
 
                                     if (def.TextureIds != null && def.TextureIds.TryGetValue(kv.Key, out string texId)
                                         && textures.TryGetResourceWithFullName(texId, out var rect))

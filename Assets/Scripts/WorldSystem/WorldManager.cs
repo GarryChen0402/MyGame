@@ -44,7 +44,7 @@ public class WorldManager
     }
 
     // Controller entry for player block operations. stateId is a global block
-    // state id (see BlockStateRegistry); returns false when the target position
+    // state id (see ResourceSystem.BlockStates); returns false when the target position
     // is already occupied or the dimension doesn't exist.
     public bool TryPlaceBlock(ushort dimId, Vector3Int dimensionCoord, ushort stateId, bool fromInteraction = false)
     {
