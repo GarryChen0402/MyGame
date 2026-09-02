@@ -1,10 +1,10 @@
-using UnityEditor.PackageManager;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class InteractionManager
 {
     private static InteractionManager instance = new();
-    public static InteractionManager Intance => instance;
+    public static InteractionManager Instance => instance;
 
     private InteractionManager()
     {
@@ -39,19 +39,17 @@ public class InteractionManager
 
     
 
-    // // Left-click main: break the targeted block (Before hooks can cancel).
-    // private static void OnBlockBreak(BlockBreakEvent evt)
-    // {
-    //     // WorldManager.Instance.TryBreakBlockAt(evt.Operator.DimensionId, evt.DimensionBlockCoord, fromInteraction: true);
-    // }
-
     public void HandleLeftClick(Entity entity, Vector3Int dimCoord)
     {
-        // EventBus.Instance.Publish(new BlockBreakEvent()
-        // {
-        //     Operator = entity,
-        //     DimensionBlockCoord = dimCoord
-        // });
+        if(!WorldManager.Instance.TryGetDimension(entity.DimensionId, out var dim))return;
+        List<ItemStack> drops = DropResolver.Collect(dim, dimCoord);   // read the old block before the break removes it
+        if(!WorldManager.Instance.TryBreakBlockAt(entity.DimensionId, dimCoord, fromInteraction: true))return;
+        // Spawn every drop at the block center +0.5 up with a random horizontal
+        // kick (P5 of the item drop dev plan: full break -> drop chain).
+        Vector3 spawnPos = new(dimCoord.x + 0.5f, dimCoord.y + 1f, dimCoord.z + 0.5f);
+        foreach(ItemStack stack in drops)
+            ItemEntityManager.Instance.SpawnItemEntity(entity.DimensionId, spawnPos, stack,
+                new Vector3(Random.Range(-3f, 3f), 0f, Random.Range(-3f, 3f)), 0.5f);
     }
 
 

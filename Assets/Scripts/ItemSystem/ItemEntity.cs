@@ -67,6 +67,7 @@ public class ItemEntity : Entity
         wasOnGround = onGround;
 
         TickMerge(dt);
+        TryPickup();
 
         LifeTime += dt;
         if(LifeTime >= DespawnTime || Position.y < VoidY)
@@ -74,7 +75,23 @@ public class ItemEntity : Entity
             ItemEntityManager.Instance.DespawnItemEntity(this);
             return;
         }
-        // Pickup check (design doc §5 step 5) lands in P6 of the dev plan.
+    }
+
+    // Pickup (design doc §5 step 5): the pickup box is the player box extended
+    // 1.0 horizontally (boundaries inclusive) and 0.5 up/down (boundaries
+    // exclusive). Whole-stack transfer on success (TryAddItemStack empties the
+    // stack), hover and retry when the inventory has no room (vanilla).
+    private void TryPickup()
+    {
+        Player player = Player.Instance;
+        if(player == null || PickupDelay > 0f)return;
+        AABB item = MainBox;
+        AABB p = player.MainBox;
+        if(item.MaxRange.x < p.MinRange.x - 1.0f || item.MinRange.x > p.MaxRange.x + 1.0f)return;
+        if(item.MaxRange.z < p.MinRange.z - 1.0f || item.MinRange.z > p.MaxRange.z + 1.0f)return;
+        if(item.MaxRange.y <= p.MinRange.y - 0.5f || item.MinRange.y >= p.MaxRange.y + 0.5f)return;
+        if(!player.inventory.TryAddItemStack(Stack))return;   // no room: hover
+        ItemEntityManager.Instance.DespawnItemEntity(this);
     }
 
     // Sweeps the displacement (PhysicsManager axis-separated) and zeroes the

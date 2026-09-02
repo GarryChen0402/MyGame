@@ -37,11 +37,6 @@ public class PlayerInputHandler : IInputHandler
         
         MoveHandler();
         InteractionHandler();
-
-        // TEMP dev key (removed in P6 of the dev plan): spawn a stone drop in
-        // front of the player to exercise item physics before breaking (P4/P5).
-        if(Input.GetKeyDown(KeyCode.F))TemporarySpawnDrop();
-
     }
     private void MoveHandler()
     {
@@ -98,6 +93,19 @@ public class PlayerInputHandler : IInputHandler
                 Debug.Log($"Slot {player.SelectedSlotIndex}: {selectedDef.FullName} x{selected.amount}");
             else
                 Debug.Log($"Slot {player.SelectedSlotIndex}: (empty)");
+        }
+
+        // Left-click break (P4 of the item drop dev plan): empty-hand or held
+        // item both break; drop spawning is wired in P5.
+        if (Input.GetMouseButtonDown(0))
+        {
+            if (player.CurrentRaycastHitResult.IsHit)
+            {
+                if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
+                Vector3Int coord = player.CurrentRaycastHitResult.BlockDimensionCoord;
+                if(dim.GetBlockAt(coord) == 0)return;   // air: nothing to break
+                InteractionManager.Instance.HandleLeftClick(player, coord);
+            }
         }
 
         if (Input.GetMouseButtonDown(1))
@@ -195,19 +203,4 @@ public class PlayerInputHandler : IInputHandler
         }
     }
 
-    // TEMP dev helper (removed in P6 of the dev plan): spawns a stone drop in
-    // front of the player so item physics/lifetime can be exercised before the
-    // break path (P4/P5) is wired.
-    private void TemporarySpawnDrop()
-    {
-        if(player == null)return;
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId("minecraft:stone", out ushort stoneId))return;
-        Vector3 dir = Quaternion.Euler(0f, player.yaw, 0f) * Vector3.forward;
-        ItemEntityManager.Instance.SpawnItemEntity(
-            player.DimensionId,
-            player.Position + Vector3.up * 1.5f + dir * 2f,
-            new ItemStack { itemId = stoneId, amount = 8 },
-            new Vector3(Random.Range(-0.25f, 0.25f), 1f, Random.Range(-0.25f, 0.25f)),
-            0.5f);
-    }
 }

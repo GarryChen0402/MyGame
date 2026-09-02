@@ -38,7 +38,7 @@ public static class GameBootstrap
         _ = ResourceSystem.Instance;
         _ = WorldManager.Instance;
         WorldSaveManager.Instance.Initialize();   // caches persistentDataPath (main thread only)
-        _ = InteractionManager.Intance;
+        _ = InteractionManager.Instance;
         _ = BlockEntityManager.Instance;   // subscribes BlockChanged/ChunkUnloaded before any chunk event
     }
 
