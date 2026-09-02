@@ -336,7 +336,7 @@ public class Minecraft : IMod
                     {
                         Capacity = 1,
                         AllowedTags = new() { "fuel" },
-                        ExtractPolicy = ContainerAccess.Module
+                        ExtractPolicy = ContainerAccess.Any
                     })
                 },
                 new DataContainerConfig
@@ -369,11 +369,13 @@ public class Minecraft : IMod
 
         ResourceSystem.Instance.UIDefinitions.Register(CrosshairUI.CrosshairUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HotBarUI.hotbarDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(HeldItemUI.heldItemUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(PlayerInventoryUI.playerInvUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(FurnaceUI.furanceUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
+        ResourceSystem.Instance.InputHandlers.Register(new UIInputHandler());
     }
 
     // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.VisualScripting;
 using Unity.VisualScripting.Antlr3.Runtime.Tree;
 using UnityEngine;
@@ -9,6 +10,11 @@ public class FurnaceUI : UIBehavior
     private SlotUI inputSlot = null;
     private SlotUI fuelSlot = null;
     private SlotUI outputSlot = null;
+
+    // Click access points of this furnace's three containers (input/fuel/
+    // output), rebuilt whenever the UI binds to a new block entity.
+    private readonly List<ISlotAccess> containerSlots = new();
+    public override IReadOnlyList<ISlotAccess> ContainerSlots => containerSlots;
 
     private void Awake()
     {
@@ -57,13 +63,23 @@ public class FurnaceUI : UIBehavior
             Refresh();
             return;
         }
+        containerSlots.Clear();
         targetFurance = be;
-        var input = be.GetDataContainer<InventoryDataContainer>("input");
-        if(input != null)inputSlot.SetItemStack(input.GetItemStackAt(0));
-        var fuel = be.GetDataContainer<InventoryDataContainer>("fuel");
-        if(fuel != null)fuelSlot.SetItemStack(fuel.GetItemStackAt(0));
-        var output = be.GetDataContainer<InventoryDataContainer>("output");
-        if(output != null)outputSlot.SetItemStack(output.GetItemStackAt(0));
+        BindContainerSlot("input", inputSlot);
+        BindContainerSlot("fuel", fuelSlot);
+        BindContainerSlot("output", outputSlot);
+    }
+
+    // Resolves one named container of the BE, binds the slot's click access
+    // point and shows its content (same slot object the click logic mutates).
+    private void BindContainerSlot(string name, SlotUI slotUI)
+    {
+        var container = targetFurance.GetDataContainer<InventoryDataContainer>(name);
+        if(container == null)return;
+        var access = new ContainerSlotAccess(container, 0);
+        slotUI.Bind(access);
+        slotUI.SetItemStack(access.Get());
+        containerSlots.Add(access);
     }
 
     public static UIDefinition furanceUIDefinition = new()
@@ -71,6 +87,7 @@ public class FurnaceUI : UIBehavior
         modId = "minecraft",
         name = "furnace",
         Kind = UIKind.SinglePanel,
+        InputHandlerId = "minecraft:ui_input_handler",
         OpenWithPlayerInventory = true,
         Factory = () =>{
             var go = new GameObject("Furnace UI", typeof(FurnaceUI));

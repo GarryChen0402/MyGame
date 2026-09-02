@@ -60,10 +60,19 @@ public class PlayerInventoryUI : UIBehavior
 
     private void OnEnable()
     {
-        // foreach(var slot in slots)slot.Refresh();
+        // Rebind click access (player slots have no container policy) and the
+        // displayed stack; both point at the same Inventory slot objects.
         for(int i = 0; i < 36; i++)
         {
+            slots[i].Bind(new PlayerSlotAccess(Player.Instance.inventory, i));
             slots[i].SetItemStack(Player.Instance.inventory.GetItemStackAt(i));
         }
+    }
+
+    // Click resolution mutates the bound stacks in place; Refresh sweeps every
+    // slot to reflect merges / swaps / quick-moves.
+    public override void Refresh()
+    {
+        for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
     }
 }

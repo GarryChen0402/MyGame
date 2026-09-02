@@ -53,6 +53,11 @@ public class Player : Entity
             }
             inventory.itemStacks.Add(new ItemStack { itemId = itemId, amount = entry.amount });
         }
+        // Save files list non-empty entries only; refill the fixed 36 slots so
+        // every GetItemStackAt(index) stays valid (an out-of-range null slot
+        // would make clicks on empty backpack slots silently no-op).
+        while(inventory.itemStacks.Count < inventory.MaxSlotCount)
+            inventory.itemStacks.Add(new ItemStack());
     }
 
     public override bool IsHoldingItem()

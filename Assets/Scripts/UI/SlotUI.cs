@@ -1,9 +1,10 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class SlotUI : MonoBehaviour
+public class SlotUI : MonoBehaviour, IPointerClickHandler
 {
     private ItemIconRenderer Icon;
     private TextMeshProUGUI Text;
@@ -71,4 +72,10 @@ public class SlotUI : MonoBehaviour
         Icon.SetItem(itemStack.itemId);
         Text.text = itemStack.amount > 1 ? itemStack.amount.ToString() : "";
     }
+    private ISlotAccess access;
+    public ISlotAccess Access => access;
+    public void Bind(ISlotAccess access) => this.access = access;
+    public void OnPointerClick(PointerEventData eventData)
+        => UIManager.Instance.HandleSlotClicked(this, eventData);
+
 }
