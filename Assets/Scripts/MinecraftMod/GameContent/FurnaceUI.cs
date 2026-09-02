@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Unity.VisualScripting;
-using Unity.VisualScripting.Antlr3.Runtime.Tree;
 using UnityEngine;
 using UnityEngine.UI;
+// using UnityEngine.UIElements;
 
 public class FurnaceUI : UIBehavior
 {
@@ -10,6 +10,9 @@ public class FurnaceUI : UIBehavior
     private SlotUI inputSlot = null;
     private SlotUI fuelSlot = null;
     private SlotUI outputSlot = null;
+    private ProgressBarUI fireProgress = null;   // fuel burn gauge above the fuel slot
+    private ProgressBarUI cookProgress = null;   // recipe progress arrow
+    private ProcessingWorkContainer work = null; // work container of the bound BE
 
     // Click access points of this furnace's three containers (input/fuel/
     // output), rebuilt whenever the UI binds to a new block entity.
@@ -53,6 +56,30 @@ public class FurnaceUI : UIBehavior
         outputGo.transform.SetParent(transform, false);
         outputGo.transform.localPosition = new Vector3(120, 0, 0);
 
+        // Fire Progress: full when a fuel piece is lit, its visible top edge
+        // sinks as the burn runs out (Progress 1 -> 0 keeps the bottom part).
+        // fireProgress = AddProgressBar("Fire Progress", new Vector3(-120, -25, 0),
+        //     ProgressBarUI.Direction.BottomToTop,
+        //     Resources.Load<Sprite>("Textures/UI/furnace_fire_front"),
+        //     Resources.Load<Sprite>("Textures/UI/furnace_fire_back"));
+        var fireProgressGo = ProgressBarUI.AddProgressBar(
+            "Fire Progress", new Vector3(-120, 0, 0),
+            ProgressBarUI.Direction.BottomToTop,
+            Resources.Load<Sprite>("Textures/UI/furnace_fire_front"),
+            Resources.Load<Sprite>("Textures/UI/furnace_fire_back")
+        );
+        fireProgressGo.transform.SetParent(transform, false);
+        fireProgress = fireProgressGo.GetComponent<ProgressBarUI>();
+
+        // Craft Progress: front grows left-to-right while a recipe cooks and
+        // resets to back-only once the output is crafted.
+
+        var craftProgressGo = ProgressBarUI.AddProgressBar("Cook Progress", Vector3.zero,
+            ProgressBarUI.Direction.LeftToRight,
+            Resources.Load<Sprite>("Textures/UI/furnace_progress_front"),
+            Resources.Load<Sprite>("Textures/UI/furnace_progress_back"));
+        craftProgressGo.transform.SetParent(transform, false);
+        cookProgress = craftProgressGo.GetComponent<ProgressBarUI>();
     }
 
     public override void SetData(object data)
@@ -65,6 +92,9 @@ public class FurnaceUI : UIBehavior
         }
         containerSlots.Clear();
         targetFurance = be;
+        work = null;
+        foreach(var wc in be.WorkContainers)
+            if(wc is ProcessingWorkContainer pwc){ work = pwc; break; }
         BindContainerSlot("input", inputSlot);
         BindContainerSlot("fuel", fuelSlot);
         BindContainerSlot("output", outputSlot);
@@ -94,6 +124,35 @@ public class FurnaceUI : UIBehavior
             return go;
         }
     };
+
+    // SlotUI-style: no explicit size - the GO's RectTransform defaults to the
+    // 100x100 slot cell and the child images fill it (preserveAspect keeps the
+    // small pixel textures from stretching).
+    private ProgressBarUI AddProgressBar(string name, Vector3 pos, ProgressBarUI.Direction dir,
+        Sprite front, Sprite back)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        go.transform.localPosition = pos;
+        go.AddComponent<RectTransform>();
+        var bar = go.AddComponent<ProgressBarUI>();
+        bar.Setup(front, dir, back);
+        return bar;
+    }
+
+    // Pushes the work container's live tick state into the two gauges while
+    // the panel is open (Update stops when the UI is hidden).
+    private void Update()
+    {
+        if(work == null)return;
+        fireProgress.Progress = work.FuelLeftTickTime <= 0 ? 0f
+            : (float)work.FuelLeftTickTime / ProcessingWorkContainer.FUEL_BURN_TICKS;
+        cookProgress.Progress = work.TotalTickTime <= 0 ? 0f
+            : (float)work.CurrentTickProgress / work.TotalTickTime;
+        inputSlot.Refresh();
+        fuelSlot.Refresh();
+        outputSlot.Refresh();
+    }
 
     public override void Refresh()
     {

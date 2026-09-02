@@ -45,43 +45,51 @@ public class ProcessingWorkContainer : WorkContainer
         if(Input == null || Output == null || Fuel == null)return;
 
         // Re-match when nothing burns or the current recipe no longer fits the
-        // input; vanilla resets progress when no recipe can run.
+        // input; vanilla resets progress when no recipe can run. Progress runs
+        // only while canRun, but the lit fire burns down regardless (below).
         if (CurrentRecipe == null || !MatchesInput(CurrentRecipe))
         {
             CurrentRecipe = FindRecipe();
-            if (CurrentRecipe == null)
-            {
-                CurrentTickProgress = 0;
-                return;
-            }
             CurrentTickProgress = 0;
-            TotalTickTime = ToTicks(CurrentRecipe);
+            if (CurrentRecipe != null) TotalTickTime = ToTicks(CurrentRecipe);
         }
 
         // Output blocked -> vanilla resets progress until it fits again.
-        if (!CanFitOutput(CurrentRecipe))
+        bool canRun = CurrentRecipe != null;
+        if (canRun && !CanFitOutput(CurrentRecipe))
         {
             CurrentTickProgress = 0;
-            return;
+            canRun = false;
         }
 
-        // Light a new fuel item when the current burn has ended.
-        if (FuelLeftTickTime <= 0 && TryConsumeFuel())
-            FuelLeftTickTime = FUEL_BURN_TICKS;
-        if (FuelLeftTickTime <= 0) return;   // out of fuel -> paused, progress kept
-
-        FuelLeftTickTime--;
-        CurrentTickProgress++;
-        if (CurrentTickProgress >= TotalTickTime)
+        // A lit fire always burns down one tick whether or not a recipe can
+        // run (vanilla wastes the remaining burn once the input runs out); a
+        // new fuel piece is lit only when a recipe can actually run.
+        bool changed = false;
+        if (FuelLeftTickTime > 0)
         {
-            if (TryCraft(CurrentRecipe))
+            FuelLeftTickTime--;
+            changed = true;
+            if (canRun)
             {
-                CurrentTickProgress = 0;
-                CurrentRecipe = FindRecipe();   // next recipe under the remaining input
-                if (CurrentRecipe != null) TotalTickTime = ToTicks(CurrentRecipe);
+                CurrentTickProgress++;
+                if (CurrentTickProgress >= TotalTickTime)
+                {
+                    if (TryCraft(CurrentRecipe))
+                    {
+                        CurrentTickProgress = 0;
+                        CurrentRecipe = FindRecipe();   // next recipe under the remaining input
+                        if (CurrentRecipe != null) TotalTickTime = ToTicks(CurrentRecipe);
+                    }
+                }
             }
         }
-        MarkDirty();
+        else if (canRun && TryConsumeFuel())
+        {
+            FuelLeftTickTime = FUEL_BURN_TICKS;   // lit fire starts next tick
+            changed = true;
+        }
+        if (changed) MarkDirty();
     }
 
     private int ToTicks(RecipeDefinition recipe)

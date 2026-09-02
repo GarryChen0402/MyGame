@@ -61,7 +61,16 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
     public void Refresh()
     {
         if(itemStack == null)return;
-        if(itemStack == null || itemStack.IsEmpty())
+        bool empty = itemStack.IsEmpty();
+        // Skip when the rendered state already matches: Refresh may be polled
+        // every frame (furnace work tick) and Icon.SetItem re-renders a 3D
+        // model into a RenderTexture, which must not run on unchanged slots.
+        if(shown && shownItemId == itemStack.itemId
+           && shownAmount == (empty ? 0 : itemStack.amount)) return;
+        shown = true;
+        shownItemId = itemStack.itemId;
+        shownAmount = empty ? 0 : itemStack.amount;
+        if(itemStack == null || empty)
         {
             Icon.gameObject.SetActive(false);
             Text.text = "";
@@ -77,5 +86,9 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
     public void Bind(ISlotAccess access) => this.access = access;
     public void OnPointerClick(PointerEventData eventData)
         => UIManager.Instance.HandleSlotClicked(this, eventData);
+
+    private bool shown;              // false until the first Refresh after bind
+    private ushort shownItemId;      // last rendered state (empty => amount 0)
+    private int shownAmount;
 
 }
