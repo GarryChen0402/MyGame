@@ -72,6 +72,8 @@ public class UIManager : MonoBehaviour
 
             ui.SetData(data);
             ui.Open();
+
+            if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
             return;
         }
 
@@ -83,6 +85,7 @@ public class UIManager : MonoBehaviour
         currentUI = uiGo.GetComponent<UIBehavior>();
         currentUI.SetData(ui);
         currentUI.Open();
+        if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
         UICache[uiId] = currentUI;
     }
 

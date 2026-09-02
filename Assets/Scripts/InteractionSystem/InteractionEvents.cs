@@ -14,21 +14,21 @@ public class UseItemOnStaticBlock : GameEvent
     public ItemUseResult Result;
 }
 
-// public class UseItemOnBlockEntity : GameEvent
-// {
-//     public Entity entity;
-//     public Vector3Int HitBlockCoord; // Dimension Coord;
-//     public Vector3 HitNormal;
+public class UseItemOnBlockEntity : GameEvent
+{
+    public Entity entity;
+    public Vector3Int HitBlockCoord; // Dimension Coord;
+    public Vector3 HitNormal;
 
-//     public ItemStack HoldingItem;
-//     public ItemDefinition ItemDef;
+    public ItemStack HoldingItem;
+    public ItemDefinition ItemDef;
 
-//     public ushort BlockId;
-//     public BlockDefinition BlockDef;
-//     public BlockEntity blockEntity;
-//     public BlockEntityDefinition BlockEntityDef;
-//     public ItemUseResult Result;
-// }
+    public ushort BlockId;
+    public BlockDefinition BlockDef;
+    public BlockEntity blockEntity;
+    public BlockEntityDefinition BlockEntityDef;
+    public ItemUseResult Result;
+}
 
 public class UseItem : GameEvent
 {

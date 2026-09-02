@@ -125,21 +125,45 @@ public class PlayerInputHandler : MonoBehaviour
                 if (player.CurrentRaycastHitResult.IsHit)
                 {
                     if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
-                    var blockId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
-                    if(!ResourceSystem.Instance.BlockDefinitions.TryGetResourceWithNumberId(blockId, out var blockDef))return;
+                    var stateId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
+                    if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var def))return;
+                    var blockDef = def.Block;
+                    var blockId = def.BlockId;
                     if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(currentHoldingItemStack.itemId, out var itemDef))return;
-                    var evt = new UseItemOnStaticBlock()
+                    if (blockDef.HasBlockEntity)
                     {
-                        entity = player,
-                        HoldingItem = currentHoldingItemStack,
-                        HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                        HitNormal = player.CurrentRaycastHitResult.Normal,
-                        ItemDef = itemDef,
-                        BlockId = blockId,
-                        BlockDef = blockDef
-                    };
-                    EventBus.Instance.Publish(evt);
-                    result = evt.Result;
+                        if(!WorldManager.Instance.TryGetBlockEntity(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, out BlockEntity blockEntity))
+                            return;
+                        var evt = new UseItemOnBlockEntity()
+                        {
+                            entity = player,
+                            HoldingItem = currentHoldingItemStack,
+                            ItemDef = itemDef,
+                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                            HitNormal = player.CurrentRaycastHitResult.Normal,
+                            BlockId = blockId,
+                            BlockDef = blockDef,
+                            blockEntity = blockEntity,
+                            BlockEntityDef = blockEntity.Definition,
+                        };
+                        EventBus.Instance.Publish(evt);
+                        result = evt.Result;
+                    }
+                    else
+                    {
+                        var evt = new UseItemOnStaticBlock()
+                        {
+                            entity = player,
+                            HoldingItem = currentHoldingItemStack,
+                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                            HitNormal = player.CurrentRaycastHitResult.Normal,
+                            ItemDef = itemDef,
+                            BlockId = blockId,
+                            BlockDef = blockDef
+                        };
+                        EventBus.Instance.Publish(evt);
+                        result = evt.Result;
+                    }
                     if(result.UseSuccess)currentHoldingItemStack.TryConsumeItem(result.ConsumeAmount);
                 }
             }

@@ -13,6 +13,7 @@ public class InteractionManager
         EventBus.Instance.Subscribe<UseItemOnStaticBlock>(OnUseItemOnStaticBlock);
         EventBus.Instance.Subscribe<InteractWithStaticBlock>(OnInteractWithStaticBlock);
         EventBus.Instance.Subscribe<InteractWithBlockEntity>(OnInteractWithBlockEntity);
+        EventBus.Instance.Subscribe<UseItemOnBlockEntity>(OnUseItemOnBlockEntity);
     }
 
     // P2 main: resolve the held item and delegate judgment to its behavior.
@@ -68,6 +69,11 @@ public class InteractionManager
     }
 
     public void OnInteractWithBlockEntity(InteractWithBlockEntity evt)
+    {
+        evt.blockEntity.OnInteract(evt.entity, evt.BlockEntityDef);
+    }
+
+    public void OnUseItemOnBlockEntity(UseItemOnBlockEntity evt)
     {
         evt.blockEntity.OnInteract(evt.entity, evt.BlockEntityDef);
     }

@@ -92,6 +92,11 @@ public class InventoryDataContainer : DataContainer
         return false;
     }
 
+    public ItemStack GetItemStackAt(int index)
+    {
+        return Inv.GetItemStackAt(index);
+    }
+
     // ---- persistence ----
 
     // Slot data only: capacity, policies and whitelists are declaration config
