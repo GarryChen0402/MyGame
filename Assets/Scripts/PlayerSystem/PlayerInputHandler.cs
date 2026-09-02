@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -151,15 +152,36 @@ public class PlayerInputHandler : MonoBehaviour
                     if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var def))return;
                     var blockDef = def.Block;
                     var blockId = def.BlockId;
-                    var evt = new InteractWithStaticBlock()
+                    if(!blockDef.HasBlockEntity)
                     {
-                        entity = player,
-                        HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                        HitNormal = player.CurrentRaycastHitResult.Normal,
-                        BlockId = blockId,
-                        BlockDef = blockDef
-                    };
-                    EventBus.Instance.Publish(evt);
+                        var evt = new InteractWithStaticBlock()
+                        {
+                            entity = player,
+                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                            HitNormal = player.CurrentRaycastHitResult.Normal,
+                            BlockId = blockId,
+                            BlockDef = blockDef
+                        };
+                        EventBus.Instance.Publish(evt);
+                    }
+                    else
+                    {
+                        // The block has a BE: the chunk hosting it is always
+                        // enabled (the ray just hit it), so the lookup must succeed.
+                        if(!WorldManager.Instance.TryGetBlockEntity(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, out BlockEntity blockEntity))
+                            return;
+                        var evt = new InteractWithBlockEntity()
+                        {
+                            entity = player,
+                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
+                            HitNormal = player.CurrentRaycastHitResult.Normal,
+                            BlockId = blockId,
+                            BlockDef = blockDef,
+                            blockEntity = blockEntity,
+                            BlockEntityDef = blockEntity.Definition
+                        };
+                        EventBus.Instance.Publish(evt);
+                    }
                 }
             }
         }

@@ -58,6 +58,15 @@ public class WorldManager
         return dim.TryBreakBlockAt(dimensionCoord, fromInteraction);
     }
 
+    // Read-only lookup of the block entity at a dimension coord (interaction
+    // entry: does not generate or load any chunk).
+    public bool TryGetBlockEntity(ushort dimId, Vector3Int dimensionCoord, out BlockEntity blockEntity)
+    {
+        blockEntity = null;
+        if(!TryGetDimension(dimId, out var dim))return false;
+        return dim.TryGetBlockEntity(dimensionCoord, out blockEntity);
+    }
+
     public bool IsDimensionExist(ushort dimensionId) => Dimensions.ContainsKey(dimensionId);
 
     public bool TryGetOrGenerateDimension(string dimensionFullName, out Dimension dimension)

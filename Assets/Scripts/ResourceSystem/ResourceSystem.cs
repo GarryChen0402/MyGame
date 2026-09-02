@@ -31,6 +31,11 @@ public class ResourceSystem
     public ResourceRegistryTable<RecipeType> RecipeTypes {get;} = new();
     public ResourceRegistryTable<RecipeDefinition> Recipes {get;} = new();
 
+    // Block entity system: container types + BE definitions
+    public ResourceRegistryTable<DataContainerDefinition> DataContainerDefinitions {get;} = new();
+    public ResourceRegistryTable<WorkContainerDefinition> WorkContainerDefinitions {get;} = new();
+    public ResourceRegistryTable<BlockEntityDefinition> BlockEntityDefinitions {get;} = new();
+
     // UI Register
     public ResourceRegistryTable<UIDefinition> UIDefinitions {get;} = new();
 
@@ -72,6 +77,9 @@ public class ResourceSystem
         Textures.Freeze();
         RecipeTypes.Freeze();
         Recipes.Freeze();
+        DataContainerDefinitions.Freeze();
+        WorkContainerDefinitions.Freeze();
+        BlockEntityDefinitions.Freeze();
         BuildAllBlockStates();
         BlockStates.Freeze();
     }

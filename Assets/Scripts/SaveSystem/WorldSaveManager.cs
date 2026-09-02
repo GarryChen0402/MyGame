@@ -41,15 +41,20 @@ public class WorldSaveManager
     // ---- chunk saves ----
 
     // Serializes the chunk snapshot on a worker, then queues the file write.
-    // Calling thread must be the main thread (checks IsSavedToDisk).
+    // Calling thread must be the main thread (checks IsSavedToDisk). BE data is
+    // snapshotted here too - containers are main-thread owned - and handed to
+    // the worker, which only assembles the file. A chunk unloaded earlier holds
+    // its BE snapshot in PendingBlockEntities (see Chunk.UnregisterAllBlockEntities);
+    // a live chunk is serialized on the spot.
     public void EnqueueChunkSave(Dimension dim, Chunk chunk)
     {
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         string path = ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord);
+        List<BlockEntitySaveData> blockEntities = chunk.PendingBlockEntities ?? chunk.BuildBlockEntitySaveData();
         ThreadPool.QueueUserWorkItem(_ =>
         {
             string json;
-            try { json = ChunkSerializer.Serialize(chunk); }
+            try { json = ChunkSerializer.Serialize(chunk, blockEntities); }
             catch(Exception e)
             {
                 Debug.LogError($"[WorldSaveManager] serialize chunk ({chunk.ChunkCoord}) failed: {e}");
@@ -170,7 +175,10 @@ public class WorldSaveManager
         if(!chunk.IsModified || chunk.IsSavedToDisk) return;
         try
         {
-            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord), ChunkSerializer.Serialize(chunk));
+            // Same main-thread BE snapshot rule as EnqueueChunkSave.
+            List<BlockEntitySaveData> blockEntities = chunk.PendingBlockEntities ?? chunk.BuildBlockEntitySaveData();
+            ChunkSerializer.WriteFileAtomic(ChunkPath(dim.DimensionDefinitionInfo.FullName, chunk.ChunkCoord),
+                ChunkSerializer.Serialize(chunk, blockEntities));
             chunk.MarkSavedToDisk();
         }
         catch(Exception e)

@@ -105,6 +105,10 @@ public class Dimension
             FillNewChunk(chunk);
         chunk.SilentMode = false;
         EnableChunks[ChunkCoord] = chunk;
+        // Same announcement as the async path (RegisterGeneratedChunk): save
+        // data (PendingBlockEntities) is consumed on ChunkLoaded, so BEs of the
+        // player's own chunk would silently vanish without this event.
+        EventBus.Instance.Publish(new ChunkLoadedEvent(chunk));
         return chunk;
     }
 
@@ -139,6 +143,16 @@ public class Dimension
     {
         var chunk = GetOrCreateChunk(DimensionCoordToChunkCoord(dimensionCoord));
         return chunk.TryBreakBlockAt(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), fromInteraction);
+    }
+
+    // Returns the block entity hosted at a dimension coord. Read-only lookup on
+    // enabled chunks only (an interactable block's chunk is always enabled).
+    public bool TryGetBlockEntity(Vector3Int dimensionCoord, out BlockEntity blockEntity)
+    {
+        blockEntity = null;
+        var chunkCoord = DimensionCoordToChunkCoord(dimensionCoord);
+        if(!EnableChunks.TryGetValue(chunkCoord, out var chunk))return false;
+        return chunk.BlockEntities.TryGetValue(Chunk.DimensionCoordToChunkLocalCoord(dimensionCoord), out blockEntity);
     }
 
     public static Vector3Int WorldPosToDimensionCoord(Vector3 worldPos)

@@ -27,9 +27,11 @@ public class SubChunkSaveData
     public List<int> blockData = new();
 }
 
-// One block entity in a chunk save. x/y/z are chunk-local (x/z mod 16,
-// y = dimension y); type is the BlockEntityDefinition full name. Modules are
-// per-module JSON strings in declaration order, matched back by index on load.
+// One block entity in a chunk save (container-era format, see design doc §7).
+// x/y/z are chunk-local (x/z mod 16, y = dimension y); type is the
+// BlockEntityDefinition full name. Data containers are matched back by name
+// (definition changes skip with a warning); work containers by list order,
+// which mirrors the config order used at assembly.
 [Serializable]
 public class BlockEntitySaveData
 {
@@ -37,14 +39,23 @@ public class BlockEntitySaveData
     public int y;
     public int z;
     public string type;
-    public List<ModuleSaveData> modules = new();
+    public List<DataContainerSaveData> data = new();
+    public List<WorkContainerSaveData> work = new();
 }
 
 [Serializable]
-public class ModuleSaveData
+public class DataContainerSaveData
 {
-    public string module;   // module name (informational)
-    public string data;     // the module's own JSON
+    public string name;   // container name within the BE
+    public string type;   // container type full name (informational)
+    public string data;   // the container's own JSON (DataContainer.Serialize)
+}
+
+[Serializable]
+public class WorkContainerSaveData
+{
+    public string type;   // container type full name (informational)
+    public string data;   // the container's own JSON (WorkContainer.Serialize)
 }
 
 public static class ChunkSerializer
@@ -131,6 +142,37 @@ public static class ChunkSerializer
         // BE data is handed to BlockEntityManager on ChunkLoadedEvent (worker
         // thread only parses strings; instance creation stays on the main thread).
         chunk.PendingBlockEntities = data.blockEntities;
+    }
+
+    // Main thread only: snapshots one live BE (position + per-container state)
+    // into its save entry. Container JSON strings come from each container's
+    // Serialize; config order mirrors the assembly order used on restore.
+    public static BlockEntitySaveData SerializeBlockEntity(BlockEntity be, Vector3Int localCoord)
+    {
+        var entry = new BlockEntitySaveData
+        {
+            x = localCoord.x,
+            y = localCoord.y,
+            z = localCoord.z,
+            type = be.Definition.FullName
+        };
+        if(be.Definition.DataContainers != null)
+        {
+            foreach(var cfg in be.Definition.DataContainers)
+            {
+                if(string.IsNullOrEmpty(cfg.Name))continue;
+                if(!be.DataContainers.TryGetValue(cfg.Name, out var container))continue;
+                entry.data.Add(new DataContainerSaveData { name = cfg.Name, type = cfg.TypeFullname, data = container.Serialize() });
+            }
+        }
+        for(int i = 0; i < be.WorkContainers.Count; i++)
+        {
+            string type = null;
+            if(be.Definition.WorkContainers != null && i < be.Definition.WorkContainers.Count)
+                type = be.Definition.WorkContainers[i].TypeFullname;
+            entry.work.Add(new WorkContainerSaveData { type = type, data = be.WorkContainers[i].Serialize() });
+        }
+        return entry;
     }
 
     // Atomic write: write a temp file, then replace the target. File.Replace is

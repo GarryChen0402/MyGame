@@ -51,14 +51,14 @@ public class InteractWithStaticBlock : GameEvent
     public BlockDefinition BlockDef;
 }
 
-// public class InteractWithBlockEntity : GameEvent
-// {
-//     public Entity entity;
-//     public Vector3Int HitBlockCoord; // Dimension Coord;
-//     public Vector3 HitNormal;
-//     public ushort BlockId;
-//     public BlockDefinition BlockDef;
+public class InteractWithBlockEntity : GameEvent
+{
+    public Entity entity;
+    public Vector3Int HitBlockCoord; // Dimension Coord;
+    public Vector3 HitNormal;
+    public ushort BlockId;
+    public BlockDefinition BlockDef;
 
-//     public BlockEntity blockEntity;
-//     public BlockEntityDefinition BlockEntityDef;
-// }
+    public BlockEntity blockEntity;
+    public BlockEntityDefinition BlockEntityDef;
+}

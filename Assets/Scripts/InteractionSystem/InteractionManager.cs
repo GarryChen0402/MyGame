@@ -12,6 +12,7 @@ public class InteractionManager
         // registered (P0/P1 light up when their behaviors are added).
         EventBus.Instance.Subscribe<UseItemOnStaticBlock>(OnUseItemOnStaticBlock);
         EventBus.Instance.Subscribe<InteractWithStaticBlock>(OnInteractWithStaticBlock);
+        EventBus.Instance.Subscribe<InteractWithBlockEntity>(OnInteractWithBlockEntity);
     }
 
     // P2 main: resolve the held item and delegate judgment to its behavior.
@@ -66,5 +67,9 @@ public class InteractionManager
         Debug.Log($"Current interact with the Block :{evt.BlockDef.FullName}");
     }
 
+    public void OnInteractWithBlockEntity(InteractWithBlockEntity evt)
+    {
+        evt.blockEntity.OnInteract(evt.entity, evt.BlockEntityDef);
+    }
 
 }

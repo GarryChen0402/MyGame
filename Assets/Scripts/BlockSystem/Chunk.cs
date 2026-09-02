@@ -113,6 +113,68 @@ public class Chunk
     // BlockEntityManager on ChunkLoadedEvent. Null when not loaded from disk.
     public List<BlockEntitySaveData> PendingBlockEntities { get; set; } = null;
 
+    // Block entities hosted by this chunk, keyed by chunk-local coords. The key
+    // is Vector3Int on purpose: two BEs can share an x/z column (stacked), so a
+    // Vector2Int key would overwrite one of them.
+    public readonly Dictionary<Vector3Int, BlockEntity> BlockEntities = new();
+
+    // Stores a freshly created BE (see BlockEntityDefinition.CreateNewBlockEntity)
+    // at its chunk-local coord and hands it to the BlockEntityManager so it gets
+    // ticked. A stale BE at the same spot (replaced block) is unregistered first.
+    public void RegisterBlockEntity(BlockEntity be, Vector3Int chunkLocalCoord)
+    {
+        if(be == null || !IsCorrectChunkLocalCoord(chunkLocalCoord))return;
+        if(BlockEntities.TryGetValue(chunkLocalCoord, out var previous))
+            BlockEntityManager.Instance.Unregister(previous);
+        be.Position = ChunkLocalCoordToDimensionCoord(ChunkCoord, chunkLocalCoord);   // BE stores dimension coords
+        be.OwnerChunk = this;   // MarkDirty now reaches this chunk's save flag
+        BlockEntities[chunkLocalCoord] = be;
+        BlockEntityManager.Instance.Register(be);
+    }
+
+    // Drops the BE at the given coord (block broken or replaced by a non-BE
+    // block). No-op when the spot hosts no BE.
+    public void RemoveBlockEntity(Vector3Int chunkLocalCoord)
+    {
+        if(!BlockEntities.Remove(chunkLocalCoord, out var be))return;
+        BlockEntityManager.Instance.Unregister(be);
+    }
+
+    // Chunk unloaded / disabled: every BE stops ticking and is dropped with the
+    // chunk. Their serialized state is cached in PendingBlockEntities first so a
+    // later re-enable (and the unload save, which runs after the unload event)
+    // can restore them; ChunkLoaded consumers clear the cache once restored.
+    public void UnregisterAllBlockEntities()
+    {
+        if(BlockEntities.Count > 0)
+        {
+            PendingBlockEntities = BuildBlockEntitySaveData();
+            foreach(var be in BlockEntities.Values)
+                BlockEntityManager.Instance.Unregister(be);
+            BlockEntities.Clear();
+        }
+    }
+
+    // Main thread only: serializes every live BE into the save list. Null when
+    // the chunk hosts none; pass the result to ChunkSerializer.Serialize, which
+    // runs on a worker (BE state is main-thread owned, so snapshot it here).
+    public List<BlockEntitySaveData> BuildBlockEntitySaveData()
+    {
+        if(BlockEntities.Count == 0)return null;
+        var list = new List<BlockEntitySaveData>(BlockEntities.Count);
+        foreach(var kv in BlockEntities)
+            list.Add(ChunkSerializer.SerializeBlockEntity(kv.Value, kv.Key));
+        return list;
+    }
+
+    // Inverse of DimensionCoordToChunkLocalCoord.
+    public static Vector3Int ChunkLocalCoordToDimensionCoord(Vector2Int chunkCoord, Vector3Int chunkLocalCoord)
+        => new(
+            chunkCoord.x * SubChunk.SubChunkBlockSize + chunkLocalCoord.x,
+            chunkLocalCoord.y,
+            chunkCoord.y * SubChunk.SubChunkBlockSize + chunkLocalCoord.z
+        );
+
 
     // Set by the save manager once the current content was written to disk.
     public void MarkSavedToDisk() => IsSavedToDisk = true;
