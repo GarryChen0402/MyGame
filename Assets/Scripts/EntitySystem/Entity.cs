@@ -29,6 +29,8 @@ public class Entity // Data Class
         PhysicsManager.Instance.MoveEntity(this, motion);
     }
 
+    public virtual void OnUpdate(float deltaTime) {}
+
     public virtual bool IsHoldingItem() => false;
     
 }

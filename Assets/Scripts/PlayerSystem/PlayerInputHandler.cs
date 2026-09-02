@@ -38,6 +38,10 @@ public class PlayerInputHandler : IInputHandler
         MoveHandler();
         InteractionHandler();
 
+        // TEMP dev key (removed in P6 of the dev plan): spawn a stone drop in
+        // front of the player to exercise item physics before breaking (P4/P5).
+        if(Input.GetKeyDown(KeyCode.F))TemporarySpawnDrop();
+
     }
     private void MoveHandler()
     {
@@ -190,4 +194,20 @@ public class PlayerInputHandler : IInputHandler
             }
         }
     }
-}   
+
+    // TEMP dev helper (removed in P6 of the dev plan): spawns a stone drop in
+    // front of the player so item physics/lifetime can be exercised before the
+    // break path (P4/P5) is wired.
+    private void TemporarySpawnDrop()
+    {
+        if(player == null)return;
+        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId("minecraft:stone", out ushort stoneId))return;
+        Vector3 dir = Quaternion.Euler(0f, player.yaw, 0f) * Vector3.forward;
+        ItemEntityManager.Instance.SpawnItemEntity(
+            player.DimensionId,
+            player.Position + Vector3.up * 1.5f + dir * 2f,
+            new ItemStack { itemId = stoneId, amount = 8 },
+            new Vector3(Random.Range(-0.25f, 0.25f), 1f, Random.Range(-0.25f, 0.25f)),
+            0.5f);
+    }
+}

@@ -155,6 +155,39 @@ public class Chunk
         }
     }
 
+    // Item drops hosted by this chunk. Data ownership lives here (design doc
+    // §3.1) - the manager only references living drops; unload destroys them
+    // (v1) and a future v2 snapshot restores them like PendingBlockEntities.
+    public readonly List<ItemEntity> ItemEntities = new();
+
+    // Stores a freshly spawned drop in this chunk and hands it to the manager
+    // so it gets updated each frame.
+    public void RegisterItemEntity(ItemEntity entity)
+    {
+        if(entity == null)return;
+        entity.OwnerChunk = this;
+        ItemEntities.Add(entity);
+        ItemEntityManager.Instance.Register(entity);
+    }
+
+    // Removes the entity from this chunk's list (cross-chunk migration and
+    // despawn both route through here) and drops the manager reference.
+    public void RemoveItemEntity(ItemEntity entity)
+    {
+        if(entity == null || !ItemEntities.Remove(entity))return;
+        entity.OwnerChunk = null;
+        ItemEntityManager.Instance.Unregister(entity);
+    }
+
+    // Chunk unloaded/disabled: every drop is destroyed with the chunk (v1 does
+    // not persist drops - design doc §8).
+    public void UnregisterAllItemEntities()
+    {
+        if(ItemEntities.Count == 0)return;
+        foreach(var entity in new List<ItemEntity>(ItemEntities))
+            ItemEntityManager.Instance.DespawnItemEntity(entity);
+    }
+
     // Main thread only: serializes every live BE into the save list. Null when
     // the chunk hosts none; pass the result to ChunkSerializer.Serialize, which
     // runs on a worker (BE state is main-thread owned, so snapshot it here).
