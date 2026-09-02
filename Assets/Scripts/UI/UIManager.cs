@@ -66,6 +66,7 @@ public class UIManager : MonoBehaviour
     public void OpenUI(string uiId, object data = null)
     {
         if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName(uiId, out var uiDef))return;
+        // ResourceSystem.Instance.InputHandlers.TryGetResourceWithFullName(uiDef.InputHandlerId, out var inputHandler);
         if(UICache.TryGetValue(uiId, out var ui))
         {
             if(uiDef.Kind == UIKind.SinglePanel)currentUI = ui;
@@ -74,6 +75,8 @@ public class UIManager : MonoBehaviour
             ui.Open();
 
             if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
+            InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
+            // if(inputHandler != null)InputHandlerManager.Instance.Push(inputHandler);
             return;
         }
 
@@ -86,12 +89,14 @@ public class UIManager : MonoBehaviour
         currentUI.SetData(ui);
         currentUI.Open();
         if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
+        InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
         UICache[uiId] = currentUI;
     }
 
     public void CloseUI()
     {
         currentUI?.Close();
+        if(currentUI != null)InputHandlerManager.Instance.Pop();
     }
 
     public ItemStack HeldItemStack{get; set;} = new();

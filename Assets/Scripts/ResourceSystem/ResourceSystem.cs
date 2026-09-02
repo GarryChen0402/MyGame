@@ -38,7 +38,8 @@ public class ResourceSystem
 
     // UI Register
     public ResourceRegistryTable<UIDefinition> UIDefinitions {get;} = new();
-
+    // Input Handler
+    public ResourceRegistryTable<IInputHandler> InputHandlers {get;} = new();
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;

@@ -1,47 +1,27 @@
-using System.Collections.Concurrent;
-using Unity.VisualScripting;
 using UnityEngine;
 
 // Runs before WorldRenderer.Update so a block edit marks its chunk rebuild in
 // the same frame, letting the Important rebuild dispatch and render immediately.
-[DefaultExecutionOrder(-100)]
-public class PlayerInputHandler : MonoBehaviour
+// [DefaultExecutionOrder(-100)]
+public class PlayerInputHandler : IInputHandler
 {
-    [SerializeField]
     private Player player = null;
 
-    [SerializeField]
-    private float horizontalMoveSpeed;
+    private float horizontalMoveSpeed = 5;
 
-    [SerializeField]
-    private float verticalMoveSpeed;
+    private float verticalMoveSpeed = 5;
 
-    [SerializeField]
     private float mouseSensitivity = 2f;
 
     private const float RaycastReach = 4.5f;
-    private void Awake()
+    public PlayerInputHandler()
     {
         player = Player.Instance;
-
-        // Test items resolved by full name: numeric ids depend on registration order.
-        // Give("minecraft:stone", 1);
-        // Give("minecraft:dirt", 1);
-        // Give("minecraft:grass", 1);
-        // Give("minecraft:stone_stair", 16);
-        // Give("minecraft:diamond_sword", 1);
-        // Give("minecraft:cobblestone", 16);
-        // Give("minecraft:coal", 16);
-        // Give("minecraft:furnace", 1);
+        modId = "minecraft";
+        name = "player_input_handler";
     }
 
-    private void Give(string fullName, int amount)
-    {
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(fullName, out ushort itemId))return;
-        player.inventory.TryAddItemAsMax(new ItemStack { itemId = itemId, amount = amount });
-    }
-
-    private void Update()
+    public override void OnUpdate()
     {
         if(player == null)return;
         if (Input.GetKey(KeyCode.LeftAlt))
