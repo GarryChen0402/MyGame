@@ -219,7 +219,17 @@ public class WorldManager
         task.Dimension.RegisterGeneratedChunk(task.Chunk);
     }
 
-    // public ushort GetBlockAt(ushort dimId)
+    // Every-frame world logic step (design doc 逻辑tick驱动与渲染解耦重构方案.md):
+    // the sole driver of the logic managers, called by GameLoopDriver. Order
+    // matters: chunks finished this frame register first, then the systems that
+    // tick over them (autosave, block entities, item entities).
+    public void Tick(float dt)
+    {
+        ProcessChunkGeneration();
+        WorldSaveManager.Instance.Tick(dt);
+        BlockEntityManager.Instance.Tick(dt);
+        ItemEntityManager.Instance.Update(dt);
+    }
 }
 
 // One async chunk generation unit: a worker fills Chunk, the main thread then

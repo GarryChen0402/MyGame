@@ -40,6 +40,18 @@ public static class GameBootstrap
         WorldSaveManager.Instance.Initialize();   // caches persistentDataPath (main thread only)
         _ = InteractionManager.Instance;
         _ = BlockEntityManager.Instance;   // subscribes BlockChanged/ChunkUnloaded before any chunk event
+        EnsureGameLoopDriver();
+    }
+
+    // GameLoopDriver steps the world logic every frame (WorldManager.Tick). Created
+    // here - before any scene Awake/Update - as a persistent GO so the loop exists
+    // in every mode (editor play, builds, Dedicated Server), scene-independent.
+    private static void EnsureGameLoopDriver()
+    {
+        if(GameObject.Find("GameLoopDriver") != null)return;   // re-entrancy guard (domain reload off)
+        var go = new GameObject("GameLoopDriver");
+        go.AddComponent<GameLoopDriver>();
+        UnityEngine.Object.DontDestroyOnLoad(go);   // fully qualified: 'Object' collides with System.Object
     }
 
     private static void Phase2_LoadMods()

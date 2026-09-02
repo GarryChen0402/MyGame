@@ -41,21 +41,10 @@ public class WorldRenderer : MonoBehaviour
     private void Update()
     {
         if(playerTransform == null)return;
-        // View forwards the player position; chunk load/unload is the Controller's job.
+        // View forwards the player position; chunk load/unload is the Controller's
+        // job. World logic ticking lives in WorldManager.Tick (GameLoopDriver).
         WorldManager.Instance.OnPlayerMoved(playerTransform.position);
-        // Register finished worker-generated chunks (events need the main thread).
-        WorldManager.Instance.ProcessChunkGeneration();
         ProcessRebuildChunkQueue();
-        WorldSaveManager.Instance.Tick(Time.deltaTime);
-        BlockEntityManager.Instance.Tick(Time.deltaTime);
-        ItemEntityManager.Instance.Update(Time.deltaTime);
-    }
-
-    private void OnApplicationQuit()
-    {
-        // Block until every dirty chunk, the player and the world metadata are
-        // on disk; the main thread has nothing left to do at this point.
-        WorldSaveManager.Instance.SaveAllOnQuit();
     }
 
     // Makes the chunk-loading center follow a restored player position (the

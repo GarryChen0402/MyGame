@@ -17,9 +17,9 @@ public class ItemEntityManager
     private readonly Dictionary<ItemEntity, GameObject> shells = new();
     private Transform dynamicRoot;
 
-    // Lazy singleton: first Instance access happens from WorldRenderer.Update,
-    // by which point EventBus/PhysicsManager subscriptions are ready (the same
-    // lazy pattern as BlockEntityManager).
+    // Lazy singleton: first Instance access happens from WorldManager.Tick
+    // (GameLoopDriver), by which point EventBus/PhysicsManager subscriptions are
+    // ready (the same lazy pattern as BlockEntityManager).
     private ItemEntityManager()
     {
         EventBus.Instance.Subscribe<ChunkUnloadedEvent>(OnChunkUnloaded);
@@ -37,7 +37,8 @@ public class ItemEntityManager
         if(entity != null)tracked.Remove(entity);
     }
 
-    // Frame driver, mounted in WorldRenderer.Update next to BlockEntityManager.Tick.
+    // Frame driver, mounted in WorldManager.Tick (GameLoopDriver) next to
+    // BlockEntityManager.Tick.
     public void Update(float deltaTime)
     {
         if(tracked.Count == 0)return;

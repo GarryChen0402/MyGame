@@ -41,9 +41,9 @@ public class BlockEntityManager
         foreach(var wc in be.WorkContainers)wc.OnRemoved();
     }
 
-    // Fixed-step accumulator, driven from WorldRenderer.Update like
-    // WorldSaveManager.Instance.Tick. If the frame rate drops below 20fps the
-    // while-loop catches up the backlog so game ticks never lag wall time.
+    // Fixed-step accumulator, driven from WorldManager.Tick (GameLoopDriver)
+    // like WorldSaveManager.Instance.Tick. If the frame rate drops below 20fps
+    // the while-loop catches up the backlog so game ticks never lag wall time.
     public void Tick(float deltaTime)
     {
         accumulator += deltaTime;
