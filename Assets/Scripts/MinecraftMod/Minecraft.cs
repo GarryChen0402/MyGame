@@ -76,6 +76,7 @@ public class Minecraft : IMod
                 ["right"]  = $"{ModId}:stone"
             },
             Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
+            Hardness = 1.5f
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)
@@ -96,6 +97,7 @@ public class Minecraft : IMod
                 ["right"]  = $"{ModId}:dirt"
             },
             Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
+            Hardness = 1,
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)

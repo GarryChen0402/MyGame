@@ -8,6 +8,7 @@ public class Player : Entity
     // MC: 1.8-tall player box, eyes sit at 1.62 above the feet.
     public const float EyeHeight = 1.62f;
 
+    private float harvestSpeedMultiply = 1.0f;
 
     private Player()
     {
@@ -62,7 +63,29 @@ public class Player : Entity
 
     public override bool IsHoldingItem()
     {
-        var stack = inventory.GetItemStackAt(SelectedSlotIndex);
+        var stack = GetCurrentHoldingItemStack();
         return stack != null && !stack.IsEmpty();
+    }
+
+    public override ItemStack GetCurrentHoldingItemStack()
+    {
+        return inventory.GetItemStackAt(SelectedSlotIndex);
+    }
+
+    public override void ConsumeItemUseResult(ItemUseResult result)
+    {
+        if(!IsHoldingItem())return;
+        if(result.UseSuccess)GetCurrentHoldingItemStack().TryConsumeItem(result.ConsumeAmount);
+    }
+
+    public override float GetSessionUpdateTime(InteractionSessionTargetType targetType, float dt)
+    {
+        //TODo : Current logic is just a demo for test.
+        if(targetType == InteractionSessionTargetType.Block)
+        {
+            float progress = harvestSpeedMultiply * dt;
+            return progress;
+        }
+        return dt;
     }
 }

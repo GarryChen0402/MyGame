@@ -111,6 +111,7 @@ public static class GameBootstrap
         _ = WorldManager.Instance;
         _ = WorldSaveManager.Instance;   // caches persistentDataPath (main thread only)
         _ = InteractionManager.Instance;
+        _ = EntityManager.Instance;
         _ = BlockEntityManager.Instance;   // subscribes BlockChanged/ChunkUnloaded before any chunk event
         _ = ItemEntityManager.Instance;
         EnsureGameLoopDriver();

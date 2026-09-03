@@ -30,7 +30,7 @@ public class UseItemOnBlockEntity : GameEvent
     public ItemUseResult Result;
 }
 
-public class UseItem : GameEvent
+public class UseItemEvent : GameEvent
 {
     public Entity entity;
     public Vector3Int HitBlockCoord; // Dimension Coord;
