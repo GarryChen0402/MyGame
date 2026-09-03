@@ -4,15 +4,28 @@ public static class ItemMeshLibrary
 {
     public static readonly Dictionary<ushort, Mesh> blockMeshCache = new();   // keyed by itemId
     public static readonly Dictionary<ushort, Mesh> itemMeshCache = new();    // keyed by itemId
+    private static readonly HashSet<ushort> warnedFailures = new();   // warn once per itemId
 
     public static Mesh GetOrCreateBlockMesh(ushort itemId, ItemDefinition def)
     {
         if(blockMeshCache.TryGetValue(itemId, out var mesh))return mesh;
-        if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(def.BlockFullName, out ushort blockId))return null;
+        if(!ResourceSystem.Instance.BlockDefinitions.TryGetNumberId(def.BlockFullName, out ushort blockId))
+        {
+            WarnOnce(itemId, $"block '{def.BlockFullName}' is not a registered block");
+            return null;
+        }
         // Icons show the block's default state (vanilla behavior).
         BlockState state = ResourceSystem.Instance.GetState(ResourceSystem.Instance.GetDefaultState(blockId));
-        if(state == null)return null;
-        if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))return null;
+        if(state == null)
+        {
+            WarnOnce(itemId, $"block '{def.BlockFullName}' has no default state");
+            return null;
+        }
+        if(!ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))
+        {
+            WarnOnce(itemId, $"block state model '{state.ModelId}' is not registered");
+            return null;
+        }
 
         mesh = BuildBlockMesh(state, model);
         blockMeshCache[itemId] = mesh;
@@ -22,9 +35,21 @@ public static class ItemMeshLibrary
     public static Mesh GetOrCreateItemMesh(ushort itemId, ItemDefinition def)
     {
         if(itemMeshCache.TryGetValue(itemId, out var mesh))return mesh;
-        mesh = BuildItemMesh(def);
-        if(mesh != null)itemMeshCache[itemId] = mesh;
+        mesh = BuildItemMesh(itemId, def);
+        if(mesh == null)
+        {
+            WarnOnce(itemId, "item mesh build failed (see the warning above)");
+            return null;
+        }
+        itemMeshCache[itemId] = mesh;
         return mesh;
+    }
+
+    private static void WarnOnce(ushort itemId, string reason)
+    {
+        if(!warnedFailures.Add(itemId))return;
+        ResourceSystem.Instance.ItemDefinitions.TryGetStringId(itemId, out string fullName);
+        Debug.LogWarning($"[ItemMeshLibrary] icon mesh skipped for '{fullName ?? itemId.ToString()}': {reason}");
     }
 
     // Six unoccluded faces, baked face shading (mesh colors), centered at origin.
@@ -72,14 +97,22 @@ public static class ItemMeshLibrary
     // Vanilla ItemModelGenerator logic: every non-transparent pixel of the
     // texture becomes a 1-texel-thick slab (front/back faces, plus side faces
     // where a neighbor pixel is transparent), forming the item's silhouette.
-    private static Mesh BuildItemMesh(ItemDefinition def)
+    private static Mesh BuildItemMesh(ushort itemId, ItemDefinition def)
     {
-        if(def.LayerTextures == null || def.LayerTextures.Length == 0)return null;
-        if(!ResourceSystem.Instance.Textures.TryGetResourceWithFullName(def.LayerTextures[0], out var tex))return null;
+        if(def.LayerTextures == null || def.LayerTextures.Length == 0)
+        {
+            WarnOnce(itemId, "item has no LayerTextures");
+            return null;
+        }
+        if(!ResourceSystem.Instance.Textures.TryGetResourceWithFullName(def.LayerTextures[0], out var tex))
+        {
+            WarnOnce(itemId, $"texture '{def.LayerTextures[0]}' is not registered");
+            return null;
+        }
         Texture2D source = tex.Atlas;
         if(!source.isReadable)
         {
-            Debug.LogWarning($"[ItemIcon] Texture '{def.LayerTextures[0]}' is not readable; enable Read/Write in its import settings to build the item model.");
+            WarnOnce(itemId, $"texture '{def.LayerTextures[0]}' is not readable; enable Read/Write in its import settings to build the item model");
             return null;
         }
         Rect rect = tex.AtlasUVRect;
@@ -150,7 +183,11 @@ public static class ItemMeshLibrary
             }
         }
 
-        if(verts.Count == 0)return null;
+        if(verts.Count == 0)
+        {
+            WarnOnce(itemId, $"texture '{def.LayerTextures[0]}' has no opaque pixels");
+            return null;
+        }
         var mesh = new Mesh();
         mesh.SetVertices(verts);
         mesh.SetUVs(0, uvs);

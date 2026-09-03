@@ -56,7 +56,20 @@ public static class SlotClickProcessor
         bool sameStackable = slotStack.itemId == carried.itemId && slot.MaxStackFor(slotStack) > 1;
         if(sameStackable)
         {
-            if(!slot.CanPlace(carried))return;   // e.g. Module-only output slot rejects
+            if(!slot.CanPlace(carried))
+            {
+                // Output slots (Module-only insert policy) reject placements;
+                // vanilla feel pulls the whole slot stack into the cursor
+                // instead, consuming the recipe on MarkChanged. A cursor that
+                // cannot hold the whole stack makes the click a no-op.
+                if(!slot.CanTake())return;
+                int cursorSpace = slot.MaxStackFor(carried) - carried.amount;
+                if(cursorSpace < slotStack.amount)return;
+                carried.amount += slotStack.amount;
+                slotStack.Clear();
+                slot.MarkChanged();
+                return;
+            }
             int space = slot.MaxStackFor(slotStack) - slotStack.amount;
             if(space <= 0)return;                // full stack: no effect
             if(rightClick)

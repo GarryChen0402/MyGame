@@ -11,7 +11,6 @@ public class HeldItemUI : UIBehavior
     private RectTransform rt;
     private ItemIconRenderer Icon;
     private TextMeshProUGUI Text;
-    private ushort cachedItemId;
     private int cachedAmount;
 
     private void Awake()
@@ -55,11 +54,12 @@ public class HeldItemUI : UIBehavior
         if(iconActive != !empty)Icon.gameObject.SetActive(!empty);
         if(empty)return;
 
-        if(held.itemId != cachedItemId)
-        {
-            cachedItemId = held.itemId;
-            Icon.SetItem(held.itemId);
-        }
+        // Re-render every frame while holding: a single small offscreen draw is
+        // negligible, and an unconditional render self-heals a dropped first
+        // frame (observed: the first-ever held render could come up blank and
+        // only recover once any other item was picked up).
+        Icon.SetItem(held.itemId);
+
         if(held.amount != cachedAmount)
         {
             cachedAmount = held.amount;

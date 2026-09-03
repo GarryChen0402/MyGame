@@ -8,9 +8,8 @@ public static class ItemIconRenderSystem
     private static bool initialized;
     private static Camera iconCamera;
     private static Transform modelRoot;
-    private static readonly Dictionary<ushort, Mesh> blockMeshCache = new();   // keyed by itemId
-    private static readonly Dictionary<ushort, Mesh> itemMeshCache = new();    // keyed by itemId
     private static Material iconMaterial;
+    private static readonly HashSet<ushort> warnedFailures = new();   // warn once per itemId
 
     // World-side item shells (EntityRenderer) share the icon scene's material:
     // same block atlas, unlit + baked vertex shading, alpha blend for item
@@ -30,14 +29,27 @@ public static class ItemIconRenderSystem
     public static void RenderItemIcon(ushort itemId, RenderTexture target)
     {
         if(target == null)return;
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemId, out var def))return;
+        if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemId, out var def))
+        {
+            WarnOnce(itemId, "item definition not registered");
+            return;
+        }
 
         EnsureInit();
 
         Mesh mesh = def.IsBlockItem
             ? ItemMeshLibrary.GetOrCreateBlockMesh(itemId, def)
             : ItemMeshLibrary.GetOrCreateItemMesh(itemId, def);
-        if(mesh == null || mesh.vertexCount == 0)return;
+        if(mesh == null)
+        {
+            WarnOnce(itemId, $"{(def.IsBlockItem ? "block" : "item")} mesh lookup failed (see the warning above)");
+            return;
+        }
+        if(mesh.vertexCount == 0)
+        {
+            WarnOnce(itemId, "mesh has no vertices");
+            return;
+        }
 
         // Blocks get an isometric three-face view; items are shown head-on
         // (the item model's front face points +z, so the camera sits on +z).
@@ -57,6 +69,15 @@ public static class ItemIconRenderSystem
         modelRoot.GetComponent<MeshFilter>().sharedMesh = mesh;
         iconCamera.targetTexture = target;
         iconCamera.Render();
+    }
+
+    // Reports a skipped render once per item (a per-item failure repeats on
+    // every SetItem retry, which would spam the console on each click).
+    private static void WarnOnce(ushort itemId, string reason)
+    {
+        if(!warnedFailures.Add(itemId))return;
+        ResourceSystem.Instance.ItemDefinitions.TryGetStringId(itemId, out string fullName);
+        Debug.LogWarning($"[ItemIconRenderSystem] icon render skipped for '{fullName ?? itemId.ToString()}': {reason}");
     }
 
     // private static Mesh GetOrCreateBlockMesh(ushort itemId, ItemDefinition def)

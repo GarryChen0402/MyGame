@@ -49,6 +49,9 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "furance_side", Resources.Load<Texture2D>("Textures/Blocks/furance_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "furance_top_bottom", Resources.Load<Texture2D>("Textures/Blocks/furance_top_bottom"));
         ResourceSystem.Instance.RegisterTexture(ModId, "coal", Resources.Load<Texture2D>("Textures/Items/coal"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_front", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_front"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_side", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_side"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_top", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_top"));
         // EntityModel & EntityAnimation Content
         EntityModel playerModel = EntityModelParser.Parse(Resources.Load<TextAsset>("Models/entity/player").text);
         ResourceSystem.Instance.EntityModels.Register(playerModel);
@@ -210,6 +213,26 @@ public class Minecraft : IMod
             BlockEntityDefinitionFullName = $"{ModId}:furnace"
         };
 
+        // Crafting table: static cube + a BlockEntity carrying the 3x3 grid,
+        // the result slot and the instant crafting logic (BE definition below).
+        BlockDefinition craftingTableDefinition = new()
+        {
+            modId = ModId,
+            name = "crafting_table",
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:crafting_table_top",
+                ["bottom"] = $"{ModId}:crafting_table_side",
+                ["front"]  = $"{ModId}:crafting_table_front",
+                ["back"]   = $"{ModId}:crafting_table_side",
+                ["left"]   = $"{ModId}:crafting_table_side",
+                ["right"]  = $"{ModId}:crafting_table_side"
+            },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
+            HasBlockEntity = true,
+            BlockEntityDefinitionFullName = $"{ModId}:crafting_table"
+        };
+
         ResourceSystem.Instance.BlockDefinitions.Register(air);
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
@@ -217,6 +240,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterBlock(stairDefinition);
         ResourceSystem.Instance.RegisterBlock(cobblestoneDefinition);
         ResourceSystem.Instance.RegisterBlock(furnaceDefinition);
+        ResourceSystem.Instance.RegisterBlock(craftingTableDefinition);
 
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:grass", out grassId);
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:dirt", out dirtId);
@@ -313,11 +337,45 @@ public class Minecraft : IMod
             ProcessingTickTime = 20   // short for validation
         });
 
+        // Crafting category + demo workbench recipes (RecipeType filtering keeps
+        // them out of the furnace pipeline). Shape keys resolve row characters
+        // to items; shaped recipes match by translation only, null Shape means
+        // loose multiset matching.
+        ResourceSystem.Instance.RecipeTypes.Register(new RecipeType { modId = ModId, name = "crafting" });
+        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
+        {
+            modId = ModId,
+            name = "crafting_furnace",
+            RecipeTypeFullName = $"{ModId}:crafting",
+            Shape = new[] { "CCC", "C C", "CCC" },
+            ShapeKeys = new() { ['C'] = $"{ModId}:cobblestone" },
+            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:furnace", amount = 1 } }
+        });
+        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
+        {
+            modId = ModId,
+            name = "crafting_stone_stair",
+            RecipeTypeFullName = $"{ModId}:crafting",
+            Shape = new[] { "S", "S", "S" },
+            ShapeKeys = new() { ['S'] = $"{ModId}:stone" },
+            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:stone_stair", amount = 1 } }
+        });
+        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
+        {
+            modId = ModId,
+            name = "crafting_grass",
+            RecipeTypeFullName = $"{ModId}:crafting",
+            Inputs = new() { new ItemStackAmount { itemId = $"{ModId}:dirt", amount = 4 } },
+            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:grass", amount = 1 } }
+        });
+
         // Container types (global once) + the furnace BE definition.
         ResourceSystem.Instance.DataContainerDefinitions.Register(new DataContainerDefinition
         { modId = "universal", name = "inventory", Factory = cfg => new InventoryDataContainer(cfg) });
         ResourceSystem.Instance.WorkContainerDefinitions.Register(new WorkContainerDefinition
         { modId = "universal", name = "processing", Factory = cfg => new ProcessingWorkContainer(cfg) });
+        ResourceSystem.Instance.WorkContainerDefinitions.Register(new WorkContainerDefinition
+        { modId = "universal", name = "crafting", Factory = cfg => new CraftingWorkContainer(cfg) });
 
         ResourceSystem.Instance.BlockEntityDefinitions.Register(new BlockEntityDefinition
         {
@@ -368,12 +426,54 @@ public class Minecraft : IMod
             }
         });
 
+        // Crafting table BE: 9-slot grid (freely insertable/extractable) +
+        // 1-slot result (Module-insert only: players can only ever take the
+        // preview out, never place into it) + the instant crafting logic.
+        ResourceSystem.Instance.BlockEntityDefinitions.Register(new BlockEntityDefinition
+        {
+            modId = ModId,
+            name = "crafting_table",
+            UIFullName = CraftingTableUI.craftingTableUIDefinition.FullName,
+            DataContainers = new()
+            {
+                new DataContainerConfig
+                {
+                    Name = "grid", TypeFullname = "universal:inventory",
+                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config { Capacity = 9 })
+                },
+                new DataContainerConfig
+                {
+                    Name = "result", TypeFullname = "universal:inventory",
+                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
+                    {
+                        Capacity = 1,
+                        InsertPolicy = ContainerAccess.Module,
+                        ExtractPolicy = ContainerAccess.Any
+                    })
+                }
+            },
+            WorkContainers = new()
+            {
+                new WorkContainerConfig
+                {
+                    TypeFullname = "universal:crafting",
+                    RecipeType = $"{ModId}:crafting",
+                    Parameters = JsonUtility.ToJson(new CraftingWorkContainer.Config
+                    {
+                        Grid = "grid",
+                        Result = "result"
+                    })
+                }
+            }
+        });
+
 
         ResourceSystem.Instance.UIDefinitions.Register(CrosshairUI.CrosshairUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HotBarUI.hotbarDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HeldItemUI.heldItemUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(PlayerInventoryUI.playerInvUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(FurnaceUI.furanceUIDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(CraftingTableUI.craftingTableUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
