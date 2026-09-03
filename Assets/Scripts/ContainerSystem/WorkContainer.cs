@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 public abstract class WorkContainer
 {
     public BlockEntity Host;
@@ -15,7 +17,7 @@ public abstract class WorkContainer
 public class WorkContainerConfig
 {
     public string TypeFullname;
-    public string RecipeType;
+    public List<string> SupportedRecipeTypes;   // recipeType (parser full name) set this container runs; registration-time only
     public string Parameters;
 }
 

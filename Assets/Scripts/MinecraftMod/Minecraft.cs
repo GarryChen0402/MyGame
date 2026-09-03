@@ -325,49 +325,38 @@ public class Minecraft : IMod
 
         
 
-        // Recipe category + the minimal furnace recipe: 1 cobblestone -> 1 stone.
-        ResourceSystem.Instance.RecipeTypes.Register(new RecipeType { modId = ModId, name = "furance" });
-        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
-        {
-            modId = ModId,
-            name = "smelt_cobblestone",
-            RecipeTypeFullName = $"{ModId}:furance",
-            Inputs = new() { new ItemStackAmount { itemId = $"{ModId}:cobblestone", amount = 1 } },
-            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:stone", amount = 1 } },
-            ProcessingTickTime = 20   // short for validation
-        });
+        // ---- recipe parsers: their full name is the recipe type id ----
+        ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Shaped());
+        ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Shapeless());
+        ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Processing());
 
-        // Crafting category + demo workbench recipes (RecipeType filtering keeps
-        // them out of the furnace pipeline). Shape keys resolve row characters
-        // to items; shaped recipes match by translation only, null Shape means
-        // loose multiset matching.
-        ResourceSystem.Instance.RecipeTypes.Register(new RecipeType { modId = ModId, name = "crafting" });
-        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
-        {
-            modId = ModId,
-            name = "crafting_furnace",
-            RecipeTypeFullName = $"{ModId}:crafting",
-            Shape = new[] { "CCC", "C C", "CCC" },
-            ShapeKeys = new() { ['C'] = $"{ModId}:cobblestone" },
-            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:furnace", amount = 1 } }
-        });
-        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
-        {
-            modId = ModId,
-            name = "crafting_stone_stair",
-            RecipeTypeFullName = $"{ModId}:crafting",
-            Shape = new[] { "S", "S", "S" },
-            ShapeKeys = new() { ['S'] = $"{ModId}:stone" },
-            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:stone_stair", amount = 1 } }
-        });
-        ResourceSystem.Instance.Recipes.Register(new RecipeDefinition
-        {
-            modId = ModId,
-            name = "crafting_grass",
-            RecipeTypeFullName = $"{ModId}:crafting",
-            Inputs = new() { new ItemStackAmount { itemId = $"{ModId}:dirt", amount = 4 } },
-            Outputs = new() { new ItemStackAmount { itemId = $"{ModId}:grass", amount = 1 } }
-        });
+        // ---- demo recipes via the text entry (three-layer envelopes; the
+        // content text below is the inner layer, Build escapes it into the
+        // envelope document) ----
+
+        // Furnace: 1 cobblestone -> 1 stone (short duration for validation).
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:processing",
+            @"{ ""modId"": ""minecraft"", ""name"": ""smelt_cobblestone"", ""inputs"": [ { ""itemId"": ""minecraft:cobblestone"", ""amount"": 1 } ], ""outputs"": [ { ""itemId"": ""minecraft:stone"", ""amount"": 1 } ], ""durationTicks"": 20 }",
+            "[]"));
+
+        // Workbench shaped: 8 cobblestone in a ring -> 1 furnace.
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:shaped",
+            @"{ ""modId"": ""minecraft"", ""name"": ""crafting_furnace"", ""pattern"": [""CCC"", ""C C"", ""CCC""], ""keys"": [ { ""symbol"": ""C"", ""item"": ""minecraft:cobblestone"" } ], ""outputs"": [ { ""itemId"": ""minecraft:furnace"", ""amount"": 1 } ] }",
+            "[]"));
+
+        // Workbench shaped: 3 stone in a column -> 1 stone stair.
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:shaped",
+            @"{ ""modId"": ""minecraft"", ""name"": ""crafting_stone_stair"", ""pattern"": [""S"", ""S"", ""S""], ""keys"": [ { ""symbol"": ""S"", ""item"": ""minecraft:stone"" } ], ""outputs"": [ { ""itemId"": ""minecraft:stone_stair"", ""amount"": 1 } ] }",
+            "[]"));
+
+        // Workbench shapeless: 4 dirt -> 1 grass.
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:shapeless",
+            @"{ ""modId"": ""minecraft"", ""name"": ""crafting_grass"", ""inputs"": [ { ""itemId"": ""minecraft:dirt"", ""amount"": 4 } ], ""outputs"": [ { ""itemId"": ""minecraft:grass"", ""amount"": 1 } ] }",
+            "[]"));
 
         // Container types (global once) + the furnace BE definition.
         ResourceSystem.Instance.DataContainerDefinitions.Register(new DataContainerDefinition
@@ -415,7 +404,7 @@ public class Minecraft : IMod
                 new WorkContainerConfig
                 {
                     TypeFullname = "universal:processing",
-                    RecipeType = $"{ModId}:furance",
+                    SupportedRecipeTypes = new() { "universal:processing" },
                     Parameters = JsonUtility.ToJson(new ProcessingWorkContainer.Config
                     {
                         Input = "input",
@@ -457,7 +446,7 @@ public class Minecraft : IMod
                 new WorkContainerConfig
                 {
                     TypeFullname = "universal:crafting",
-                    RecipeType = $"{ModId}:crafting",
+                    SupportedRecipeTypes = new() { "universal:shaped", "universal:shapeless" },
                     Parameters = JsonUtility.ToJson(new CraftingWorkContainer.Config
                     {
                         Grid = "grid",

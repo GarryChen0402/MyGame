@@ -1,12 +1,14 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Instant 3x3 crafting work container (workbench): purely player-driven, no
 // periodic work. While the grid matches a recipe, its output sits live in the
 // result slot as a preview; taking the result consumes one full recipe set
-// from the grid and re-matches immediately. Recipes with a Shape match by
+// from the grid and re-matches immediately. Shaped recipes match by
 // translation only (no rotation) over the shape's non-empty bounding box;
-// Shape == null matches loose by multiset totals.
+// shapeless recipes match slot-to-placeholder (see MatchesLoose) - dispatched
+// by Kind.
 public class CraftingWorkContainer : WorkContainer
 {
     [Serializable]
@@ -17,17 +19,20 @@ public class CraftingWorkContainer : WorkContainer
     }
 
     private readonly Config config;
-    private readonly string recipeTypeId;   // recipe category full name (WorkContainerConfig.RecipeType)
+    // Recipe types (parser full names) this container can run, e.g.
+    // {"universal:shaped", "universal:shapeless"} (WorkContainerConfig.SupportedRecipeTypes).
+    private readonly List<string> supportedRecipeTypes;
 
     public InventoryDataContainer Grid, Result;
-    public RecipeDefinition CurrentMatch;   // source of the live preview; runtime only, never persisted
-    private int matchRowOffset;             // shape row -> grid row shift of CurrentMatch
-    private int matchColOffset;             // shape col -> grid col shift of CurrentMatch
+    public RecipeContent CurrentMatch;   // source of the live preview; runtime only, never persisted
+    private int matchRowOffset;          // shape row -> grid row shift of CurrentMatch
+    private int matchColOffset;          // shape col -> grid col shift of CurrentMatch
+    private readonly List<int> matchSlots = new();   // grid indices paired to shapeless placeholders; synced with CurrentMatch
 
     public CraftingWorkContainer(WorkContainerConfig config)
     {
         this.config = JsonUtility.FromJson<Config>(config.Parameters);
-        recipeTypeId = config.RecipeType;
+        supportedRecipeTypes = config.SupportedRecipeTypes;
     }
 
     public override void OnBind(BlockEntity blockEntity)
@@ -104,17 +109,27 @@ public class CraftingWorkContainer : WorkContainer
         MarkDirty();
     }
 
-    // First recipe of this container's category that fits. The demo recipes
-    // are shape-disjoint, so registry iteration order cannot pick a wrong one.
-    private RecipeDefinition FindRecipe()
+    // First recipe of the container's supported recipe types that fits,
+    // scanned bucket by bucket in the declared type order (a cross-type
+    // ambiguity resolves to the earlier declared type). The demo recipes are
+    // shape-disjoint, so iteration order cannot pick a wrong one.
+    private RecipeContent FindRecipe()
     {
-        if(Grid == null)return null;
-        foreach(var recipe in ResourceSystem.Instance.Recipes.Values)
+        if(Grid == null || supportedRecipeTypes == null)return null;
+        foreach(var recipeType in supportedRecipeTypes)
         {
-            if(recipe.RecipeTypeFullName != recipeTypeId)continue;
-            bool fits = recipe.Shape != null && recipe.Shape.Length > 0
-                ? MatchesShape(recipe) : MatchesLoose(recipe);
-            if(fits)return recipe;
+            foreach(var recipe in ResourceSystem.Instance.GetRecipesByRecipeType(recipeType))
+            {
+                bool fits = recipe.Kind switch
+                {
+                    RecipeKind.Shaped => MatchesShape(recipe),
+                    RecipeKind.Shapeless => MatchesLoose(recipe),
+                    // Processing recipes never run here; a mismatched direct
+                    // registration is already rejected at Freeze, skip defensively.
+                    _ => false
+                };
+                if(fits)return recipe;
+            }
         }
         return null;
     }
@@ -123,7 +138,7 @@ public class CraftingWorkContainer : WorkContainer
     // (ragged row tails count as empty) is tried at every offset that fits:
     // symbol cells must hold their ShapeKeys item, all other grid cells must
     // be empty. No rotation, no mirrors, no extra items.
-    private bool MatchesShape(RecipeDefinition recipe)
+    private bool MatchesShape(RecipeContent recipe)
     {
         int rows = recipe.Shape.Length;
         int minR = rows, maxR = -1, minC = int.MaxValue, maxC = -1;
@@ -157,7 +172,7 @@ public class CraftingWorkContainer : WorkContainer
 
     // True when every grid cell matches the shape translated by (rowShift,
     // colShift): symbol cells need their item, everything else must be empty.
-    private bool ShapeFitsAt(RecipeDefinition recipe, int rowShift, int colShift)
+    private bool ShapeFitsAt(RecipeContent recipe, int rowShift, int colShift)
     {
         for(int r = 0; r < config.GridHeight; r++)
         {
@@ -180,7 +195,7 @@ public class CraftingWorkContainer : WorkContainer
 
     // Shape symbol at shape coordinates (r, c); ' ' outside the array, past a
     // ragged row end, or left of column 0 - i.e. an empty-cell requirement.
-    private static char SymbolAt(RecipeDefinition recipe, int r, int c)
+    private static char SymbolAt(RecipeContent recipe, int r, int c)
     {
         if(r < 0 || r >= recipe.Shape.Length || c < 0)return ' ';
         string row = recipe.Shape[r];
@@ -188,33 +203,53 @@ public class CraftingWorkContainer : WorkContainer
         return row[c];
     }
 
-    // Loose multiset match (no Shape): every Input entry must be available and
-    // the total grid count must equal the recipe need - one exact set, no
-    // leftover or foreign items, position irrelevant.
-    private bool MatchesLoose(RecipeDefinition recipe)
+    // Shapeless slot-placeholder match (vanilla ShapelessRecipe semantics):
+    // inputs expand into placeholders (an entry of amount N = N same-item
+    // placeholders). The number of occupied slots must equal the total
+    // placeholder count and every occupied slot must pair with a placeholder
+    // of its item - one slot too many, one too few or a foreign item all
+    // fail. A slot holding a stack of several items still claims a single
+    // placeholder; the surplus stays in the slot and is left over on consume.
+    private bool MatchesLoose(RecipeContent recipe)
     {
+        matchSlots.Clear();
         if(recipe.Inputs == null || recipe.Inputs.Count == 0)return false;
         int needTotal = 0;
+        var placeholders = new Dictionary<ushort, int>();   // item id -> remaining placeholders
         foreach(var need in recipe.Inputs)
         {
+            if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(need.itemId, out ushort id))return false;
             needTotal += need.amount;
-            if(!TryGetAvailable(need.itemId, out int have) || have < need.amount)return false;
+            placeholders.TryGetValue(id, out int have);
+            placeholders[id] = have + need.amount;
         }
         if(needTotal <= 0)return false;
-        return CountGridTotal() == needTotal;
+
+        int occupied = 0;
+        for(int i = 0; i < Grid.Inv.itemStacks.Count; i++)
+        {
+            var slot = Grid.Inv.GetItemStackAt(i);
+            if(slot == null || slot.IsEmpty())continue;
+            occupied++;
+            if(occupied > needTotal)return false;   // more occupied slots than placeholders can never fit
+            if(!placeholders.TryGetValue(slot.itemId, out int left) || left <= 0)return false;
+            placeholders[slot.itemId] = left - 1;
+            matchSlots.Add(i);
+        }
+        return occupied == needTotal;
     }
 
     // ---- consumption (on result take) ----
 
-    private void Consume(RecipeDefinition recipe)
+    private void Consume(RecipeContent recipe)
     {
-        if(recipe.Shape != null && recipe.Shape.Length > 0)ConsumeShaped(recipe);
-        else ConsumeLoose(recipe);
+        if(recipe.Kind == RecipeKind.Shaped)ConsumeShaped(recipe);
+        else ConsumeLoose(recipe);   // shapeless (the only other kind that can preview here)
     }
 
     // Shaped: consume the exact symbol cells of the matched shape at its
     // offset - one per cell, spaces untouched.
-    private void ConsumeShaped(RecipeDefinition recipe)
+    private void ConsumeShaped(RecipeContent recipe)
     {
         for(int r = 0; r < recipe.Shape.Length; r++)
         {
@@ -228,42 +263,13 @@ public class CraftingWorkContainer : WorkContainer
         }
     }
 
-    // Loose: cross-slot consume per input entry (same pattern as the
-    // processing container's ConsumeInput).
-    private void ConsumeLoose(RecipeDefinition recipe)
+    // Loose: consume one item from every slot that was paired with a
+    // placeholder. matchSlots is re-synced by the last RefreshPreview and the
+    // grid cannot change between preview and take without another refresh, so
+    // the pairing is still exact here.
+    private void ConsumeLoose(RecipeContent recipe)
     {
-        foreach(var need in recipe.Inputs)ConsumeNeed(need);
-    }
-
-    private void ConsumeNeed(ItemStackAmount need)
-    {
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(need.itemId, out ushort id))return;
-        int left = need.amount;
-        for(int i = 0; i < Grid.Inv.itemStacks.Count && left > 0; i++)
-        {
-            var slot = Grid.Inv.GetItemStackAt(i);
-            if(slot == null || slot.IsEmpty() || slot.itemId != id)continue;
-            int take = Mathf.Min(left, slot.amount);
-            Grid.Inv.TryConsumeItemAt(i, take);
-            left -= take;
-        }
-    }
-
-    private bool TryGetAvailable(string fullName, out int total)
-    {
-        total = 0;
-        if(!ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(fullName, out ushort id))return false;
-        foreach(var slot in Grid.Inv.itemStacks)
-            if(slot != null && slot.itemId == id)total += slot.amount;
-        return true;
-    }
-
-    private int CountGridTotal()
-    {
-        int total = 0;
-        foreach(var slot in Grid.Inv.itemStacks)
-            if(slot != null && !slot.IsEmpty())total += slot.amount;
-        return total;
+        foreach(int slot in matchSlots)Grid.Inv.TryConsumeItemAt(slot, 1);
     }
 
     private void ClearResult()

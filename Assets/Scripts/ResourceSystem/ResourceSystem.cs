@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-public class ResourceSystem
+// Recipe triad (design doc): parsers define recipe types (their full name IS
+// the recipeType id), contents are the concrete recipes, checkers gate them.
+public partial class ResourceSystem
 {
     public static ResourceSystem Instance {get; } = new ResourceSystem();
     // Model Info
@@ -27,9 +29,10 @@ public class ResourceSystem
     public ResourceRegistryTable<EntityAnimation> EntityAnimations {get;} = new();
 
 
-    // Recipes: categories + concrete recipes
-    public ResourceRegistryTable<RecipeType> RecipeTypes {get;} = new();
-    public ResourceRegistryTable<RecipeDefinition> Recipes {get;} = new();
+    // Recipes: the "three legs" - parsers (recipeType id), contents and checkers
+    public ResourceRegistryTable<RecipeParserDefinition> RecipeParsers {get;} = new();
+    public ResourceRegistryTable<RecipeContent> Recipes {get;} = new();
+    public ResourceRegistryTable<RequirementCheckerDefinition> RequirementCheckers {get;} = new();
 
     // Block entity system: container types + BE definitions
     public ResourceRegistryTable<DataContainerDefinition> DataContainerDefinitions {get;} = new();
@@ -70,7 +73,9 @@ public class ResourceSystem
             Debug.LogError("[GameBootstrap] missing required block : minecraft:air");
         CustomModels.Freeze();
         BlockDefinitions.Freeze();
-        ItemDefinitions.Freeze();
+        RecipeParsers.Freeze();          // recipe types (parsers) freeze before item lookups validate against them
+        ItemDefinitions.Freeze();        // item references become checkable
+        RequirementCheckers.Freeze();
         ItemBehaviors.Freeze();
         DimensionDefinitions.Freeze();
         DimensionGenerator.Freeze();
@@ -78,7 +83,8 @@ public class ResourceSystem
         EntityModels.Freeze();
         EntityAnimations.Freeze();
         Textures.Freeze();
-        RecipeTypes.Freeze();
+        ValidateRecipeReferences();      // item / RecipeType<->Kind / checker references; aborts startup on errors
+        BuildRecipeTypeIndex();          // recipeType -> recipe list buckets (runtime query index)
         Recipes.Freeze();
         DataContainerDefinitions.Freeze();
         WorkContainerDefinitions.Freeze();

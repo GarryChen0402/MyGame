@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class ProcessingWorkContainer : WorkContainer
@@ -11,7 +12,9 @@ public class ProcessingWorkContainer : WorkContainer
     }
 
     private readonly Config config;
-    private readonly string recipeTypeId;   // recipe category full name (WorkContainerConfig.RecipeType)
+    // Recipe types (parser full names) this container can run, e.g.
+    // {"universal:processing"} (WorkContainerConfig.SupportedRecipeTypes).
+    private readonly List<string> supportedRecipeTypes;
 
     // Temporary flat fuel value until ItemDefinition gains a real burn-time field.
     public const int FUEL_BURN_TICKS = 200;
@@ -20,12 +23,12 @@ public class ProcessingWorkContainer : WorkContainer
     public int CurrentTickProgress;   // ticks burned so far (vanilla cookingProgress)
     public int TotalTickTime;         // target ticks for the current recipe
     public int FuelLeftTickTime;      // remaining fuel ticks (vanilla litTime)
-    public RecipeDefinition CurrentRecipe;
+    public RecipeContent CurrentRecipe;
 
     public ProcessingWorkContainer(WorkContainerConfig config)
     {
         this.config = JsonUtility.FromJson<Config>(config.Parameters);
-        recipeTypeId = config.RecipeType;
+        supportedRecipeTypes = config.SupportedRecipeTypes;
     }
 
     public override void OnBind(BlockEntity blockEntity)
@@ -92,20 +95,26 @@ public class ProcessingWorkContainer : WorkContainer
         if (changed) MarkDirty();
     }
 
-    private int ToTicks(RecipeDefinition recipe)
+    private int ToTicks(RecipeContent recipe)
         => Mathf.Max(1, Mathf.RoundToInt(recipe.ProcessingTickTime / config.SpeedMultiplier));
 
-    private RecipeDefinition FindRecipe()
+    private RecipeContent FindRecipe()
     {
-        foreach (var recipe in ResourceSystem.Instance.Recipes.Values)
+        if (supportedRecipeTypes == null) return null;
+        foreach (var recipeType in supportedRecipeTypes)
         {
-            if (recipe.RecipeTypeFullName != recipeTypeId) continue;
-            if (MatchesInput(recipe)) return recipe;
+            foreach (var recipe in ResourceSystem.Instance.GetRecipesByRecipeType(recipeType))
+            {
+                // Only Processing recipes run here; a mismatched direct
+                // registration is already rejected at Freeze, skip defensively.
+                if (recipe.Kind != RecipeKind.Processing) continue;
+                if (MatchesInput(recipe)) return recipe;
+            }
         }
         return null;
     }
 
-    private bool MatchesInput(RecipeDefinition recipe)
+    private bool MatchesInput(RecipeContent recipe)
     {
         foreach (var need in recipe.Inputs)
         {
@@ -115,7 +124,7 @@ public class ProcessingWorkContainer : WorkContainer
     }
 
     // Checks every output fits (policy/whitelist + merge capacity) without mutating.
-    private bool CanFitOutput(RecipeDefinition recipe)
+    private bool CanFitOutput(RecipeContent recipe)
     {
         foreach (var outEntry in recipe.Outputs)
         {
@@ -126,7 +135,7 @@ public class ProcessingWorkContainer : WorkContainer
         return true;
     }
 
-    private bool TryCraft(RecipeDefinition recipe)
+    private bool TryCraft(RecipeContent recipe)
     {
         foreach (var need in recipe.Inputs)
         {
