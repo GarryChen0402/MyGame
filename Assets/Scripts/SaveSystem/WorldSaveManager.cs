@@ -263,11 +263,15 @@ public class WorldSaveManager
             };
             if(ResourceSystem.Instance.DimensionDefinitions.TryGetStringId(player.DimensionId, out string dimName))
                 data.dimensionId = dimName;
-            foreach(var stack in player.inventory.itemStacks)
+            var stacks = player.inventory.itemStacks;
+            for(int i = 0; i < stacks.Count; i++)
             {
+                var stack = stacks[i];
                 if(stack == null || stack.IsEmpty()) continue;
                 if(!ResourceSystem.Instance.ItemDefinitions.TryGetStringId(stack.itemId, out string itemName)) continue;
-                data.inventory.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount });
+                // slotIndex pins each stack to its slot so a reload restores
+                // the exact backpack layout instead of shifting items forward.
+                data.inventory.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount, slotIndex = i });
             }
             ChunkSerializer.WriteFileAtomic(Path.Combine(WorldRootPath, "player.json"), JsonUtility.ToJson(data));
         }
@@ -314,4 +318,8 @@ public class ItemStackSaveData
 {
     public string itemId;
     public int amount;
+    // Owning inventory slot. -1 (absent in saves written before this field
+    // existed) means "no fixed slot": loaders then place the entry into the
+    // first empty slot, preserving the old shift-to-front behavior for v1.
+    public int slotIndex = -1;
 }

@@ -110,18 +110,23 @@ public class InventoryDataContainer : DataContainer
     public override string Serialize()
     {
         var save = new SaveData();
-        foreach (var stack in Inv.itemStacks)
+        var stacks = Inv.itemStacks;
+        for (int i = 0; i < stacks.Count; i++)
         {
+            var stack = stacks[i];
             if (stack == null || stack.IsEmpty()) continue;
             if (ResourceSystem.Instance.ItemDefinitions.TryGetStringId(stack.itemId, out string itemName))
-                save.slots.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount });
+                // slotIndex pins each stack to its slot so a reload restores
+                // the exact layout (crafting grids match recipes by position).
+                save.slots.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount, slotIndex = i });
         }
         return JsonUtility.ToJson(save);
     }
 
-    // Restores non-empty slots in file order (slots hold a fixed-capacity list
-    // of stacks, so empties are refilled and stacks re-merged via the normal
-    // insert path). Unknown items are skipped with a warning.
+    // Restores each entry into the slot it was saved from, keeping the exact
+    // layout. Entries without a valid slotIndex (older saves) and entries
+    // whose saved slot is already occupied fall back to the first empty slot
+    // in file order. Unknown items are skipped with a warning.
     public override void Deserialize(string json)
     {
         var save = JsonUtility.FromJson<SaveData>(json);
@@ -136,7 +141,12 @@ public class InventoryDataContainer : DataContainer
                 Debug.LogWarning($"[InventoryDataContainer] unknown item '{entry.itemId}' in save; skipped");
                 continue;
             }
-            Inv.TryAddItemStack(new ItemStack { itemId = itemId, amount = entry.amount });
+            int slot = entry.slotIndex >= 0 && entry.slotIndex < Inv.itemStacks.Count
+                ? entry.slotIndex : -1;
+            if (slot < 0 || !Inv.GetItemStackAt(slot).IsEmpty())
+                slot = Inv.itemStacks.FindIndex(s => s.IsEmpty());
+            if (slot < 0) continue;   // no free slot left (duplicated/overflowing save)
+            Inv.itemStacks[slot] = new ItemStack { itemId = itemId, amount = entry.amount };
         }
     }
 }

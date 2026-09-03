@@ -43,7 +43,16 @@ public class Player : Entity
                 Debug.LogWarning($"[Player] unknown dimension '{data.dimensionId}' in save; keeping current");
         }
 
+        // Fixed 36 slots first, so every GetItemStackAt(index) stays valid
+        // (an out-of-range null slot would make clicks on empty backpack
+        // slots silently no-op).
         inventory.itemStacks.Clear();
+        for(int i = 0; i < inventory.MaxSlotCount; i++)
+            inventory.itemStacks.Add(new ItemStack());
+        // Restore each entry into the exact slot it was saved from, keeping
+        // the backpack layout intact across save cycles. Entries without a
+        // valid slotIndex (v1 saves) and entries whose saved slot is already
+        // occupied fall back to the first empty slot in file order.
         foreach(var entry in data.inventory)
         {
             if(entry == null || entry.amount <= 0 || string.IsNullOrEmpty(entry.itemId)) continue;
@@ -52,13 +61,13 @@ public class Player : Entity
                 Debug.LogWarning($"[Player] unknown item '{entry.itemId}' in save; skipped");
                 continue;
             }
-            inventory.itemStacks.Add(new ItemStack { itemId = itemId, amount = entry.amount });
+            int slot = entry.slotIndex >= 0 && entry.slotIndex < inventory.itemStacks.Count
+                ? entry.slotIndex : -1;
+            if(slot < 0 || !inventory.GetItemStackAt(slot).IsEmpty())
+                slot = inventory.itemStacks.FindIndex(s => s.IsEmpty());
+            if(slot < 0)continue;   // no free slot left (duplicated/overflowing save)
+            inventory.itemStacks[slot] = new ItemStack { itemId = itemId, amount = entry.amount };
         }
-        // Save files list non-empty entries only; refill the fixed 36 slots so
-        // every GetItemStackAt(index) stays valid (an out-of-range null slot
-        // would make clicks on empty backpack slots silently no-op).
-        while(inventory.itemStacks.Count < inventory.MaxSlotCount)
-            inventory.itemStacks.Add(new ItemStack());
     }
 
     public override bool IsHoldingItem()
