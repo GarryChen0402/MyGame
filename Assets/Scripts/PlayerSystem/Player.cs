@@ -1,6 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 
-public class Player : Entity
+public class Player : Entity, ICraftingGridHost
 {
     private static Player instance = new();
     public static Player Instance => instance;
@@ -9,6 +10,14 @@ public class Player : Entity
     public const float EyeHeight = 1.62f;
 
     private float harvestSpeedMultiply = 1.0f;
+
+    // Personal 2x2 crafting (design doc Docs/玩家界面-模型预览组件与2x2个人合成
+    // 设计方案.md §5.1.3): containers are constructed without any block
+    // entity - Host stays null, so their MarkDirty chain is a no-op and the
+    // player save (written whole on a fixed cadence) is the persistence path.
+    public InventoryDataContainer CraftingGrid;
+    public InventoryDataContainer CraftingResult;
+    public CraftingSolver Crafting;
 
     private Player()
     {
@@ -21,11 +30,39 @@ public class Player : Entity
         });
 
         inventory = new Inventory(36, false);
+        InitCrafting();
     }
 
+    private void InitCrafting()
+    {
+        CraftingGrid = new InventoryDataContainer(new DataContainerConfig
+        {
+            Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config { Capacity = 4 })
+        });
+        // Module-only insert, mirroring the workbench result slot: players can
+        // only ever take the preview out, never place into it.
+        CraftingResult = new InventoryDataContainer(new DataContainerConfig
+        {
+            Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
+            {
+                Capacity = 1,
+                InsertPolicy = ContainerAccess.Module,
+                ExtractPolicy = ContainerAccess.Any
+            })
+        });
+        Crafting = new CraftingSolver(CraftingGrid, CraftingResult, 2, 2,
+            new List<string> { "universal:shaped", "universal:shapeless" }, null);
+    }
+
+    // ---- ICraftingGridHost (UI binds grid/result slot accessors to the player) ----
+
+    public void OnGridChanged() => Crafting?.OnGridChanged();
+    public void OnResultTaken() => Crafting?.OnResultTaken();
+
     // Overwrites state from a save file: AABB (0.6-wide, 1.8-tall player box,
-    // position is the feet-center pivot), look direction, dimension, inventory.
-    // Unknown string ids are skipped with a warning instead of failing the load.
+    // position is the feet-center pivot), look direction, dimension, inventory
+    // and the 2x2 crafting grid. Unknown string ids are skipped with a warning
+    // instead of failing the load.
     public void RestoreFromSave(PlayerSaveData data)
     {
         AABBs[0] = new AABB(
@@ -68,6 +105,12 @@ public class Player : Entity
             if(slot < 0)continue;   // no free slot left (duplicated/overflowing save)
             inventory.itemStacks[slot] = new ItemStack { itemId = itemId, amount = entry.amount };
         }
+
+        // 2x2 crafting grid (old v1 saves carry no field -> stays empty). The
+        // result slot is a runtime preview and is never persisted, same as the
+        // workbench work container.
+        if(data.craftingGrid != null)
+            CraftingGrid.RestoreSave(new InventoryDataContainer.SaveData { slots = data.craftingGrid });
     }
 
     public override bool IsHoldingItem()

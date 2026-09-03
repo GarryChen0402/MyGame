@@ -1,8 +1,8 @@
 using UnityEngine;
 
 // Pushed to the handler stack while a panel UI is open: releases the cursor
-// for clicking and closes the panel on Escape (UIManager.CloseUI pops it back
-// off, after which the player handler below re-locks the cursor).
+// for clicking and closes the panel on Escape / E (UIManager.CloseUI pops it
+// back off, after which the player handler below re-locks the cursor).
 public class UIInputHandler : IInputHandler
 {
     public UIInputHandler()
@@ -10,12 +10,12 @@ public class UIInputHandler : IInputHandler
         modId = "minecraft";
         name = "ui_input_handler";
     }
-    
+
     public override void OnUpdate()
     {
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        if(Input.GetKeyDown(KeyCode.Escape))
+        if(Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.E))
             UIManager.Instance.CloseUI();
     }
 }

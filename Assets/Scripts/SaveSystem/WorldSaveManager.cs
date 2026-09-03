@@ -261,6 +261,8 @@ public class WorldSaveManager
                 yaw = player.yaw,
                 inventory = new List<ItemStackSaveData>()
             };
+            if(player.CraftingGrid != null)
+                data.craftingGrid = player.CraftingGrid.ExportSave().slots;
             if(ResourceSystem.Instance.DimensionDefinitions.TryGetStringId(player.DimensionId, out string dimName))
                 data.dimensionId = dimName;
             var stacks = player.inventory.itemStacks;
@@ -311,6 +313,11 @@ public class PlayerSaveData
     public float yaw;
     public string dimensionId;
     public List<ItemStackSaveData> inventory = new();
+    // 2x2 personal crafting grid, slot-pinned like the backpack. Absent in v1
+    // saves (JsonUtility leaves the field null) - loaders then keep the grid
+    // empty. The crafting result slot is a runtime preview and never saved,
+    // matching the workbench work container's persistence contract.
+    public List<ItemStackSaveData> craftingGrid;
 }
 
 [Serializable]

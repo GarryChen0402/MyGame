@@ -107,7 +107,12 @@ public class InventoryDataContainer : DataContainer
         public List<ItemStackSaveData> slots = new();
     }
 
-    public override string Serialize()
+    public override string Serialize() => JsonUtility.ToJson(ExportSave());
+
+    // Exports the slot content (id/amount/pinned slotIndex) without wrapping
+    // it in JSON - shared by block-entity saves and the player save file, so
+    // both write through the same slot-pinning rules.
+    public SaveData ExportSave()
     {
         var save = new SaveData();
         var stacks = Inv.itemStacks;
@@ -120,16 +125,15 @@ public class InventoryDataContainer : DataContainer
                 // the exact layout (crafting grids match recipes by position).
                 save.slots.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount, slotIndex = i });
         }
-        return JsonUtility.ToJson(save);
+        return save;
     }
 
     // Restores each entry into the slot it was saved from, keeping the exact
     // layout. Entries without a valid slotIndex (older saves) and entries
     // whose saved slot is already occupied fall back to the first empty slot
     // in file order. Unknown items are skipped with a warning.
-    public override void Deserialize(string json)
+    public void RestoreSave(SaveData save)
     {
-        var save = JsonUtility.FromJson<SaveData>(json);
         if (save == null || save.slots == null) return;
         Inv.itemStacks.Clear();
         for (int i = 0; i < Inv.MaxSlotCount; i++) Inv.itemStacks.Add(new ItemStack());
@@ -148,5 +152,11 @@ public class InventoryDataContainer : DataContainer
             if (slot < 0) continue;   // no free slot left (duplicated/overflowing save)
             Inv.itemStacks[slot] = new ItemStack { itemId = itemId, amount = entry.amount };
         }
+    }
+
+    public override void Deserialize(string json)
+    {
+        var save = JsonUtility.FromJson<SaveData>(json);
+        RestoreSave(save);
     }
 }

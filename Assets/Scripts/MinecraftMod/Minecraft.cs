@@ -463,6 +463,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.UIDefinitions.Register(PlayerInventoryUI.playerInvUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(FurnaceUI.furanceUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(CraftingTableUI.craftingTableUIDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(PlayerUI.playerUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());

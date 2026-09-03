@@ -28,6 +28,11 @@ public class PlayerInputHandler : IInputHandler
     public override void OnUpdate()
     {
         if(player == null)return;
+        // Open the player UI (E). Closing is handled by UIInputHandler, which
+        // owns the input stack while any panel is open - this handler is not
+        // updated then, so the key can never double-fire.
+        if(Input.GetKeyDown(KeyCode.E))
+            UIManager.Instance?.OpenUI("minecraft:player_ui");
         MoveHandler();
         InteractionHandler();
     }
