@@ -28,14 +28,18 @@ public class InputHandlerManager : MonoBehaviour
     {
         if(string.IsNullOrEmpty(inputHandlerId))return false;
         if(!ResourceSystem.Instance.InputHandlers.TryGetResourceWithFullName(inputHandlerId, out var handler))return false;
+        if(inputHandlers.Count > 0)CurrentInputHandler.OnExit();
         Push(handler);
+        handler.OnEnter();
         return true;
     }
 
     public bool Pop()
     {
         if(inputHandlers.Count == 1)return false;
-        inputHandlers.Pop();
+        var top = inputHandlers.Pop();
+        top.OnExit();
+        CurrentInputHandler.OnEnter();
         return true;
     }
 

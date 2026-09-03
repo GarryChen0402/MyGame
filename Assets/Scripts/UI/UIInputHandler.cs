@@ -10,7 +10,7 @@ public class UIInputHandler : IInputHandler
         modId = "minecraft";
         name = "ui_input_handler";
     }
-
+    
     public override void OnUpdate()
     {
         Cursor.lockState = CursorLockMode.None;

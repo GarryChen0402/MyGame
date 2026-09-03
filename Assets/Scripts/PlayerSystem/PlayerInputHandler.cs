@@ -20,23 +20,22 @@ public class PlayerInputHandler : IInputHandler
         modId = "minecraft";
         name = "player_input_handler";
     }
+    public override void OnEnter()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+    }
 
     public override void OnUpdate()
     {
         if(player == null)return;
-        if (Input.GetKey(KeyCode.LeftAlt))
-        {
-            Cursor.lockState = CursorLockMode.None;
-            return;
-        }
-        else
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-        }
-
-        
         MoveHandler();
         InteractionHandler();
+    }
+
+
+    public override void OnExit()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
     }
     private void MoveHandler()
     {
