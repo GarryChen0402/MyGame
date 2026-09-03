@@ -66,6 +66,8 @@ public class ResourceSystem
     // their own table is frozen last so the registration inside isn't rejected.
     public void Freeze()
     {
+        if(!BlockDefinitions.ContainsValue("minecraft:air"))
+            Debug.LogError("[GameBootstrap] missing required block : minecraft:air");
         CustomModels.Freeze();
         BlockDefinitions.Freeze();
         ItemDefinitions.Freeze();
@@ -81,6 +83,12 @@ public class ResourceSystem
         DataContainerDefinitions.Freeze();
         WorkContainerDefinitions.Freeze();
         BlockEntityDefinitions.Freeze();
+        
+    }
+
+    public void PostFreeze()
+    {
+        BuildAtlas();
         BuildAllBlockStates();
         BlockStates.Freeze();
     }

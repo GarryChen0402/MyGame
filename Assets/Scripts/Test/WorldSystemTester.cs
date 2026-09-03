@@ -12,6 +12,10 @@ public class WorldSystemTester : MonoBehaviour
     {
         // Resource registration and atlas packing are handled by GameBootstrap.
         // Restore world seed and player state before the world builds around them.
+        // TODO(Phase 6): main menu / world selection UI is not implemented yet -
+        // this entry point should let the player choose "load an existing save" or
+        // "start a new world" (see Docs/游戏启动与资源初始化阶段设计.md, Phase 6-8).
+        // For now the game always enters the fixed save directory directly.
         WorldSaveManager.Instance.LoadWorldMeta();
         WorldSaveManager.Instance.LoadPlayer();
 

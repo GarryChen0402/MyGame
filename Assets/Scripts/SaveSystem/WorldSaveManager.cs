@@ -15,12 +15,15 @@ public class WorldSaveManager
     // worker (chunk load tasks run off the main thread).
     private string worldRootPath;
     public string WorldRootPath => worldRootPath;
-
-    public void Initialize()
+    private WorldSaveManager()
     {
-        if (worldRootPath == null)
-            worldRootPath = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Saves");
+        worldRootPath ??= Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Saves");
     }
+    // public void Initialize()
+    // {
+    //     if (worldRootPath == null)
+    //         worldRootPath = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Saves");
+    // }
 
     private const float AutosaveIntervalSeconds = 60f;
     private float autosaveTimer;
