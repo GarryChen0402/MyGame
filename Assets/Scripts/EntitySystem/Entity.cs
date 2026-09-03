@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 public class Entity // Data Class
@@ -41,13 +42,21 @@ public class Entity // Data Class
         if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
         // else if(Session.TargetType == InteractionSessionTargetType.Entity && ())// TODO: add the raycast to raycast the entity
         else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
-        if(Session.Completed)return;
+        if (Session.Completed)
+        {
+            EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Operator = this, Ctx = Session});
+            return;
+        }
         Session.Durantion += GetSessionUpdateTime(Session.TargetType, dt);
+        EventBus.Instance.Publish(new InteractionSessionContextTickEvent(){Operator = this, Ctx = Session});
+
         if(Session.Durantion >= Session.CompleteTime)
         {
             Session.OnComplete.Invoke();
             Session.Completed = true;
+            EventBus.Instance.Publish(new InteractionSessionContextCompletedEvent(){Operator = this, Ctx = Session});
         }
+        
     }
     public virtual float GetSessionUpdateTime(InteractionSessionTargetType targetType, float dt) => dt;
 
@@ -68,22 +77,33 @@ public class Entity // Data Class
         Session.OnComplete = OnComplete;
         if(itemStack != null && ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemStack.itemId, out var itemDefinition))
             Session.ItemDef = itemDefinition;
-        if(!WorldManager.Instance.TryGetDimension(DimensionId, out var dim))return;
-        ushort stateId = dim.GetBlockAt(blockCoord);
-        if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var blockState))return;
-        Session.blockId = blockState.BlockId;
-        Session.BlockDef = blockState.Block;
-        if (!Session.BlockDef.HasBlockEntity)
+        if(WorldManager.Instance.TryGetDimension(DimensionId, out var dim))
         {
-            Session.blockEntity = null;
-            Session.BlockEntityDef = null;
+            ushort stateId = dim.GetBlockAt(blockCoord);
+            if(ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var blockState))
+            {
+                Session.blockId = blockState.BlockId;
+                Session.BlockDef = blockState.Block;
+                if (!Session.BlockDef.HasBlockEntity)
+                {
+                    Session.blockEntity = null;
+                    Session.BlockEntityDef = null;
+                }
+                else
+                {
+                    if(WorldManager.Instance.TryGetBlockEntity(DimensionId, blockCoord, out var be))
+                    {
+                        Session.blockEntity = be;
+                        Session.BlockEntityDef = be.Definition;
+                    }
+                }
+            }
         }
-        else
+        EventBus.Instance.Publish(new InteractionSessionContextStartEvent()
         {
-            if(!WorldManager.Instance.TryGetBlockEntity(DimensionId, blockCoord, out var be))return;
-            Session.blockEntity = be;
-            Session.BlockEntityDef = be.Definition;
-        }
+            Operator = this,
+            Ctx = Session
+        });
 
     }
 

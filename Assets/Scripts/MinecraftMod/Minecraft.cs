@@ -378,6 +378,15 @@ public class Minecraft : IMod
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new UIInputHandler());
+
+        //Break block sprite
+        for(int i = 0; i < 10; i++)
+        {
+            ResourceSystem.Instance.RegisterTexture(ModId, $"crack_{i}", 
+                Resources.Load<Texture2D>($"Textures/Overlay/breakStageSprite-{i}")
+            );
+        }
+
     }
 
     // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。

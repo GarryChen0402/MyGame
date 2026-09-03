@@ -62,3 +62,24 @@ public class InteractWithBlockEntity : GameEvent
     public BlockEntity blockEntity;
     public BlockEntityDefinition BlockEntityDef;
 }
+
+public class InteractionSessionContextStartEvent : GameEvent
+{
+    public Entity Operator;
+    public InteractionSessionContext Ctx;
+}
+public class InteractionSessionContextTickEvent : GameEvent
+{
+    public Entity Operator;
+    public InteractionSessionContext Ctx;
+}
+public class InteractionSessionContextCompletedEvent : GameEvent
+{
+    public Entity Operator;
+    public InteractionSessionContext Ctx;
+}
+public class InteractionSessionContextInteruptedEvent : GameEvent
+{
+    public Entity Operator;
+    public InteractionSessionContext Ctx;
+}
