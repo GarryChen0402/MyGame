@@ -106,6 +106,7 @@ public class UIManager : MonoBehaviour
 
     public void CloseUI()
     {
+        CancelDrag();   // panel closed mid-drag: drop the session untouched
         currentUI?.Close();
         if(currentUI != null && CurrentUIhasInputHandler)
         {
@@ -137,6 +138,131 @@ public class UIManager : MonoBehaviour
         currentUI?.Refresh();
         if(PlayerInventoryRoot != null && PlayerInventoryRoot.TryGetComponent<UIBehavior>(out var invUi))
             invUi.Refresh();
+    }
+
+    // ---- drag-to-distribute session (Docs/物品拖拽分配交互实现方案.md §4) ----
+
+    // Active while a drag is in progress: the source is the held stack, and
+    // every slot hovered over (deduped) receives one settlement on release.
+    // Slot contents never change mid-drag, so collection order and validity
+    // are exactly what DragEnd settles over. Hovered slots keep their
+    // SlotUI so the session can drive the accept/reject outlines.
+    private class DragSession
+    {
+        public bool Right;
+        public ItemStack Carried;                    // UIManager.HeldItemStack reference
+        public readonly List<SlotUI> TargetUis = new();
+        public SlotUI Rejected;                      // hovered but cannot receive (red outline)
+    }
+
+    private DragSession activeDrag = null;
+    private readonly PointerEventData dragPointerData = new(EventSystem.current);
+    private readonly List<RaycastResult> dragRaycastResults = new();
+
+    private void Update()
+    {
+        if(activeDrag != null)PollPointer();
+    }
+
+    internal void HandleDragBegin(SlotUI slotUI, PointerEventData eventData)
+    {
+        if(currentUI == null)return;
+        if(slotUI == null || slotUI.Access == null)return;   // display-only slot: not draggable
+        if(activeDrag != null)return;                        // one drag at a time
+
+        var carried = HeldItemStack;
+        if(carried == null || carried.IsEmpty())
+        {
+            // One-gesture pick-up: an empty cursor picks the source slot up
+            // (left = whole, right = half) so a press-and-drag works like
+            // vanilla; the emptied source slot never receives the spread.
+            var src = slotUI.Access;
+            var t = src.Get();
+            if(t == null || t.IsEmpty() || !src.CanTake())return;   // nothing to pick: no session
+            SlotClickProcessor.Click(src, eventData.button == PointerEventData.InputButton.Right, carried);
+            RefreshVisibleSlots();
+        }
+        if(carried == null || carried.IsEmpty())return;
+
+        activeDrag = new DragSession
+        {
+            Right = eventData.button == PointerEventData.InputButton.Right,
+            Carried = carried
+        };
+        PollPointer();
+    }
+
+    internal void HandleDragEnd(SlotUI slotUI, PointerEventData eventData)
+    {
+        if(activeDrag == null)return;
+        PollPointer();                     // final poll: the release position joins the collection
+        var session = activeDrag;
+        activeDrag = null;
+        ClearDragHighlights(session);
+        if(session.TargetUis.Count == 0)return;   // never hovered a receivable slot: keep the items
+        var accesses = new List<ISlotAccess>(session.TargetUis.Count);
+        foreach(var targetUi in session.TargetUis)accesses.Add(targetUi.Access);
+        SlotClickProcessor.DragEnd(accesses, session.Right, session.Carried);
+        RefreshVisibleSlots();
+    }
+
+    // Drops the session without touching any slot data (panel closed mid-drag:
+    // held items are handled by the regular close cleanup).
+    private void CancelDrag()
+    {
+        if(activeDrag == null)return;
+        ClearDragHighlights(activeDrag);
+        activeDrag = null;
+    }
+
+    private static void ClearDragHighlights(DragSession session)
+    {
+        foreach(var ui in session.TargetUis)ui.SetDragHighlight(SlotUI.DragHighlight.None);
+        session.Rejected?.SetDragHighlight(SlotUI.DragHighlight.None);
+        session.Rejected = null;
+    }
+
+    // While a drag is active, Unity stops routing pointer enter/exit to other
+    // elements, so hover detection must raycast manually every frame. Slot
+    // icons are child graphics and sort ahead of the slot image, so resolve
+    // the first SlotUI ancestor instead of trusting the topmost result.
+    private void PollPointer()
+    {
+        if(activeDrag == null)return;
+        if(EventSystem.current == null)return;
+        dragPointerData.position = Input.mousePosition;
+        dragRaycastResults.Clear();
+        EventSystem.current.RaycastAll(dragPointerData, dragRaycastResults);
+        SlotUI hover = null;
+        foreach(var result in dragRaycastResults)
+        {
+            hover = result.gameObject.GetComponentInParent<SlotUI>();
+            if(hover != null)break;
+        }
+
+        // Clear the previous reject outline once the pointer left that slot.
+        var prevRejected = activeDrag.Rejected;
+        if(prevRejected != null && prevRejected != hover)
+        {
+            prevRejected.SetDragHighlight(SlotUI.DragHighlight.None);
+            activeDrag.Rejected = null;
+        }
+        CurrentHoverSlotUI = hover;                    // hover slot during drag (null = outside)
+
+        if(hover == null || hover.Access == null)return;          // outside any operable slot
+        if(activeDrag.TargetUis.Contains(hover))return;           // already accepted: outline stays
+
+        if(!SlotClickProcessor.CanReceive(hover.Access, activeDrag.Carried))
+        {
+            if(activeDrag.Rejected != hover)
+            {
+                activeDrag.Rejected = hover;
+                hover.SetDragHighlight(SlotUI.DragHighlight.Reject);
+            }
+            return;
+        }
+        activeDrag.TargetUis.Add(hover);
+        hover.SetDragHighlight(SlotUI.DragHighlight.Accept);
     }
 
     public ItemStack HeldItemStack{get; set;} = new();

@@ -4,19 +4,45 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class SlotUI : MonoBehaviour, IPointerClickHandler
+public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler,
+    IPointerEnterHandler, IPointerExitHandler
 {
+    // Drag visual feedback (Docs/物品拖拽分配交互实现方案.md §7 阶段3):
+    // Accept = slot will receive the distribution (green outline), Reject =
+    // hovered but cannot receive (red outline).
+    public enum DragHighlight { None, Accept, Reject }
+
     private ItemIconRenderer Icon;
     private TextMeshProUGUI Text;
     private ItemStack itemStack;
+    private Outline highlight;
+    private GameObject hoverOverlay;                    // translucent white hover highlight
+    private static Sprite whiteSprite;                  // generated 1x1 solid sprite
+    private static readonly Color AcceptColor = new(0.35f, 1f, 0.4f);
+    private static readonly Color RejectColor = new(1f, 0.3f, 0.25f);
+    private static readonly Color HoverColor = new(1f, 1f, 1f, 0.3f);
+
+    private static Sprite GetWhiteSprite()
+    {
+        if(whiteSprite != null)return whiteSprite;
+        var tex = new Texture2D(1, 1);
+        tex.SetPixel(0, 0, Color.white);
+        tex.Apply();
+        whiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+        return whiteSprite;
+    }
 
     private void Awake()
-    {   
+    {
         var bg_image = gameObject.AddComponent<Image>();
         bg_image.sprite = Resources.Load<Sprite>("Textures/UI/slot");
         // var edgeGo = new GameObject("edge");
         // edgeGo.transform.SetParent(gameObject.transform);
         // edgeGo.AddComponent<Image>().sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_edge");
+
+        highlight = bg_image.gameObject.AddComponent<Outline>();
+        highlight.effectDistance = new Vector2(3, 3);
+        highlight.enabled = false;
 
         var iconGo = new GameObject("Icon");
         iconGo.transform.SetParent(gameObject.transform, false);
@@ -39,6 +65,21 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
         var textRect = (RectTransform)Text.transform;
         textRect.sizeDelta = new Vector2(100, textRect.sizeDelta.y);   // width = 100
 
+        // Hover highlight: created last so it renders above the icon/text,
+        // like vanilla's white overlay on the hovered slot. No raycast
+        // target: purely visual, must never swallow clicks.
+        hoverOverlay = new GameObject("Hover");
+        hoverOverlay.transform.SetParent(transform, false);
+        var hoverRt = hoverOverlay.AddComponent<RectTransform>();
+        hoverRt.anchorMin = Vector2.zero;
+        hoverRt.anchorMax = Vector2.one;
+        hoverRt.offsetMin = Vector2.zero;
+        hoverRt.offsetMax = Vector2.zero;
+        var hoverImage = hoverOverlay.AddComponent<Image>();
+        hoverImage.sprite = GetWhiteSprite();
+        hoverImage.color = HoverColor;
+        hoverImage.raycastTarget = false;
+        hoverOverlay.SetActive(false);
     }
 
     // Bind the slot to an item stack and refresh the icon and count label.
@@ -84,8 +125,48 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
     private ISlotAccess access;
     public ISlotAccess Access => access;
     public void Bind(ISlotAccess access) => this.access = access;
+
+    // Managed by the UIManager drag session; the outline is drawn on the slot
+    // background image so it never covers the icon.
+    public void SetDragHighlight(DragHighlight state)
+    {
+        if(highlight == null)return;
+        if(state == DragHighlight.None)
+        {
+            highlight.enabled = false;
+            return;
+        }
+        highlight.enabled = true;
+        highlight.effectColor = state == DragHighlight.Accept ? AcceptColor : RejectColor;
+    }
+
+    // Hover tracking (feeds UIManager.CurrentHoverSlotUI; tooltip later).
+    // Unity stops routing enter/exit during a drag, so the drag session
+    // updates the hover slot from its own per-frame raycast instead.
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        UIManager.Instance.CurrentHoverSlotUI = this;
+        hoverOverlay?.SetActive(true);
+    }
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        var ui = UIManager.Instance;
+        if(ui != null && ui.CurrentHoverSlotUI == this)ui.CurrentHoverSlotUI = null;
+        hoverOverlay?.SetActive(false);
+    }
+
     public void OnPointerClick(PointerEventData eventData)
         => UIManager.Instance.HandleSlotClicked(this, eventData);
+
+    public void OnEndDrag(PointerEventData eventData)
+        => UIManager.Instance.HandleDragEnd(this, eventData);
+    public void OnBeginDrag(PointerEventData eventData)
+        => UIManager.Instance.HandleDragBegin(this, eventData);
+    // Unity only routes BeginDrag/EndDrag to the object it resolved as the
+    // drag handler at press time, and that resolution looks for IDragHandler
+    // (StandaloneInputModule: pointerDrag = GetEventHandler<IDragHandler>).
+    // Hover tracking during the drag is polled by UIManager instead.
+    public void OnDrag(PointerEventData eventData) { }
 
     private bool shown;              // false until the first Refresh after bind
     private ushort shownItemId;      // last rendered state (empty => amount 0)

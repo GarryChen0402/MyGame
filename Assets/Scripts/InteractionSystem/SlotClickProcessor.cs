@@ -146,4 +146,69 @@ public static class SlotClickProcessor
             target.MarkChanged();
         }
     }
+
+    // Whether a slot can receive one drag distribution (Docs/物品拖拽分配交互
+    // 实现方案.md §5.1): place into an empty slot or merge into a same-item
+    // stack that is not full, policy gates included. Shared by the drag
+    // session collector and the settlement below - slot contents never change
+    // mid-drag, so the collector's check stays valid at settlement.
+    public static bool CanReceive(ISlotAccess slot, ItemStack carried)
+    {
+        if(slot == null || carried == null || carried.IsEmpty())return false;
+        var t = slot.Get();
+        if(t == null || t.IsEmpty())return slot.CanPlace(carried);       // empty slot
+        if(t.itemId != carried.itemId || slot.MaxStackFor(t) <= 1)return false;
+        if(t.amount >= slot.MaxStackFor(t))return false;                  // full stack
+        return slot.CanPlace(carried);                                    // same stack, merge
+    }
+
+    // DRAG_END (vanilla QUICK_CRAFT release): one settlement for every slot
+    // the cursor dragged over. targets are collected (deduped, pre-filtered
+    // by CanReceive) by the UIManager drag session. Left drag spreads carried
+    // as evenly as possible - remainder items go to the earliest targets;
+    // right drag places one item per target until carried runs out. Amounts
+    // truncated by a slot's capacity stay on the cursor; conservation holds.
+    public static void DragEnd(IReadOnlyList<ISlotAccess> targets, bool rightDrag, ItemStack carried)
+    {
+        if(targets == null || targets.Count == 0)return;
+        if(carried == null || carried.IsEmpty())return;
+        int n = targets.Count;
+
+        // Left drag: even spread. When carried.amount < n, per == 0 degrades
+        // naturally to "place 1 into the first carried.amount slots".
+        if(!rightDrag)
+        {
+            int per = carried.amount / n;
+            int rem = carried.amount % n;          // first `rem` targets get one extra
+            for(int i = 0; i < n && !carried.IsEmpty(); i++)
+            {
+                var target = targets[i];
+                var t = target.Get();
+                if(t == null)continue;
+                bool empty = t.IsEmpty();
+                int remain = target.MaxStackFor(empty ? carried : t) - (empty ? 0 : t.amount);
+                int put = Mathf.Min(per + (i < rem ? 1 : 0), remain);
+                if(put <= 0)continue;
+                if(empty)
+                {
+                    t.itemId = carried.itemId;
+                    t.amount = put;
+                }
+                else t.amount += put;              // same item checked by CanReceive
+                carried.amount -= put;
+                if(carried.amount == 0)carried.Clear();
+                target.MarkChanged();
+            }
+            return;
+        }
+
+        // Right drag: one per target in collection order.
+        foreach(var target in targets)
+        {
+            if(carried.IsEmpty())break;
+            target.PlaceOne(carried);
+            if(carried.IsEmpty())carried.Clear();
+            target.MarkChanged();
+        }
+    }
 }
