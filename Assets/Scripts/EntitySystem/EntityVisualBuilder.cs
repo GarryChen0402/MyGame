@@ -12,10 +12,24 @@ public static class EntityVisualBuilder
 {
     public static EntityVisual Build(EntityModel model, Dictionary<string, string> faceTextureIds,
                                      Material material, Transform parent)
+        => BuildFromRoots(model, model.Roots, faceTextureIds, material, parent);
+
+    // Builds the hierarchy subtree rooted at `rootId` (that cube and its
+    // descendants) instead of the model's own roots - the model editor shows
+    // one part per page this way. The subtree root keeps the cube's position,
+    // so it sits exactly where it does inside the full model.
+    public static EntityVisual BuildFrom(EntityModel model, string rootId,
+                                         Dictionary<string, string> faceTextureIds,
+                                         Material material, Transform parent)
+        => BuildFromRoots(model, new List<string> { rootId }, faceTextureIds, material, parent);
+
+    private static EntityVisual BuildFromRoots(EntityModel model, List<string> roots,
+                                               Dictionary<string, string> faceTextureIds,
+                                               Material material, Transform parent)
     {
         if(material == null)material = ResourceSystem.Instance.BlockMaterial;
 
-        var root = new GameObject(model.FullName);
+        var root = new GameObject(roots.Count == 1 ? roots[0] : model.FullName);
         root.transform.SetParent(parent, false);
 
         var faceRects = new Dictionary<string, Rect>();
@@ -25,7 +39,7 @@ public static class EntityVisualBuilder
                     faceRects[kv.Key] = tex.AtlasUVRect;
 
         var visual = new EntityVisual { Root = root.transform, PartTransforms = new(), BasePositions = new() };
-        foreach(string id in model.Roots)
+        foreach(string id in roots)
             BuildCube(model, id, root.transform, faceRects, material, visual);
         return visual;
     }

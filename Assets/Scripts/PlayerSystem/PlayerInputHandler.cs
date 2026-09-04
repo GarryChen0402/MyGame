@@ -37,6 +37,10 @@ public class PlayerInputHandler : IInputHandler
         // Widget smoke-test UI (default T).
         if(keys.WasPressed("minecraft:open_widget_test"))
             UIManager.Instance?.OpenUI("minecraft:widget_test");
+        // Entity model editor (default P, design doc §7 decision C revised):
+        // the Ctrl+P combo collides with the Unity editor's play shortcut.
+        if(keys.WasPressed("minecraft:open_entity_model_editor"))
+            UIManager.Instance?.OpenUI("entity_model_editor:entity_model_editor");
         MoveHandler(keys);
         InteractionHandler(keys);
     }

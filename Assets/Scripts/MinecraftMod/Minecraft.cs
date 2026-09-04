@@ -465,6 +465,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.UIDefinitions.Register(CraftingTableUI.craftingTableUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(PlayerUI.playerUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(WidgetTestUI.widgetTestUIDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(EntityModelEditorUI.editorUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
@@ -499,6 +500,10 @@ public class Minecraft : IMod
         // Widget smoke-test UI (UI 组件化重构设计方案 §3.4): opens the tab /
         // icon / text / input / button demo panel (WidgetTestUI).
         RegisterKeyBinding("open_widget_test", KeyCode.T, "game", "minecraft:player_input_handler");
+        // Entity model editor (design doc §7): plain P. Decision C originally
+        // specified Ctrl+P; the combo collides with the Unity editor's play
+        // shortcut, so the revision binds the bare key (2026-09-04).
+        RegisterKeyBinding("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
 
         //Break block sprite
         for(int i = 0; i < 10; i++)

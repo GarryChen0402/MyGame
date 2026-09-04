@@ -7,7 +7,8 @@ using UnityEngine;
 // carries the face UV rect (normalized within its texture) and color.
 public static class EntityModelParser
 {
-    private const float PixelsPerBlock = 16f;
+    // Public so EntityModelSerializer / EntityModelEditorSession reuse it.
+    public const float PixelsPerBlock = 16f;
 
     // Corner points of each face in unit-cube space (matches BaseGameModel winding).
     private static readonly Dictionary<string, Vector3[]> FaceCorners = new()
@@ -70,7 +71,6 @@ public static class EntityModelParser
         if(entry == null)return;
         var corners = FaceCorners[name];
         var verts = new List<Vector3>(4);
-        var uv = new List<Vector2>(4);
         var colors = new List<Color>(4);
         // JsonUtility leaves an unspecified Color at (0,0,0,0); treat that as white.
         Color color = entry.color.a == 0f ? Color.white : entry.color;
@@ -78,11 +78,9 @@ public static class EntityModelParser
         {
             Vector3 c = corners[i];
             verts.Add(new Vector3(c.x * size.x, c.y * size.y, c.z * size.z));
-            // Corner (x, y) maps into the uvRect: x -> width, y -> height.
-            uv.Add(new Vector2(entry.uvRect.x + c.x * entry.uvRect.z,
-                               entry.uvRect.y + c.y * entry.uvRect.w));
             colors.Add(color);
         }
+        var uv = ExpandFaceUv(name, entry.uvRect);
         Vector3 normal = FaceNormals[name];
         cube.Faces[name] = new ModelFaceData
         {
@@ -93,6 +91,32 @@ public static class EntityModelParser
             triangles = new List<int> { 0, 2, 1, 0, 3, 2 },
             canBeOccluded = entry.canBeOccluded
         };
+    }
+
+    // uvRect corner multipliers in vertex order, identical to the hand-written
+    // uv arrays of BaseGameModel's cube faces: the face-internal axis mapping
+    // is carried by the vertex order of FaceCorners, never derived from
+    // geometry coordinates (a constant-x face like "left" would otherwise
+    // collapse its u into one column and mirror faces like "front").
+    private static readonly Vector2[] FaceUvCorners =
+        { new(0, 0), new(1, 0), new(1, 1), new(0, 1) };
+
+    // Expands a normalized uvRect into the face's 4 corner UVs: vertex i maps
+    // onto the i-th corner of the rect (bottom-left, bottom-right, top-right,
+    // top-left), so every face renders unmirrored when viewed from outside,
+    // matching BaseGameModel. Public because the model editor's UV write-back
+    // path reuses the same expansion, keeping edited faces exactly derivable
+    // back by EntityModelSerializer.
+    public static List<Vector2> ExpandFaceUv(string face, Vector4 uvRect)
+    {
+        var corners = FaceCorners[face];   // unknown faces throw here; length drives the loop below
+        var uv = new List<Vector2>(4);
+        for(int i = 0; i < corners.Length; i++)
+        {
+            Vector2 p = FaceUvCorners[i];
+            uv.Add(new Vector2(uvRect.x + p.x * uvRect.z, uvRect.y + p.y * uvRect.w));
+        }
+        return uv;
     }
 }
 

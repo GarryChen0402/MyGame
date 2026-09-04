@@ -8,7 +8,7 @@ using UnityEngine.UI;
 // AddComponent on a sized GO, call Setup() once, optionally enable the mouse
 // look-tracking (vanilla InventoryScreen behavior: head - and optionally the
 // body - turn toward the cursor).
-public class EntityModelPreviewUI : MonoBehaviour
+public class EntityModelPreviewUI : MonoBehaviour, EntityModelPreviewRenderSystem.IModelPreviewHost
 {
     public enum FollowMode
     {

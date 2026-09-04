@@ -7,10 +7,17 @@ using UnityEngine.UI;
 // UIIconWidget/UITextWidget: self-built component + static factory, anchored
 // to the parent's center, size decided by the caller. Keystrokes are gated by
 // CharacterValidation.Integer (digits, leading '-' only); a sanitize pass
-// strips anything else so pasted text also stays a valid integer.
+// strips anything else so pasted text also stays a valid integer. Hosts drive
+// the red-frame "invalid value" look through SetInvalid and commit handling
+// mirrors UITextInputWidget: OnValueChanged fires per keystroke (live overlay
+// previews), OnSubmit on Enter / focus loss (apply).
 public class UIIntegerInputWidget : MonoBehaviour
 {
     private TMP_InputField inputField;
+    private Image bg;
+    private static readonly Color NormalColor = new(1f, 1f, 1f, 0.6f);
+    private static readonly Color InvalidColor = new(1f, 0.5f, 0.5f, 0.75f);
+
     private void Awake()
     {
         inputField = gameObject.AddComponent<TMP_InputField>();
@@ -35,9 +42,9 @@ public class UIIntegerInputWidget : MonoBehaviour
 
         // Subtle backdrop marks the input area; without a graphic on this GO
         // EventSystem could never hit the field to focus it, and the same
-        // image doubles as the transition graphic.
-        var bg = gameObject.AddComponent<Image>();
-        bg.color = new Color(1f, 1f, 1f, 0.6f);
+        // image doubles as the transition / invalid-state graphic.
+        bg = gameObject.AddComponent<Image>();
+        bg.color = NormalColor;
         inputField.targetGraphic = bg;
 
         // GO comes with a RectTransform from the factory (Awake-time transform
@@ -48,6 +55,14 @@ public class UIIntegerInputWidget : MonoBehaviour
         inputField.onValueChanged.AddListener(_ => Sanitize());
         SetValue(0);
     }
+
+    // Fires with the raw field text on Enter or focus loss. Hosts parse back
+    // through GetValue (empty / minus-only fields parse as 0).
+    public TMP_InputField.SubmitEvent OnSubmit => inputField.onEndEdit;
+
+    // Fires per keystroke - hosts use it to live-update dependent UI without
+    // waiting for a commit.
+    public TMP_InputField.OnChangeEvent OnValueChanged => inputField.onValueChanged;
 
     // Pasted text bypasses keystroke validation, so every change is re-checked
     // and repaired (SetTextWithoutNotify keeps this from re-triggering the
@@ -69,6 +84,10 @@ public class UIIntegerInputWidget : MonoBehaviour
         }
         return sb.ToString();
     }
+
+    // Host-driven validation look: red frame while invalid (the host decides
+    // validity; the widget only paints the state).
+    public void SetInvalid(bool invalid) => bg.color = invalid ? InvalidColor : NormalColor;
 
     // Empty / minus-only fields parse as 0.
     public int GetValue() => int.TryParse(inputField.text, out int v) ? v : 0;

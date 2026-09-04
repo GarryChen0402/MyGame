@@ -11,6 +11,15 @@ using UnityEngine;
 // with an unbounded instance count.
 public static class EntityModelPreviewRenderSystem
 {
+    // Anything that shows a stage-registered model tree: the render system
+    // hides/shows the tree around each draw and renders it into the host's RT.
+    // Both the player-inventory preview and the model editor preview host.
+    public interface IModelPreviewHost
+    {
+        EntityVisual Visual { get; }
+        RenderTexture RenderTarget { get; }
+    }
+
     private const string PreviewLayerName = "ModelPreview";
     private const int FallbackLayer = 30;   // highest free slot (31 is ItemIcon)
 
@@ -24,13 +33,17 @@ public static class EntityModelPreviewRenderSystem
     private static int stageLayer;
     private static int stageLayerMask;
     private static Camera stageCamera;
+
+    // Camera of the hidden stage. Preview components raycast picking rays
+    // through it; valid once anything has been registered.
+    public static Camera StageCamera => stageCamera;
     private static Transform stageRoot;
     private static Material stageMaterial;
-    private static readonly List<EntityModelPreviewUI> registered = new();
+    private static readonly List<IModelPreviewHost> registered = new();
 
-    // Builds the model tree under the stage and registers it for rendering.
-    // Returns false (with a warning) when the model resource is missing.
-    public static bool Register(EntityModelPreviewUI ui, string modelFullName,
+    // Looks the model resource up in the registry and registers it under the
+    // stage. Returns false (with a warning) when the model resource is missing.
+    public static bool Register(IModelPreviewHost host, string modelFullName,
                                 Dictionary<string, string> faceTextureIds, out EntityVisual visual)
     {
         visual = null;
@@ -40,38 +53,58 @@ public static class EntityModelPreviewRenderSystem
             Debug.LogWarning($"[EntityModelPreview] model '{modelFullName}' is not registered (EntityModels)");
             return false;
         }
+        return RegisterFromModel(host, model, faceTextureIds, out visual);
+    }
+
+    // Registers an externally provided model instance (e.g. the model editor's
+    // session copy) instead of a registry lookup by name.
+    public static bool RegisterFromModel(IModelPreviewHost host, EntityModel model,
+                                         Dictionary<string, string> faceTextureIds, out EntityVisual visual)
+        => RegisterBuilt(host, EntityVisualBuilder.Build(model, faceTextureIds, stageMaterial, stageRoot), out visual);
+
+    // RegisterFromModel limited to the subtree rooted at `rootId` - the model
+    // editor shows one part per page this way (design doc §5.1, decision A).
+    public static bool RegisterFromSubtree(IModelPreviewHost host, EntityModel model, string rootId,
+                                           Dictionary<string, string> faceTextureIds, out EntityVisual visual)
+        => RegisterBuilt(host, EntityVisualBuilder.BuildFrom(model, rootId, faceTextureIds, stageMaterial, stageRoot),
+            out visual);
+
+    private static bool RegisterBuilt(IModelPreviewHost host, EntityVisual visual, out EntityVisual outVisual)
+    {
+        outVisual = visual;
+        if(host == null || visual == null)return false;
         // The stage camera sits on -Z looking toward +Z (main-camera convention);
         // the model's front face points +Z, so the tree is turned 180° to face
-        // the camera without mirroring.
-        visual = EntityVisualBuilder.Build(model, faceTextureIds, stageMaterial, stageRoot);
+        // the camera without mirroring. Hosts that orbit the model rotate on top
+        // of this base pose.
         visual.Root.localRotation = Quaternion.Euler(0f, 180f, 0f);
         SetLayerRecursive(visual.Root, stageLayer);
-        registered.Add(ui);
+        registered.Add(host);
         return true;
     }
 
-    public static void Unregister(EntityModelPreviewUI ui)
+    public static void Unregister(IModelPreviewHost host)
     {
-        if(ui == null)return;
-        if(!registered.Remove(ui))return;
-        if(ui.Visual != null && ui.Visual.Root != null)
-            Object.Destroy(ui.Visual.Root.gameObject);
+        if(host == null)return;
+        if(!registered.Remove(host))return;
+        if(host.Visual != null && host.Visual.Root != null)
+            Object.Destroy(host.Visual.Root.gameObject);
     }
 
     // Renders the given preview into its RenderTexture right now: every other
     // registered model is hidden for the draw call, then restored.
-    public static void Render(EntityModelPreviewUI ui)
+    public static void Render(IModelPreviewHost host)
     {
         EnsureInit();
-        if(ui == null || ui.Visual == null || ui.RenderTarget == null)return;
+        if(host == null || host.Visual == null || host.RenderTarget == null)return;
         foreach(var other in registered)
-            if(other != ui && other.Visual != null)
+            if(other != host && other.Visual != null)
                 SetRenderersEnabled(other.Visual, false);
-        stageCamera.targetTexture = ui.RenderTarget;
+        stageCamera.targetTexture = host.RenderTarget;
         stageCamera.Render();
         stageCamera.targetTexture = null;
         foreach(var other in registered)
-            if(other != ui && other.Visual != null)
+            if(other != host && other.Visual != null)
                 SetRenderersEnabled(other.Visual, true);
     }
 
