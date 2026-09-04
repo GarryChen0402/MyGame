@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.VisualScripting;
 
 // Player UI (design doc Docs/玩家界面-模型预览组件与2x2个人合成设计方案.md
 // §5): opens with E. Upper area = the 3D player model preview (left half)
@@ -39,26 +40,22 @@ public class PlayerUI : UIBehavior
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(920, 420);
         rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
-        // Lifted above the panel center like CraftingTableUI: the attached
-        // player inventory panel occupies the lower half of the screen.
-        rt.localPosition += new Vector3(0, 160, 0);
+        rt.localPosition += new Vector3(0, 180, 0);
 
         var bgGo = new GameObject("Background");
         bgGo.transform.SetParent(transform, false);
-        var bgRt = bgGo.AddComponent<RectTransform>();
-        bgRt.anchorMin = Vector2.zero;
-        bgRt.anchorMax = Vector2.one;
-        bgRt.offsetMin = Vector2.zero;
-        bgRt.offsetMax = Vector2.zero;
-        var bgImage = bgGo.AddComponent<Image>();
-        bgImage.type = Image.Type.Sliced;
-        bgImage.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
+        var image = bgGo.AddComponent<Image>();
+        rt = bgGo.GetOrAddComponent<RectTransform>();
+        image.type = Image.Type.Sliced;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        image.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
 
         // Preview area (left): square so the square RenderTexture never
         // stretches. Content spans [-415, 425] local so the two halves sit
         // balanced around the panel center.
         var previewGo = EntityModelPreviewUI.AddEntityModelPreview(
-            "Player Model", new Vector3(-295f, 55f, 0f), new Vector2(240f, 240f),
+            "Player Model", new Vector3(-300f, 0f, 0f), new Vector2(240f * 1.8f, 240 * 1.8f),
             "minecraft:player", PlayerFaceTextures);
         previewGo.transform.SetParent(transform, false);
 
