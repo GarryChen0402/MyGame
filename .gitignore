@@ -116,3 +116,5 @@ Docs/
 # TextMesh Pro documentation (no runtime value)
 /Assets/TextMesh Pro/Documentation/
 Saves/
+Assets/Resources/GLB
+Assets/Resources/GLTF

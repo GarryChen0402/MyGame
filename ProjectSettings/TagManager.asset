@@ -35,7 +35,7 @@ TagManager:
   - 
   - 
   - 
-  - 
+  - ModelPreview
   - ItemIcon
   m_SortingLayers:
   - name: Default
