@@ -69,4 +69,15 @@ public class PlayerInventoryUI : UIBehavior
     {
         for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
     }
+
+    // Live sync while the panel is open: SlotUI.Refresh is nearly free when
+    // nothing changed (it compares its last-rendered state against the bound
+    // stack and only re-renders the 3D icon on a difference), so a per-frame
+    // sweep also picks up direct inventory writes - give commands, pickups,
+    // crafting - that never pass through the click path. Unity skips Update
+    // on inactive GameObjects, so this runs only while the panel is visible.
+    private void Update()
+    {
+        for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
+    }
 }

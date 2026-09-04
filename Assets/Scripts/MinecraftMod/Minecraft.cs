@@ -464,6 +464,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.UIDefinitions.Register(FurnaceUI.furanceUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(CraftingTableUI.craftingTableUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(PlayerUI.playerUIDefinition);
+        ResourceSystem.Instance.UIDefinitions.Register(WidgetTestUI.widgetTestUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
@@ -495,6 +496,9 @@ public class Minecraft : IMod
         RegisterKeyBinding("descend", KeyCode.LeftShift, "movement", "minecraft:player_input_handler");
         RegisterKeyBinding("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
         RegisterKeyBinding("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
+        // Widget smoke-test UI (UI 组件化重构设计方案 §3.4): opens the tab /
+        // icon / text / input / button demo panel (WidgetTestUI).
+        RegisterKeyBinding("open_widget_test", KeyCode.T, "game", "minecraft:player_input_handler");
 
         //Break block sprite
         for(int i = 0; i < 10; i++)

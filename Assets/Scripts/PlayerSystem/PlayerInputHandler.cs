@@ -34,6 +34,9 @@ public class PlayerInputHandler : IInputHandler
         // then, so the action can never double-fire.
         if(keys.WasPressed("minecraft:open_inventory"))
             UIManager.Instance?.OpenUI("minecraft:player_ui");
+        // Widget smoke-test UI (default T).
+        if(keys.WasPressed("minecraft:open_widget_test"))
+            UIManager.Instance?.OpenUI("minecraft:widget_test");
         MoveHandler(keys);
         InteractionHandler(keys);
     }
