@@ -21,8 +21,14 @@ public class InputHandlerManager : MonoBehaviour
     public IInputHandler CurrentInputHandler => inputHandlers.Peek();
 
 
+    // Context switch: clicks routed to the outgoing context are stale for the
+    // incoming one, so the action edge buffer is drained on every switch
+    // (MC's KeyMapping.releaseAll when a Screen opens/closes).
     public void Push(IInputHandler input)
-        => inputHandlers.Push(input);
+    {
+        KeyBindingManager.Instance.ClearPendingClicks();
+        inputHandlers.Push(input);
+    }
     
     public bool TryPush(string inputHandlerId)
     {
@@ -37,6 +43,7 @@ public class InputHandlerManager : MonoBehaviour
     public bool Pop()
     {
         if(inputHandlers.Count == 1)return false;
+        KeyBindingManager.Instance.ClearPendingClicks();
         var top = inputHandlers.Pop();
         top.OnExit();
         CurrentInputHandler.OnEnter();
@@ -45,6 +52,9 @@ public class InputHandlerManager : MonoBehaviour
 
     private void Update()
     {
+        // The keybinding layer refreshes here, ahead of the active handler, so
+        // edge presses of the current frame are routed and ready to consume.
+        KeyBindingManager.Instance.RefreshInput();
         CurrentInputHandler?.OnUpdate();
     }
 }

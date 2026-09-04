@@ -28,13 +28,14 @@ public class PlayerInputHandler : IInputHandler
     public override void OnUpdate()
     {
         if(player == null)return;
-        // Open the player UI (E). Closing is handled by UIInputHandler, which
-        // owns the input stack while any panel is open - this handler is not
-        // updated then, so the key can never double-fire.
-        if(Input.GetKeyDown(KeyCode.E))
+        var keys = KeyBindingManager.Instance;
+        // Open the player UI. Closing is handled by UIInputHandler, which owns
+        // the input stack while any panel is open - this handler is not updated
+        // then, so the action can never double-fire.
+        if(keys.WasPressed("minecraft:open_inventory"))
             UIManager.Instance?.OpenUI("minecraft:player_ui");
-        MoveHandler();
-        InteractionHandler();
+        MoveHandler(keys);
+        InteractionHandler(keys);
     }
 
 
@@ -42,7 +43,7 @@ public class PlayerInputHandler : IInputHandler
     {
         Cursor.lockState = CursorLockMode.Locked;
     }
-    private void MoveHandler()
+    private void MoveHandler(KeyBindingManager keys)
     {
         player.yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
         player.pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
@@ -62,12 +63,12 @@ public class PlayerInputHandler : IInputHandler
 
         Vector2 moveDir = Vector2.zero;
         int horizontalMove = 0;
-        if(Input.GetKey(KeyCode.W))moveDir.x += 1;
-        if(Input.GetKey(KeyCode.S))moveDir.x -= 1;
-        if(Input.GetKey(KeyCode.A))moveDir.y -= 1;
-        if(Input.GetKey(KeyCode.D))moveDir.y += 1;
-        if(Input.GetKey(KeyCode.Space))horizontalMove += 1;
-        if(Input.GetKey(KeyCode.LeftShift))horizontalMove -= 1;
+        if(keys.IsDown("minecraft:forward"))moveDir.x += 1;
+        if(keys.IsDown("minecraft:back"))moveDir.x -= 1;
+        if(keys.IsDown("minecraft:left"))moveDir.y -= 1;
+        if(keys.IsDown("minecraft:right"))moveDir.y += 1;
+        if(keys.IsDown("minecraft:ascend"))horizontalMove += 1;
+        if(keys.IsDown("minecraft:descend"))horizontalMove -= 1;
 
         float yawRad = player.yaw * Mathf.Deg2Rad;
         Vector3 moveDirection = new Vector3(Mathf.Sin(yawRad), 0, Mathf.Cos(yawRad)).normalized;
@@ -79,7 +80,7 @@ public class PlayerInputHandler : IInputHandler
         player.Move(motion);
     }
 
-    private void InteractionHandler()
+    private void InteractionHandler(KeyBindingManager keys)
     {
         // Mouse wheel cycles the selected inventory slot (wraps around).
         float scroll = Input.GetAxis("Mouse ScrollWheel");
@@ -101,7 +102,7 @@ public class PlayerInputHandler : IInputHandler
 
         // Left-click break (P4 of the item drop dev plan): empty-hand or held
         // item both break; drop spawning is wired in P5.
-        if (Input.GetMouseButtonDown(0))
+        if (keys.WasPressed("minecraft:attack"))
         {
             if (player.CurrentRaycastHitResult.IsHit)
             {
@@ -112,7 +113,7 @@ public class PlayerInputHandler : IInputHandler
             }
         }
 
-        if (Input.GetMouseButtonDown(1))
+        if (keys.WasPressed("minecraft:use_item"))
         {
             if (player.IsHoldingItem())
             {

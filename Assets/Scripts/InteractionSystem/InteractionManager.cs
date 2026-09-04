@@ -27,7 +27,7 @@ public class InteractionManager
         // The session driver (Entity.ProcessInteractionSession) accumulates the
         // hold time and fires OnComplete once it reaches CompleteTime; the
         // callback consumes entity.Session as its context (single source).
-        entity.SetSession(KeyCode.Mouse0, InteractionSessionTargetType.Block,
+        entity.SetSession("minecraft:attack", InteractionSessionTargetType.Block,
             () => CompleteBreakSession(entity), completeTime, entity, dimCoord, null);
     }
 

@@ -43,6 +43,8 @@ public partial class ResourceSystem
     public ResourceRegistryTable<UIDefinition> UIDefinitions {get;} = new();
     // Input Handler
     public ResourceRegistryTable<IInputHandler> InputHandlers {get;} = new();
+    // Input actions (physical key -> action table, MC KeyMapping style)
+    public ResourceRegistryTable<KeyBinding> KeyBindings {get;} = new();
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;
@@ -89,7 +91,7 @@ public partial class ResourceSystem
         DataContainerDefinitions.Freeze();
         WorkContainerDefinitions.Freeze();
         BlockEntityDefinitions.Freeze();
-        
+        KeyBindings.Freeze();
     }
 
     public void PostFreeze()

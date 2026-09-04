@@ -38,7 +38,9 @@ public class Entity // Data Class
     public virtual void ProcessInteractionSession(float dt)
     {
         if (Session.Completed)return;
-        if(!Input.GetKey(Session.bindKey))Session.Completed = true;//Interupt
+        // Interrupt when the action is no longer held; IsDown also gates on the
+        // active input context, so opening a panel stops an in-progress break.
+        if(!KeyBindingManager.Instance.IsDown(Session.bindingFullName))Session.Completed = true;
         if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
         // else if(Session.TargetType == InteractionSessionTargetType.Entity && ())// TODO: add the raycast to raycast the entity
         else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
@@ -64,9 +66,9 @@ public class Entity // Data Class
     public virtual ItemStack GetCurrentHoldingItemStack() => null;
     
     public InteractionSessionContext Session {get; private set;} = new();
-    public void SetSession(KeyCode key, InteractionSessionTargetType type, Action OnComplete, float CompleteTime, Entity entity = null, Vector3Int blockCoord = default, ItemStack itemStack = null)
+    public void SetSession(string bindingFullName, InteractionSessionTargetType type, Action OnComplete, float CompleteTime, Entity entity = null, Vector3Int blockCoord = default, ItemStack itemStack = null)
     {
-        Session.bindKey = key;
+        Session.bindingFullName = bindingFullName;
         Session.CompleteTime = CompleteTime;
         Session.Durantion = 0;
         Session.TargetType = type;

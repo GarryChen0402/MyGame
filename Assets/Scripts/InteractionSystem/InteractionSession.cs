@@ -10,7 +10,8 @@ public enum InteractionSessionTargetType
 
 public class InteractionSessionContext
 {
-    public KeyCode bindKey;
+    // Action full name whose hold state keeps the session alive (rebind-aware).
+    public string bindingFullName;
     public InteractionSessionTargetType TargetType;
     public bool Completed = false;
     public ItemStack itemStack;

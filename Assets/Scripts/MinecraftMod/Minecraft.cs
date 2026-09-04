@@ -469,6 +469,33 @@ public class Minecraft : IMod
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new UIInputHandler());
 
+        // ---- input actions (default bindings; players rebind via overrides,
+        // game code only ever polls action ids, never physical keys) ----
+        void RegisterKeyBinding(string name, KeyCode key, string category, params string[] allowedHandlers)
+        {
+            ResourceSystem.Instance.KeyBindings.Register(new KeyBinding
+            {
+                modId = ModId,
+                name = name,
+                DefaultKey = key,
+                Category = category,
+                AllowedInputHandlers = allowedHandlers == null ? null : new HashSet<string>(allowedHandlers)
+            });
+        }
+        RegisterKeyBinding("open_inventory", KeyCode.E, "game", "minecraft:player_input_handler");
+        // Same default key as open_inventory on purpose: routing (KeyBindingManager
+        // refresh) feeds the press to whichever action the current input context
+        // admits, so E opens in game and closes inside a panel (design doc §6.1).
+        RegisterKeyBinding("close_ui", KeyCode.E, "ui", "minecraft:ui_input_handler");
+        RegisterKeyBinding("forward", KeyCode.W, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("back", KeyCode.S, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("left", KeyCode.A, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("right", KeyCode.D, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("ascend", KeyCode.Space, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("descend", KeyCode.LeftShift, "movement", "minecraft:player_input_handler");
+        RegisterKeyBinding("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
+        RegisterKeyBinding("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
+
         //Break block sprite
         for(int i = 0; i < 10; i++)
         {
