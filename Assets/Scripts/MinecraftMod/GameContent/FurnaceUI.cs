@@ -29,14 +29,8 @@ public class FurnaceUI : UIBehavior
         rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
         rt.localPosition += new Vector3(0, 160, 0);
 
-        var bgGo = new GameObject("Background");
+        var bgGo = UIWidgetBackground.CreateNewBackground();
         bgGo.transform.SetParent(transform, false);
-        var image = bgGo.AddComponent<Image>();
-        rt = bgGo.GetOrAddComponent<RectTransform>();
-        image.type = Image.Type.Sliced;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        image.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
 
         //-120 220
         var inputGo = new GameObject("Input Slot");

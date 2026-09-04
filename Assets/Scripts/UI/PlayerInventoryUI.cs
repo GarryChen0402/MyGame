@@ -17,14 +17,8 @@ public class PlayerInventoryUI : UIBehavior
         rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
         rt.localPosition += new Vector3(0, 50, 0);
 
-        var bgGo = new GameObject("Background");
+        var bgGo = UIWidgetBackground.CreateNewBackground();
         bgGo.transform.SetParent(transform, false);
-        var image = bgGo.AddComponent<Image>();
-        rt = bgGo.GetOrAddComponent<RectTransform>();
-        image.type = Image.Type.Sliced;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        image.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
 
         // x [-400, 400]
         int[] xPos = {-400, -300, -200, -100, 0, 100, 200, 300, 400};

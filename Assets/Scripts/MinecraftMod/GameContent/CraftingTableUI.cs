@@ -26,18 +26,12 @@ public class CraftingTableUI : UIBehavior
         rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
         rt.localPosition += new Vector3(0, 160, 0);
 
-        var bgGo = new GameObject("Background");
+        var bgGo = UIWidgetBackground.CreateNewBackground();
         bgGo.transform.SetParent(transform, false);
-        var image = bgGo.AddComponent<Image>();
-        rt = bgGo.GetOrAddComponent<RectTransform>();
-        image.type = Image.Type.Sliced;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        image.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
 
         // 3x3 grid, row-major with rows top-to-bottom (index = row*3+col),
         // 110 px pitch around the left half; result slot on the right.
-        for(int i = 0; i < gridSlots.Length; i++)
+        for (int i = 0; i < gridSlots.Length; i++)
         {
             var go = new GameObject($"Grid Slot {i}");
             gridSlots[i] = go.AddComponent<SlotUI>();
