@@ -48,6 +48,7 @@ public class EntityManager
         }
         var target = new MobEntity();
         target.Init(def, targetPos);
+        EntityRenderManager.Instance.Attach(target);   // shell, once the data is ready
         return true;
     }
 }

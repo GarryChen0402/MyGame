@@ -12,10 +12,6 @@ public class ItemEntityManager
 
     private readonly HashSet<ItemEntity> tracked = new();
     private readonly List<ItemEntity> tickBuffer = new();   // snapshot for iteration
-    // Render shells (one GO per entity, EntityRenderer only). Keyed here so a
-    // despawn can destroy the GO; migration between chunks keeps the shell.
-    private readonly Dictionary<ItemEntity, GameObject> shells = new();
-    private Transform dynamicRoot;
 
     // Lazy singleton: first Instance access happens from WorldManager.Tick
     // (GameLoopDriver), by which point EventBus/PhysicsManager subscriptions are
@@ -75,7 +71,7 @@ public class ItemEntityManager
     }
 
     // Total spawn entry: build data -> place into the owner chunk -> tracked
-    // -> render shell GO (EntityRenderer reads the data one-way).
+    // -> render shell GO (EntityRenderManager reads the data one-way).
     public void SpawnItemEntity(ushort dimensionId, Vector3 position, ItemStack stack,
         Vector3? motion = null, float pickupDelay = 0.5f)
     {
@@ -90,7 +86,7 @@ public class ItemEntityManager
         entity.PickupDelay = pickupDelay;
         entity.SetPosition(position);
         chunk.RegisterItemEntity(entity);   // into Chunk.ItemEntities + tracked
-        CreateRenderShell(entity);
+        EntityRenderManager.Instance.Attach(entity);
     }
 
     // Total despawn: idempotent (tracked membership is the sentinel). Removes
@@ -105,36 +101,7 @@ public class ItemEntityManager
             entity.OwnerChunk.ItemEntities.Remove(entity);
             entity.OwnerChunk = null;
         }
-        if(shells.Remove(entity, out var go))Object.Destroy(go);
-        entity.OnDestroy();   // DestroyEntity -> PhysicsManager.UnRegister
-    }
-
-    // All shells live under one lazy "DynamicEntities" root so they can be
-    // parented/filtered together; the root follows the world renderer.
-    private Transform DynamicRoot
-    {
-        get
-        {
-            if(dynamicRoot == null)
-            {
-                var go = new GameObject("DynamicEntities");
-                if(WorldRenderer.Instance != null)
-                    go.transform.SetParent(WorldRenderer.Instance.transform, false);
-                dynamicRoot = go.transform;
-            }
-            return dynamicRoot;
-        }
-    }
-
-    private void CreateRenderShell(ItemEntity entity)
-    {
-        var go = new GameObject($"Item Drop {entity.Stack.itemId}");
-        go.transform.SetParent(DynamicRoot, false);
-        // Meshes span 1m; the 0.25 scale matches the entity's physics box.
-        go.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-        var shell = go.AddComponent<EntityRenderer>();
-        shell.Bind(entity);
-        shells[entity] = go;
+        entity.OnDestroy();   // DestroyEntity -> PhysicsManager.UnRegister, shell destroyed by EntityRenderManager
     }
 
     // Chunk disabled/unloaded: its drops stop ticking and are dropped with it
