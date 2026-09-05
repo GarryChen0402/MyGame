@@ -73,20 +73,3 @@ public class EntityRenderManager
         }
     }
 }
-
-// Render shell sync for one MobEntity: reads the entity data one-way every
-// frame. Entities have no own transform - all movement happens on the AABBs
-// (PhysicsManager.MoveEntity) - so the shell re-aligns to the main box's feet
-// pivot each frame. Same one-way contract as EntityRenderer.
-public class MobVisualSync : MonoBehaviour
-{
-    private MobEntity entity;
-
-    public void Bind(MobEntity entity) => this.entity = entity;
-
-    private void Update()
-    {
-        if(entity == null || entity.AABBs.Count == 0)return;
-        transform.position = entity.MainBox.Pivot;
-    }
-}

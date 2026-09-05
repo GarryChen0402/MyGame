@@ -30,6 +30,7 @@ public static class ZombieAI
 
         var root = mob.AI.RootMachine;
         var ctx = mob.AI.Context;
+        mob.AI.TurnSpeed = cfg.TurnSpeed;   // moving frames converge yaw onto the intent heading
 
         var wanderStop = new ZombieWanderStopState(cfg.TurnSpeed, cfg.WanderMin, cfg.WanderMax);
         var wanderMove = new ZombieWanderMoveState(cfg.WanderMin, cfg.WanderMax);

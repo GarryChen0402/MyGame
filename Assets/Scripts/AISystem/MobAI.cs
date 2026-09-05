@@ -12,6 +12,9 @@ public class MobAI
     public AIContext Context = new();
     public AIIntent Intent = new();
     public AIStateMachine RootMachine;
+    // yaw convergence rate on moving frames (deg/s; injected by the assembler
+    // from its Config). 0 = heading stays owned by the decision states.
+    public float TurnSpeed;
     // Shared by Chase/Attack for A* following; reuses its waypoints/cursor
     // across state switches so a path never restarts from scratch.
     public ZombieAIPath Path = new();
@@ -52,7 +55,7 @@ public class MobAI
 
         RootMachine.Tick(dt);   // no-op while no states are registered
 
-        Apply();
+        Apply(dt);
     }
 
     private void RefreshSense()
@@ -70,7 +73,7 @@ public class MobAI
 
     private const float JumpSpeed = 6.4f;   // m/s; player-jump parity (apex ~1.28 clears a 1-block ledge)
 
-    private void Apply()
+    private void Apply(float dt)
     {
         // Hurt stun (InvincibleTimer > 0) holds horizontal writes so the
         // knockback slide plays out; target speed resumes once it ends.
@@ -83,6 +86,15 @@ public class MobAI
 
         Vector3 dir = Intent.MoveDirection;
         if(Mathf.Abs(dir.x) < 1e-4f && Mathf.Abs(dir.z) < 1e-4f)return;   // stand intent: no write
+
+        // Heading converges to the movement intent (data-layer turn; the render
+        // shell only mirrors yaw). Stand frames never reach here, so idle
+        // turning stays owned by the decision states (WanderStop).
+        if(TurnSpeed > 0f)
+        {
+            float target = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            Mob.yaw = Mathf.MoveTowardsAngle(Mob.yaw, target, TurnSpeed * dt);
+        }
 
         float speed = Mob.Definition.BaseMoveSpeed;
         Mob.Motion = new Vector3(dir.x * speed, Mob.Motion.y, dir.z * speed);

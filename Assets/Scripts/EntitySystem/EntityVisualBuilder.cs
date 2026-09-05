@@ -61,6 +61,7 @@ public static class EntityVisualBuilder
         }
         var go = Object.Instantiate(prefab, parent, false);
         var visual = new EntityVisual { Root = go.transform, PartTransforms = new(), BasePositions = new() };
+        visual.Animator = go.GetComponentInChildren<Animator>(true);
         foreach(var part in go.GetComponentsInChildren<Transform>(true))
         {
             if(part == go.transform)continue;
@@ -163,4 +164,8 @@ public class EntityVisual
     public Transform Root;
     public Dictionary<string, Transform> PartTransforms;
     public Dictionary<string, Vector3> BasePositions;
+    // Unity Animator of Prefab-backed models. Mount node varies by source
+    // (glTFast nests it), so it is found by search, not fixed path. Json cube
+    // models have none (their animation goes through EntityAnimator layers).
+    public Animator Animator;
 }

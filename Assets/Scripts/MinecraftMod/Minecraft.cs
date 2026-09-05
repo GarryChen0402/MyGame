@@ -1,6 +1,5 @@
 
 using System.Collections.Generic;
-using Unity.Burst.Intrinsics;
 using UnityEngine;
 
 public class Minecraft : IMod
