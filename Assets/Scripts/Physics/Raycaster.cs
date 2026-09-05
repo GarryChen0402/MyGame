@@ -104,7 +104,7 @@ public static class Raycaster
                 {
                     entityT = boxT;
                     entityHit = new RaycastHit(default, normal, origin + dir * boxT,
-                                               boxT, RaycastHitType.Mob, pair.Key);
+                                                boxT, RaycastHitType.Mob, pair.Key);
                 }
             }
         }

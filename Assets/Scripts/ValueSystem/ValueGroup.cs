@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 public class ValueModifierUnit
 {
@@ -48,4 +50,41 @@ public class ChancedModifier : ValueModifierUnit
         if(Random.Range(0f, 1f) >= Params["chance"])return input;
         else return input * (Params["baseRatio"] + Params["extraRatio"]);
     }
+}
+
+public class ValueEntry
+{
+    public Dictionary<string, ValueModifierUnit> MultiParts {get; private set;}= new();
+    private float baseValue;
+    public float CurrentValue => GetValue();
+
+    public ValueEntry(float baseVal) => baseValue = baseVal;
+
+    private float GetValue()
+    {
+        float target = baseValue;
+        foreach(var unit in MultiParts)target = unit.Value.Apply(target);
+        return target;
+    }
+
+    public bool AddNewPart(string id, ValueModifierUnit unit)
+    {
+        if(MultiParts.ContainsKey(id))return false;
+        MultiParts[id] = unit;
+        return false;
+    }
+
+    public bool TryGetParam(string unitId, string paramKey, out float value)
+    {
+        value = 0;
+        if(!MultiParts.ContainsKey(unitId))return false;
+        return MultiParts[unitId].TryGetParam(paramKey, out value);
+    }
+
+    public bool TrySetParam(string unitId, string paramKey, float value)
+    {
+        if(!MultiParts.ContainsKey(unitId))return false;
+        return MultiParts[unitId].TrySetParam(paramKey, value);
+    }
+    
 }
