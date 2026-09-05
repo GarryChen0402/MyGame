@@ -11,10 +11,13 @@ public static class EntityModelEditorSession
 {
     public static EntityModel DeepCopy(EntityModel src)
     {
+        src.EnsureParsed();   // registry descriptors parse lazily; the copy needs the cube tree
         var copy = new EntityModel
         {
             modId = src.modId,
             name = src.name,
+            SourceType = src.SourceType,
+            SourcePath = src.SourcePath,
             Roots = new List<string>(src.Roots),
             Cubes = new Dictionary<string, CustomCube>(),
             Hierarchy = new Dictionary<string, List<string>>()

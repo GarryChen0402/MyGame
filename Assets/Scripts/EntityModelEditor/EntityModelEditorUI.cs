@@ -37,6 +37,11 @@ public class EntityModelEditorUI : UIBehavior
             Debug.LogError($"[EntityModelEditor] model '{DefaultModelFullName}' is not registered (EntityModels)");
             return;
         }
+        if(source.SourceType != EntityModelSourceType.Json)
+        {
+            Debug.LogError($"[EntityModelEditor] '{DefaultModelFullName}' is a {source.SourceType} source; the cube editor edits Json cube models only");
+            return;
+        }
         // Editing session = deep copy; the registry model (and the player that
         // renders it) must never see preview-side mutations (design doc §4.1).
         sessionModel = EntityModelEditorSession.DeepCopy(source);

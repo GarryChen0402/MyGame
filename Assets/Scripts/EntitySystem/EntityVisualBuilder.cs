@@ -10,18 +10,66 @@ using UnityEngine;
 // FullName) onto the atlas; pass null to use a full-texture rect.
 public static class EntityVisualBuilder
 {
+    // Builds the visual of an EntityModel whatever its source kind: Json
+    // sources go through the cube-tree builder (parsing lazily first), Prefab
+    // sources are instantiated directly. Returns null when the source is
+    // missing or unbuildable (callers must tolerate null).
     public static EntityVisual Build(EntityModel model, Dictionary<string, string> faceTextureIds,
                                      Material material, Transform parent)
-        => BuildFromRoots(model, model.Roots, faceTextureIds, material, parent);
+    {
+        if(model == null)return null;
+        if(model.SourceType == EntityModelSourceType.Prefab)
+            return BuildPrefab(model, parent);
+        if(!model.EnsureParsed())
+        {
+            Debug.LogError($"[EntityVisualBuilder] cannot build json model '{model.FullName}' from '{model.SourcePath}'");
+            return null;
+        }
+        return BuildFromRoots(model, model.Roots, faceTextureIds, material, parent);
+    }
 
     // Builds the hierarchy subtree rooted at `rootId` (that cube and its
     // descendants) instead of the model's own roots - the model editor shows
     // one part per page this way. The subtree root keeps the cube's position,
-    // so it sits exactly where it does inside the full model.
+    // so it sits exactly where it does inside the full model. Cube-only: a
+    // Prefab source has no cube tree to pick a subtree from.
     public static EntityVisual BuildFrom(EntityModel model, string rootId,
                                          Dictionary<string, string> faceTextureIds,
                                          Material material, Transform parent)
-        => BuildFromRoots(model, new List<string> { rootId }, faceTextureIds, material, parent);
+    {
+        if(model == null)return null;
+        if(model.SourceType == EntityModelSourceType.Prefab)
+        {
+            Debug.LogWarning($"[EntityVisualBuilder] '{model.FullName}' is a Prefab source; subtree building applies to Json cube models only");
+            return null;
+        }
+        if(!model.EnsureParsed())return null;
+        return BuildFromRoots(model, new List<string> { rootId }, faceTextureIds, material, parent);
+    }
+
+    // Prefab source: instantiate the Resources prefab as the visual root and
+    // index its named child transforms (bones/cubes) so part-driven consumers
+    // (EntityAnimator, editor picking) can address prefab parts by name too.
+    // The prefab carries its own meshes/materials/Animator; no cube data exists.
+    private static EntityVisual BuildPrefab(EntityModel model, Transform parent)
+    {
+        var prefab = Resources.Load<GameObject>(model.SourcePath);
+        if(prefab == null)
+        {
+            Debug.LogError($"[EntityVisualBuilder] prefab source '{model.SourcePath}' of '{model.FullName}' not found (Resources)");
+            return null;
+        }
+        var go = Object.Instantiate(prefab, parent, false);
+        var visual = new EntityVisual { Root = go.transform, PartTransforms = new(), BasePositions = new() };
+        foreach(var part in go.GetComponentsInChildren<Transform>(true))
+        {
+            if(part == go.transform)continue;
+            if(visual.PartTransforms.ContainsKey(part.name))continue;   // first (outermost) hit wins
+            visual.PartTransforms[part.name] = part;
+            visual.BasePositions[part.name] = part.localPosition;
+        }
+        return visual;
+    }
 
     private static EntityVisual BuildFromRoots(EntityModel model, List<string> roots,
                                                Dictionary<string, string> faceTextureIds,

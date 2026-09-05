@@ -53,9 +53,15 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_front", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_front"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_side", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_top", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_top"));
-        // EntityModel & EntityAnimation Content
-        EntityModel playerModel = EntityModelParser.Parse(Resources.Load<TextAsset>("Models/entity/player").text);
-        ResourceSystem.Instance.EntityModels.Register(playerModel);
+        // EntityModel & EntityAnimation Content. Models register as source
+        // descriptors {type, path}; cube data parses lazily on first render.
+        ResourceSystem.Instance.EntityModels.Register(new EntityModel
+        {
+            modId = ModId,
+            name = "player",
+            SourceType = EntityModelSourceType.Json,
+            SourcePath = "Models/entity/player"
+        });
         ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_walk").text));
         ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_attack").text));
         // BlockDefinition Content
@@ -508,6 +514,13 @@ public class Minecraft : IMod
 
 
         // Mob Entity
+        ResourceSystem.Instance.EntityModels.Register(new EntityModel
+        {
+            modId = ModId,
+            name = "zombie",
+            SourceType = EntityModelSourceType.Prefab,
+            SourcePath = "GLTF/Zombie1/source/zombie"   // glTFast-imported zombie prefab
+        });
         var zombie = new MobDefinition()
         {
             modId = ModId,
@@ -519,6 +532,7 @@ public class Minecraft : IMod
             BaseMaxHealth = 20,
             BaseDamage = 2,
             BaseMoveSpeed = 5,
+            ModelId = $"{ModId}:zombie",
             CollisionBoxes = new()
             {
                 new AABB()

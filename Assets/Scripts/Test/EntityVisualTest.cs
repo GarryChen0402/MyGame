@@ -24,6 +24,7 @@ public class EntityVisualTest : MonoBehaviour
             ["right"] = "minecraft:firefly"
         };
         visual = EntityVisualBuilder.Build(model, faceTextureIds, null, null);
+        if(visual == null)return;   // missing/unbuildable source already logged by the builder
         visual.Root.position = new Vector3(0f, 32f, 0f);
         AddFrontIndicator();
     }
