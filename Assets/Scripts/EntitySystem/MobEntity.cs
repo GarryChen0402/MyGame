@@ -6,6 +6,14 @@ public class MobEntity : Entity
     public float CurrentHealth {get; private set;} = 0;
     public ValueEntry MaxHealth {get; private set;}
 
+    // Head heading + lock flag (data layer, same shape as Entity.yaw): MobAI
+    // evolves HeadYaw toward the look target while pursuing and sets
+    // HeadLocked, and settles HeadYaw back onto the body heading otherwise
+    // (unlocked - the animation owns the head again). The render shell
+    // mirrors HeadYaw onto the model's head node only while locked.
+    public float HeadYaw;
+    public bool HeadLocked;
+
     // Drives perception/decision/execution while alive (null until Init).
     // Stopped on death: a corpse is never AI-driven again.
     public MobAI AI {get; private set;}

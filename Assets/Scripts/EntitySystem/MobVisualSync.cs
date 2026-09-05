@@ -16,6 +16,7 @@ public class MobVisualSync : MonoBehaviour
 {
     private MobEntity entity;
     private Animator animator;
+    private Transform headPart;   // semantic "head" node of the rig; null = nothing to swivel
 
     private bool hasWalk, hasAttack, hasIdle, hasDie;
     private int walkHash, attackHash, idleHash, dieHash;
@@ -25,13 +26,21 @@ public class MobVisualSync : MonoBehaviour
     private bool speedFrozen;
 
     private const float WalkSpeedThreshold = 0.3f;   // m/s; below this a mob is standing
+    private const string HeadPartName = "head";      // rig naming convention (zombie glTF node)
+    private const float HeadSwivelRange = 75f;       // deg off the body heading; a neck-rig constraint
 
     private Action<InteractionSessionContextStartEvent> attackHandler;   // kept for unsubscribe by reference
 
-    public void Bind(MobEntity entity)
+    public void Bind(MobEntity entity, EntityVisual visual)
     {
         this.entity = entity;
-        animator = GetComponentInChildren<Animator>(true);
+        if(visual != null)
+        {
+            animator = visual.Animator;
+            if(visual.PartTransforms != null)
+                visual.PartTransforms.TryGetValue(HeadPartName, out headPart);
+        }
+        animator ??= GetComponentInChildren<Animator>(true);
         if(animator != null)
         {
             walkHash = Animator.StringToHash("walk");
@@ -72,6 +81,20 @@ public class MobVisualSync : MonoBehaviour
         // Pure mapping of entity heading - never writes entity data back.
         transform.rotation = Quaternion.Euler(entity.pitch, entity.yaw, 0f);
         if(animator != null)UpdateAnimation();
+    }
+
+    // Head swivel override runs in LateUpdate - after the Animator evaluated
+    // the skeleton this frame - so the mapped pose survives while the clips
+    // own the head as soon as the lock ends (wander) or the entity dies.
+    private void LateUpdate()
+    {
+        if(entity == null || entity.AABBs.Count == 0 || headPart == null)return;
+        if(entity.IsDead || !entity.HeadLocked)return;   // dead/unlocked: the animation owns the head
+        // Pure mapping of the data-layer heading, clamped to the rig's neck
+        // range - a visual constraint, never a write-back to entity data.
+        float swivel = Mathf.Clamp(Mathf.DeltaAngle(entity.yaw, entity.HeadYaw),
+                                   -HeadSwivelRange, HeadSwivelRange);
+        headPart.localRotation = Quaternion.Euler(0f, swivel, 0f);
     }
 
     // Semantic ladder, highest priority first. "Freeze" pins the current frame

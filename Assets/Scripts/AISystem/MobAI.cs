@@ -43,8 +43,10 @@ public class MobAI
     {
         // One-frame intent contract: every decision state writes what it wants
         // this tick, so a frame that requests nothing must not inherit a stale
-        // jump from the previous one (wander states never set it).
+        // jump or look target from the previous one (wander states never set
+        // them).
         Intent.JumpRequested = false;
+        Intent.LookAt = null;
 
         senseAccumulator += dt;
         if(senseAccumulator >= SenseInterval)
@@ -56,6 +58,7 @@ public class MobAI
         RootMachine.Tick(dt);   // no-op while no states are registered
 
         Apply(dt);
+        UpdateHead(dt);
     }
 
     private void RefreshSense()
@@ -72,6 +75,12 @@ public class MobAI
     }
 
     private const float JumpSpeed = 6.4f;   // m/s; player-jump parity (apex ~1.28 clears a 1-block ledge)
+
+    // Head convergence rates (deg/s): fast while locked on a look target so
+    // the head snaps ahead of the slower body turn; slower when settling back
+    // onto the body heading.
+    private const float HeadTurnSpeed = 540f;
+    private const float HeadReturnSpeed = 360f;
 
     private void Apply(float dt)
     {
@@ -99,6 +108,28 @@ public class MobAI
         float speed = Mob.Definition.BaseMoveSpeed;
         Mob.Motion = new Vector3(dir.x * speed, Mob.Motion.y, dir.z * speed);
         Mob.AiWroteMotion = true;
+    }
+
+    // Heading-of-the-head evolution (one-way; the render shell only mirrors
+    // HeadYaw onto the head node while HeadLocked). A look intent locks the
+    // head onto the target's horizontal angle; without one the head settles
+    // back onto the body heading so a later lock never starts from a stale
+    // pose. Death stops the AI, so a corpse keeps whatever the die clip does.
+    private void UpdateHead(float dt)
+    {
+        Entity look = Intent.LookAt;
+        if(look == null)
+        {
+            Mob.HeadLocked = false;
+            Mob.HeadYaw = Mathf.MoveTowardsAngle(Mob.HeadYaw, Mob.yaw, HeadReturnSpeed * dt);
+            return;
+        }
+        Mob.HeadLocked = true;
+        Vector3 d = look.Position - Mob.Position;
+        d.y = 0f;
+        if(d.sqrMagnitude < 1e-6f)return;   // overlapped with the target: keep the current heading
+        float target = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+        Mob.HeadYaw = Mathf.MoveTowardsAngle(Mob.HeadYaw, target, HeadTurnSpeed * dt);
     }
 
     public void Stop()

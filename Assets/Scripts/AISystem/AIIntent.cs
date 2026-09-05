@@ -15,4 +15,9 @@ public class AIIntent
     // clears it before the decision tick, so a frame with no request never
     // inherits a stale one.
     public bool JumpRequested;
+
+    // Entity to face this tick (pursuit states set it each tick they run).
+    // MobAI.Update clears it with the other one-frame intents and evolves
+    // MobEntity.HeadYaw toward the target's horizontal angle while it is set.
+    public Entity LookAt;
 }

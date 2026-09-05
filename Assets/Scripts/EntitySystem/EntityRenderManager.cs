@@ -47,7 +47,7 @@ public class EntityRenderManager
         if(!ResourceSystem.Instance.EntityModels.TryGetResourceWithFullName(entity.Definition.ModelId, out var model))return;
         var visual = EntityVisualBuilder.Build(model, null, null, DynamicRoot);
         if(visual?.Root == null)return;   // missing/unbuildable source already logged by the builder
-        visual.Root.gameObject.AddComponent<MobVisualSync>().Bind(entity);
+        visual.Root.gameObject.AddComponent<MobVisualSync>().Bind(entity, visual);
         shells[entity] = visual.Root.gameObject;
     }
 

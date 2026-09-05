@@ -27,6 +27,7 @@ public class ZombieAttackState : AIState
     public override void Tick(float dt)
     {
         Brain.Path.Follow(Brain.Context, Brain.Intent, dt);   // shared approach move (design doc §3.2)
+        Brain.Intent.LookAt = Brain.Context.Target;           // keep facing the victim between swings
         if(Brain.Mob.Session.Completed)StartSwing();          // previous blow settled -> next round
     }
 

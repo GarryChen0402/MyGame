@@ -101,16 +101,25 @@ public class ZombieAIPath
         }
     }
 
-    private static readonly Vector3Int[] NeighborOffsets =
+    private const float OrthogonalCost = 1f;
+    private static readonly float DiagonalCost = Mathf.Sqrt(2f);
+
+    private static readonly Vector3Int[] OrthogonalOffsets =
     {
         new( 1, 0, 0), new(-1, 0, 0), new(0, 0, 1), new(0, 0, -1)
     };
+    private static readonly Vector3Int[] DiagonalOffsets =
+    {
+        new( 1, 0, 1), new( 1, 0, -1), new(-1, 0, 1), new(-1, 0, -1)
+    };
 
-    // Returns false on failure (no route / budget exceeded). Search is
-    // 4-neighbor on x/z with one-cell step-up edges (vanilla WalkNodeEvaluator
-    // upward lookup): cells are stand cells, so a path can climb 1-block
-    // ledges but never 2-block walls. A goal on a lower or unreachable level
-    // simply exhausts the search and degrades to the straight-line fallback.
+    // Returns false on failure (no route / budget exceeded). Search expands
+    // 8 directions on x/z - orthogonal plus diagonal (cost sqrt(2)) - with
+    // one-cell step-up edges on the orthogonal passes only (vanilla
+    // WalkNodeEvaluator upward lookup): cells are stand cells, so a path can
+    // climb 1-block ledges but never 2-block walls. A goal on a lower or
+    // unreachable level simply exhausts the search and degrades to the
+    // straight-line fallback.
     private static bool TryFindPath(Dimension dim, Vector3Int startCell, Vector3Int goalCell, List<Vector3> outWaypoints)
     {
         outWaypoints.Clear();
@@ -156,30 +165,44 @@ public class ZombieAIPath
                 AIPathDebug.End(false);
                 return false;
             }
-            foreach(Vector3Int off in NeighborOffsets)
+            foreach(Vector3Int off in OrthogonalOffsets)
             {
                 Vector3Int nb = node.Cell + off;
                 if(closed.ContainsKey(nb))continue;
                 if(IsWalkable(dim, nb))
                 {
-                    Offer(nb, node, goalCell, open);
+                    Offer(nb, node, goalCell, open, OrthogonalCost);
                     continue;
                 }
                 // Step-up: the same-level neighbor is a wall/ledge - offer the
                 // cell one higher when walkable (headroom and support are part
                 // of IsWalkable, so a 2-block wall and overhangs drop out).
                 Vector3Int nbUp = nb + Vector3Int.up;
-                if(!closed.ContainsKey(nbUp))Offer(nbUp, node, goalCell, open);
+                if(!closed.ContainsKey(nbUp))Offer(nbUp, node, goalCell, open, OrthogonalCost);
+            }
+            foreach(Vector3Int off in DiagonalOffsets)
+            {
+                Vector3Int nb = node.Cell + off;
+                if(closed.ContainsKey(nb))continue;
+                if(!IsWalkable(dim, nb))continue;
+                // No corner cutting: a diagonal step may only squeeze between
+                // the two blocks it passes when both sides are walkable, or
+                // the mob's box would grind against the shared corner.
+                Vector3Int sideA = node.Cell + new Vector3Int(off.x, 0, 0);
+                Vector3Int sideB = node.Cell + new Vector3Int(0, 0, off.z);
+                if(!IsWalkable(dim, sideA) || !IsWalkable(dim, sideB))continue;
+                Offer(nb, node, goalCell, open, DiagonalCost);
             }
         }
         AIPathDebug.End(false);
         return false;
     }
 
-    // Open-set upsert shared by the flat and the step-up neighbor offers.
-    private static void Offer(Vector3Int cell, AStarNode from, Vector3Int goalCell, Dictionary<Vector3Int, AStarNode> open)
+    // Open-set upsert shared by the orthogonal, step-up and diagonal offers.
+    private static void Offer(Vector3Int cell, AStarNode from, Vector3Int goalCell,
+                              Dictionary<Vector3Int, AStarNode> open, float stepCost)
     {
-        float g = from.G + 1f;
+        float g = from.G + stepCost;
         if(open.TryGetValue(cell, out AStarNode known) && known.G <= g)return;
         if(AIPathDebug.Enabled)AIPathDebug.Open.Add(cell);
         open[cell] = new AStarNode(cell, g, g + Heuristic(cell, goalCell), from.Cell);
@@ -196,8 +219,8 @@ public class ZombieAIPath
         return dim.GetBlockAt(cell + Vector3Int.up) == 0;
     }
 
-    // Euclidean horizontal distance to the goal (admissible for the
-    // uniform-cost 4-neighbor grid).
+    // Euclidean horizontal distance to the goal (admissible for the 8-direction
+    // grid: it never overestimates a sqrt(2) diagonal step).
     private static float Heuristic(Vector3Int a, Vector3Int b)
     {
         float dx = a.x - b.x, dz = a.z - b.z;
