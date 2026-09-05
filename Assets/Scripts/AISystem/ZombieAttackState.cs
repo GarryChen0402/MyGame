@@ -1,0 +1,45 @@
+using UnityEngine;
+
+// Attack state (design doc §3.3): approach move + an InteractionSession swing
+// loop. Enters with a swing already started; each settled blow (AttackInterval
+// later) opens the next. The session is AI-driven - Entity skips its
+// player-facing interruption rules - and completes exactly once per swing.
+public class ZombieAttackState : AIState
+{
+    public override void OnEnter()
+    {
+        if(Brain.Context.Target != null)StartSwing();
+    }
+
+    public override void Tick(float dt)
+    {
+        Brain.Path.Follow(Brain.Context, Brain.Intent, dt);   // shared approach move (design doc §3.2)
+        if(Brain.Mob.Session.Completed)StartSwing();          // previous blow settled -> next round
+    }
+
+    // Leaving mid-swing (target lost / knocked out of range / player dead):
+    // the running session must never settle after the state ends.
+    public override void OnExit() => Brain.Mob.AbortInteractionSession();
+
+    private void StartSwing()
+    {
+        var mob = Brain.Mob;
+        var target = Brain.Context.Target;   // non-null by transition guarantee; guarded anyway
+        if(target == null || mob.Definition == null)return;
+        mob.Session.IsAIControlled = true;   // exempt from player-facing interruption rules (design doc §6.1); SetSession keeps the flag
+        float speed = mob.Definition.KnockbackStrength;
+        mob.SetSession("minecraft:attack", InteractionSessionTargetType.Entity,
+            () =>
+            {
+                // Settlement guard: Dead() already settles the session, so this
+                // is a second defense - a corpse never deals damage.
+                if(mob.IsDead || !(mob.Session.entity is Player player))return;
+                Vector3 d = player.Position - mob.Position;
+                d.y = 0f;
+                if(d.sqrMagnitude > 1e-6f)d.Normalize();
+                else d = Quaternion.Euler(0f, mob.yaw, 0f) * Vector3.forward;   // overlap fallback: own heading
+                player.Hurt(mob.Definition.BaseDamage, d * speed);
+            },
+            mob.Definition.AttackInterval, target, default, null);
+    }
+}

@@ -25,6 +25,10 @@ public class Entity // Data Class
     public Vector3 Motion;
     public float InvincibleTimer;
     protected bool OnGround;
+    // True on frames TickPhysics truncated horizontal motion against a wall
+    // (x/z axis zeroed). Reset every tick; wander uses it to stop bumping
+    // (design doc §3.1.2).
+    public bool HorizontalBlocked {get; private set;}
 
     public Entity()
     {
@@ -51,32 +55,47 @@ public class Entity // Data Class
     
     protected virtual void TickPhysics(float dt)
     {
+        HorizontalBlocked = false;
         Motion.y -= Gravity * dt;
         Vector3 desired = Motion * dt;
         MoveResult r = PhysicsManager.Instance.MoveEntity(this, desired);
         OnGround = r.OnGround;
         if(r.OnGround)Motion.y = 0f;
-        if(Mathf.Abs(r.Motion.x) < Mathf.Abs(desired.x) - 1e-4f)Motion.x = 0f;
+        if(Mathf.Abs(r.Motion.x) < Mathf.Abs(desired.x) - 1e-4f)
+        {
+            Motion.x = 0f;
+            HorizontalBlocked = true;
+        }
         if(Mathf.Abs(r.Motion.y) < Mathf.Abs(desired.y) - 1e-4f)Motion.y = 0f;
-        if(Mathf.Abs(r.Motion.z) < Mathf.Abs(desired.z) - 1e-4f)Motion.z = 0f;
+        if(Mathf.Abs(r.Motion.z) < Mathf.Abs(desired.z) - 1e-4f)
+        {
+            Motion.z = 0f;
+            HorizontalBlocked = true;
+        }
     }
     
 
     public virtual void ProcessInteractionSession(float dt)
     {
         if (Session.Completed)return;
-        // Interrupt when the action is no longer held; IsDown also gates on the
-        // active input context, so opening a panel stops an in-progress break.
-        // Instant sessions (CompleteTime <= 0, e.g. the click attack) settle on
-        // the next tick without requiring the key to stay held - one click edge
-        // creates one session, which completes exactly once.
-        if(Session.CompleteTime > 0 && !KeyBindingManager.Instance.IsDown(Session.bindingFullName))Session.Completed = true;
-        if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
-        // Entity swing: keep going only while the crosshair stays on the session
-        // target (the raycast result refreshes every frame) and it is alive.
-        else if(Session.TargetType == InteractionSessionTargetType.Entity && (CurrentRaycastHitResult.HitEntity != Session.entity
-                || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
-        else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
+        // AI-driven sessions (e.g. a mob's attack swing) bypass the operator
+        // rules below: there is no input held, no crosshair, and the target
+        // lock lives in the brain. The owning state aborts them instead.
+        if(!Session.IsAIControlled)
+        {
+            // Interrupt when the action is no longer held; IsDown also gates on the
+            // active input context, so opening a panel stops an in-progress break.
+            // Instant sessions (CompleteTime <= 0, e.g. the click attack) settle on
+            // the next tick without requiring the key to stay held - one click edge
+            // creates one session, which completes exactly once.
+            if(Session.CompleteTime > 0 && !KeyBindingManager.Instance.IsDown(Session.bindingFullName))Session.Completed = true;
+            if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
+            // Entity swing: keep going only while the crosshair stays on the session
+            // target (the raycast result refreshes every frame) and it is alive.
+            else if(Session.TargetType == InteractionSessionTargetType.Entity && (CurrentRaycastHitResult.HitEntity != Session.entity
+                    || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
+            else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
+        }
         if (Session.Completed)
         {
             EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Operator = this, Ctx = Session});
@@ -140,6 +159,16 @@ public class Entity // Data Class
             Ctx = Session
         });
 
+    }
+
+    // Abort an in-progress session without completing it (used by AI states
+    // leaving an attack early, and by the owner's death): same Interrupted
+    // event flow as the frame rule above, just operator-driven.
+    public void AbortInteractionSession()
+    {
+        if(Session.Completed)return;
+        Session.Completed = true;
+        EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Operator = this, Ctx = Session});
     }
 
     public virtual void ConsumeItemUseResult(ItemUseResult result){}

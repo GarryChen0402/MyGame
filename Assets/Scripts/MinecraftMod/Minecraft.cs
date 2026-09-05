@@ -532,7 +532,13 @@ public class Minecraft : IMod
             },
             BaseMaxHealth = 20,
             BaseDamage = 2,
-            BaseMoveSpeed = 5,
+            BaseMoveSpeed = 3,
+            SenseRange = 16,
+            ChaseRange = 24,               // 1.5x sense range: released targets stay chased briefly
+            AttackRange = 2.2f,
+            AttackInterval = 1.5f,
+            TurnSpeed = 120,               // deg/s idle turn + fallback direction snap
+            KnockbackStrength = 4,
             ModelId = $"{ModId}:zombie",
             CollisionBoxes = new()
             {

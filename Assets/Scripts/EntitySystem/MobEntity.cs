@@ -62,9 +62,16 @@ public class MobEntity : Entity
         CurrentHealth = MaxHealth.CurrentValue;
 
         AI = MobAI.Create(this);
+
+        // v1 bridge: AIDefinition data round replaces this branch later.
+        if(def.ModelId == "minecraft:zombie")ZombieAI.Configure(this);
     }
 
     public bool IsDead {get; private set;} = false;
+
+    // Last TickPhysics ground result, exposed for AI jump gating (same shape
+    // as Player.IsOnGround).
+    public bool IsOnGround => OnGround;
     private float deathTimer;
     private const float DeathDelaySeconds = 1.5f;   // visual margin (design doc §4.6)
 
@@ -92,6 +99,7 @@ public class MobEntity : Entity
         if(IsDead)return;   // idempotent: hurt-triggered and external calls converge on one flow
         IsDead = true;
         AI?.Stop();         // unsubscribe PlayerDeadEvent - the corpse no longer senses
+        Session.Completed = true;   // a corpse never settles a swing (silent: no Interrupted event)
         Debug.Log($"[Mob] {MobName} died");
         EventBus.Instance.Publish(new DeathEntity(){entity = this});
     }

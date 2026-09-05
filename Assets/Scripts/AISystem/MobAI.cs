@@ -12,6 +12,9 @@ public class MobAI
     public AIContext Context = new();
     public AIIntent Intent = new();
     public AIStateMachine RootMachine;
+    // Shared by Chase/Attack for A* following; reuses its waypoints/cursor
+    // across state switches so a path never restarts from scratch.
+    public ZombieAIPath Path = new();
 
     public const float SenseInterval = 0.1f;   // perception cadence (design doc §1)
     private float senseAccumulator;
@@ -35,6 +38,11 @@ public class MobAI
 
     public void Update(float dt)
     {
+        // One-frame intent contract: every decision state writes what it wants
+        // this tick, so a frame that requests nothing must not inherit a stale
+        // jump from the previous one (wander states never set it).
+        Intent.JumpRequested = false;
+
         senseAccumulator += dt;
         if(senseAccumulator >= SenseInterval)
         {
@@ -60,11 +68,18 @@ public class MobAI
         Context.TargetDistance = Mathf.Sqrt(delta.x * delta.x + delta.z * delta.z);
     }
 
+    private const float JumpSpeed = 6.4f;   // m/s; player-jump parity (apex ~1.28 clears a 1-block ledge)
+
     private void Apply()
     {
         // Hurt stun (InvincibleTimer > 0) holds horizontal writes so the
         // knockback slide plays out; target speed resumes once it ends.
         if(Mob.InvincibleTimer > 0f)return;
+
+        // Step-up jump: fired before the horizontal early-out so a mob standing
+        // flush at a ledge foot (no horizontal step left) still climbs.
+        if(Intent.JumpRequested && Mob.IsOnGround)
+            Mob.Motion.y = JumpSpeed;
 
         Vector3 dir = Intent.MoveDirection;
         if(Mathf.Abs(dir.x) < 1e-4f && Mathf.Abs(dir.z) < 1e-4f)return;   // stand intent: no write

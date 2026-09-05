@@ -68,6 +68,11 @@ public class PlayerInputHandler : IInputHandler
         // else
         //     Debug.Log("Looking at air");
 
+        // Hurt window: knockback plays out instead of input writes - the residual is
+        // friction-decayed by Player.TickPhysics (design doc §4). Camera/raycast above
+        // stay live.
+        if(player.InvincibleTimer > 0f)return;
+
         Vector2 moveDir = Vector2.zero;
         if(keys.IsDown("minecraft:forward"))moveDir.x += 1;
         if(keys.IsDown("minecraft:back"))moveDir.x -= 1;

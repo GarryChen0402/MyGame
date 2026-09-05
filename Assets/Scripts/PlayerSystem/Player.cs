@@ -9,6 +9,12 @@ public class Player : Entity, ICraftingGridHost
     // MC: 1.8-tall player box, eyes sit at 1.62 above the feet.
     public const float EyeHeight = 1.62f;
 
+    public const float MaxHealthValue = 20f;   // MC player 20 HP; no def resource in v1
+    public ValueEntry MaxHealth {get; private set;}
+    public float CurrentHealth {get; private set;}
+
+    private const float HurtKnockbackDamping = 3f;   // hurt-window horizontal friction (slide ~ speed/3, mob-scale)
+
     // Last TickPhysics ground result (Entity.OnGround), exposed to the input
     // layer so jump impulses only fire from the ground.
     public bool IsOnGround => OnGround;
@@ -32,6 +38,9 @@ public class Player : Entity, ICraftingGridHost
             MinRange = new Vector3(-0.3f, 114.1f, -0.3f),
             MaxRange = new Vector3( 0.3f, 115.9f, 0.3f)
         });
+
+        MaxHealth = new ValueEntry(MaxHealthValue);
+        CurrentHealth = MaxHealth.CurrentValue;
 
         inventory = new Inventory(36, false);
         InitCrafting();
@@ -148,6 +157,41 @@ public class Player : Entity, ICraftingGridHost
             return progress;
         }
         return dt;
+    }
+
+    // Hurt-window slide: the input layer stops writing horizontal during the
+    // window, so the knockback residual decays here (player normally has no
+    // idle friction - without this it would slide forever).
+    protected override void TickPhysics(float dt)
+    {
+        if(InvincibleTimer > 0f)
+        {
+            Motion.x *= Mathf.Exp(-HurtKnockbackDamping * dt);
+            Motion.z *= Mathf.Exp(-HurtKnockbackDamping * dt);
+        }
+        base.TickPhysics(dt);
+    }
+
+    // Mirror of MobEntity.Hurt (design doc §4): invincibility gate -> damage ->
+    // window -> horizontal knockback write. Death keeps the entity in place
+    // (PlayerDeadEvent, no DeathEntity) - respawn semantics land later.
+    public void Hurt(float damage, Vector3 knockbackVelocity = default)
+    {
+        if(InvincibleTimer > 0f)return;
+        CurrentHealth = Mathf.Clamp(CurrentHealth - damage, 0f, MaxHealth.CurrentValue);
+        InvincibleTimer = HurtInvincibleSeconds;
+        if(knockbackVelocity != Vector3.zero)
+            Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
+
+        Debug.Log($"[Player] took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
+        EventBus.Instance.Publish(new HurtEntity(){entity = this, amount = damage});
+
+        if(CurrentHealth <= 0f)
+        {
+            EventBus.Instance.Publish(new PlayerDeadEvent());   // zombie AI unsubscribes its chase lock
+            CurrentHealth = MaxHealth.CurrentValue;             // v1: instant full reset in place
+            // TODO full death flow (respawn / scene reset) replaces the instant reset
+        }
     }
 
     public ValueEntry AttackPoint;

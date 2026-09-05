@@ -15,9 +15,10 @@ public class AIStateMachine : AIState
     private AIState activeChild;
     private MobAI brain;
 
-    // Root machine only: injected once by MobAI.Create, shared across the tree
-    // through the virtual Brain chain on AIState.
-    public override MobAI Brain => brain;
+    // Root machine only: injected once by MobAI.Create. Nested machines fall
+    // back to the parent chain (their hosting machine), so composites never
+    // need their own injection - the whole tree shares the root's brain.
+    public override MobAI Brain => brain != null ? brain : Machine?.Brain;
     internal void SetBrain(MobAI brain) => this.brain = brain;
 
     private readonly struct Transition

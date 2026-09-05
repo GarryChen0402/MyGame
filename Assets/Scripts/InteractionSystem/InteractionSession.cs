@@ -10,6 +10,9 @@ public enum InteractionSessionTargetType
 
 public class InteractionSessionContext
 {
+    // True for sessions an AI started (mob swings): Entity.ProcessInteractionSession
+    // skips its operator interruption rules for these, the brain owns teardown.
+    public bool IsAIControlled;
     // Action full name whose hold state keeps the session alive (rebind-aware).
     public string bindingFullName;
     public InteractionSessionTargetType TargetType;

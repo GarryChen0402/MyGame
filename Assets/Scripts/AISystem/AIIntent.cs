@@ -9,4 +9,10 @@ public class AIIntent
     // Horizontal unit direction; zero = stand still. Speed is uniformly the
     // mob's BaseMoveSpeed.
     public Vector3 MoveDirection;
+
+    // Vertical step-up request (path follower, design doc §4.2 step-up):
+    // consumed by MobAI.Apply this frame as a ground jump impulse. MobAI.Update
+    // clears it before the decision tick, so a frame with no request never
+    // inherits a stale one.
+    public bool JumpRequested;
 }
