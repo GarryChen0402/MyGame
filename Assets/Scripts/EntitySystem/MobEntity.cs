@@ -6,11 +6,28 @@ public class MobEntity : Entity
     public float CurrentHealth {get; private set;} = 0;
     public ValueEntry MaxHealth {get; private set;}
 
+    // Drives perception/decision/execution while alive (null until Init).
+    // Stopped on death: a corpse is never AI-driven again.
+    public MobAI AI {get; private set;}
+
+    // True on frames MobAI.Apply wrote a horizontal target speed; such frames
+    // skip ExternalDamping (the motion already is the intended speed, damping
+    // would drag it ~5% low at 60fps). Reset every frame inside TickPhysics.
+    public bool AiWroteMotion {get; set;}
+
     private const float ExternalDamping = 3f;
     protected override void TickPhysics(float dt)
     {
-        Motion.x *= Mathf.Pow(ExternalDamping, dt);
-        Motion.z *= Mathf.Pow(ExternalDamping, dt);
+        // Exponential horizontal decay at ExternalDamping/s: a 5 m/s
+        // knockback slides ~1.7 m (Pow(3, dt) would amplify instead).
+        // Only undriven frames (hurt stun / stand intent) are damped, so the
+        // blow slides out while AI target writes stay exact.
+        if(!AiWroteMotion)
+        {
+            Motion.x *= Mathf.Exp(-ExternalDamping * dt);
+            Motion.z *= Mathf.Exp(-ExternalDamping * dt);
+        }
+        AiWroteMotion = false;
         base.TickPhysics(dt);
     }
 
@@ -44,6 +61,7 @@ public class MobEntity : Entity
         MaxHealth.SetBaseValue(def.BaseMaxHealth);
         CurrentHealth = MaxHealth.CurrentValue;
 
+        AI = MobAI.Create(this);
     }
 
     public bool IsDead {get; private set;} = false;
@@ -73,6 +91,7 @@ public class MobEntity : Entity
     {
         if(IsDead)return;   // idempotent: hurt-triggered and external calls converge on one flow
         IsDead = true;
+        AI?.Stop();         // unsubscribe PlayerDeadEvent - the corpse no longer senses
         Debug.Log($"[Mob] {MobName} died");
         EventBus.Instance.Publish(new DeathEntity(){entity = this});
     }
@@ -86,6 +105,9 @@ public class MobEntity : Entity
     // destroys the shell.
     public override void OnUpdate(float deltaTime)
     {
+        // AI decides before base physics so its Motion writes are consumed by
+        // this same frame's TickPhysics (the input layer shares this ordering).
+        if(!IsDead)AI?.Update(deltaTime);
         base.OnUpdate(deltaTime);
         if(!IsDead)return;
         deathTimer += deltaTime;
