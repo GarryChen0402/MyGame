@@ -7,19 +7,14 @@ public class MobDefinition : ResourceType
     public float BaseDamage;
     public float BaseMoveSpeed;
 
-    // AI behavior tuning (design doc §7.2). v1 zombie reads these directly;
-    // the future AIDefinition round moves them into a data asset.
-    public float SenseRange;
-    public float ChaseRange;
-    public float AttackRange;
-    public float AttackInterval;
-    public float TurnSpeed;
-    public float KnockbackStrength;
+    // AI behavior spec (AIDefinitions registry id, design doc §4.1). Missing
+    // entries log a warning at spawn and leave the empty-root no-op (no
+    // behavior). v1: "minecraft:zombie". Behavior numbers live in the
+    // AIDefinition's ConfigJson, not here - these fields stay capability-only.
+    public string AIDefinitionFullName;
 
     // EntityModel resource id (FullName) rendered as this mob's visual.
     public string ModelId;
 
     public List<AABB> CollisionBoxes;
-
-    // public string AIDefinition;
 }

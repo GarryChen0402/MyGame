@@ -1,11 +1,24 @@
 using UnityEngine;
 
 // Attack state (design doc §3.3): approach move + an InteractionSession swing
-// loop. Enters with a swing already started; each settled blow (AttackInterval
-// later) opens the next. The session is AI-driven - Entity skips its
+// loop. Enters with a swing already started; each settled blow (the injected
+// interval later) opens the next. The session is AI-driven - Entity skips its
 // player-facing interruption rules - and completes exactly once per swing.
+// Damage/knockback/interval are injected by ZombieAI.Configure (damage = the
+// species capability, the other two = AIDefinition Config numbers).
 public class ZombieAttackState : AIState
 {
+    private readonly float damage;
+    private readonly float knockbackSpeed;
+    private readonly float interval;
+
+    public ZombieAttackState(float damage, float knockbackSpeed, float interval)
+    {
+        this.damage = damage;
+        this.knockbackSpeed = knockbackSpeed;
+        this.interval = interval;
+    }
+
     public override void OnEnter()
     {
         if(Brain.Context.Target != null)StartSwing();
@@ -25,9 +38,8 @@ public class ZombieAttackState : AIState
     {
         var mob = Brain.Mob;
         var target = Brain.Context.Target;   // non-null by transition guarantee; guarded anyway
-        if(target == null || mob.Definition == null)return;
+        if(target == null)return;
         mob.Session.IsAIControlled = true;   // exempt from player-facing interruption rules (design doc §6.1); SetSession keeps the flag
-        float speed = mob.Definition.KnockbackStrength;
         mob.SetSession("minecraft:attack", InteractionSessionTargetType.Entity,
             () =>
             {
@@ -38,8 +50,8 @@ public class ZombieAttackState : AIState
                 d.y = 0f;
                 if(d.sqrMagnitude > 1e-6f)d.Normalize();
                 else d = Quaternion.Euler(0f, mob.yaw, 0f) * Vector3.forward;   // overlap fallback: own heading
-                player.Hurt(mob.Definition.BaseDamage, d * speed);
+                player.Hurt(damage, d * knockbackSpeed);
             },
-            mob.Definition.AttackInterval, target, default, null);
+            interval, target, default, null);
     }
 }

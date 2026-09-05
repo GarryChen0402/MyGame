@@ -1,29 +1,29 @@
 using UnityEngine;
 
-// Wander duration window (design doc §3.1): rolled on each state entry so
-// stops and walks alternate 3-6s. v1 code constants - the AIDefinition round
-// migrates them into the resource.
-public static class ZombieWanderWindows
-{
-    public const float Min = 3f;
-    public const float Max = 6f;
-    public static float Roll() => Random.Range(Min, Max);
-}
-
-// First wander half-window: stand still while turning to a random heading
-// (design doc §3.1). The yaw stays data-layer in v1 - shell rotation sync is a
-// later round - so this reads as the mob facing a new way before it walks.
+// Wander sub-states (design doc §3.1): stops and walks alternate over a
+// rolled duration window. The window range (and the stop state's turn speed)
+// are injected by ZombieAI.Configure from its AIDefinition Config - states
+// carry no parameter source of their own.
 public class ZombieWanderStopState : AIState
 {
+    private readonly float turnSpeed;
+    private readonly float windowMin, windowMax;
     private float targetYaw;      // world-space heading rolled on enter
     private float duration;
     private float elapsed;
     public bool DurationExpired;  // read by the parent machine's transition table
 
+    public ZombieWanderStopState(float turnSpeed, float windowMin, float windowMax)
+    {
+        this.turnSpeed = turnSpeed;
+        this.windowMin = windowMin;
+        this.windowMax = windowMax;
+    }
+
     public override void OnEnter()
     {
         targetYaw = Random.Range(0f, 360f);
-        duration = ZombieWanderWindows.Roll();
+        duration = Random.Range(windowMin, windowMax);
         elapsed = 0f;
         DurationExpired = false;
     }
@@ -34,7 +34,7 @@ public class ZombieWanderStopState : AIState
         DurationExpired = elapsed >= duration;
         Brain.Intent.MoveDirection = Vector3.zero;   // rooted in place
         var mob = Brain.Mob;
-        mob.yaw = Mathf.MoveTowardsAngle(mob.yaw, targetYaw, mob.Definition.TurnSpeed * dt);
+        mob.yaw = Mathf.MoveTowardsAngle(mob.yaw, targetYaw, turnSpeed * dt);
     }
 }
 
@@ -45,16 +45,23 @@ public class ZombieWanderStopState : AIState
 // one frame of lag is imperceptible for a sustained bump.
 public class ZombieWanderMoveState : AIState
 {
+    private readonly float windowMin, windowMax;
     private Vector3 direction;    // fixed on enter from the mob's yaw at that moment
     private float duration;
     private float elapsed;
     public bool DurationExpired;
 
+    public ZombieWanderMoveState(float windowMin, float windowMax)
+    {
+        this.windowMin = windowMin;
+        this.windowMax = windowMax;
+    }
+
     public override void OnEnter()
     {
         float rad = Brain.Mob.yaw * Mathf.Deg2Rad;
         direction = new Vector3(Mathf.Sin(rad), 0f, Mathf.Cos(rad));
-        duration = ZombieWanderWindows.Roll();
+        duration = Random.Range(windowMin, windowMax);
         elapsed = 0f;
         DurationExpired = false;
     }

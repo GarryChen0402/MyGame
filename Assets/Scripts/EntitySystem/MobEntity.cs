@@ -63,8 +63,16 @@ public class MobEntity : Entity
 
         AI = MobAI.Create(this);
 
-        // v1 bridge: AIDefinition data round replaces this branch later.
-        if(def.ModelId == "minecraft:zombie")ZombieAI.Configure(this);
+        // AIDefinition round: registry lookup replaces the v1 ModelId branch
+        // (design doc §2.3). Unknown/missing ids keep the empty-root no-op and
+        // warn once per spawn - a bad mod entry must never crash the world.
+        if(!string.IsNullOrEmpty(def.AIDefinitionFullName))
+        {
+            if(ResourceSystem.Instance.AIDefinitions.TryGetResourceWithFullName(def.AIDefinitionFullName, out var aiDef))
+                aiDef.Assembler?.Invoke(this, aiDef);
+            else
+                Debug.LogWarning($"[Mob] {def.FullName}: AIDefinition '{def.AIDefinitionFullName}' not found - empty-root no-op");
+        }
     }
 
     public bool IsDead {get; private set;} = false;

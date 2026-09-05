@@ -532,13 +532,8 @@ public class Minecraft : IMod
             },
             BaseMaxHealth = 20,
             BaseDamage = 2,
-            BaseMoveSpeed = 3,
-            SenseRange = 16,
-            ChaseRange = 24,               // 1.5x sense range: released targets stay chased briefly
-            AttackRange = 2.2f,
-            AttackInterval = 1.5f,
-            TurnSpeed = 120,               // deg/s idle turn + fallback direction snap
-            KnockbackStrength = 4,
+            BaseMoveSpeed = 3,               // species capability values stay on the definition
+            AIDefinitionFullName = $"{ModId}:zombie",
             ModelId = $"{ModId}:zombie",
             CollisionBoxes = new()
             {
@@ -550,6 +545,26 @@ public class Minecraft : IMod
             }
         };
         ResourceSystem.Instance.MobDefinitions.Register(zombie);
+
+        // AI spec: wiring logic registered once, behavior numbers ride as JSON
+        // in ConfigJson (WorkContainer split: logic in C#, numbers as data).
+        ResourceSystem.Instance.AIDefinitions.Register(new AIDefinition
+        {
+            modId = ModId,
+            name = "zombie",
+            Assembler = ZombieAI.Configure,
+            ConfigJson = JsonUtility.ToJson(new ZombieAI.Config
+            {
+                SenseRange = 16,
+                ChaseRange = 24,               // 1.5x sense range: released targets stay chased briefly
+                AttackRange = 2.2f,
+                AttackInterval = 1.5f,
+                TurnSpeed = 120,               // deg/s idle turn + fallback direction snap
+                KnockbackStrength = 4,
+                WanderMin = 3f,
+                WanderMax = 6f
+            })
+        });
 
         //Break block sprite
         for(int i = 0; i < 10; i++)

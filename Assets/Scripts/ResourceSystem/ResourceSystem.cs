@@ -47,6 +47,8 @@ public partial class ResourceSystem
     public ResourceRegistryTable<KeyBinding> KeyBindings {get;} = new();
     //MobDefinition
     public ResourceRegistryTable<MobDefinition> MobDefinitions {get;} = new();
+    // Mob AI behavior specs: assembly logic + per-species behavior numbers
+    public ResourceRegistryTable<AIDefinition> AIDefinitions {get;} = new();
 
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
@@ -95,6 +97,8 @@ public partial class ResourceSystem
         WorkContainerDefinitions.Freeze();
         BlockEntityDefinitions.Freeze();
         KeyBindings.Freeze();
+        MobDefinitions.Freeze();      // historically unfrozen; frozen now with AIDefinitions
+        AIDefinitions.Freeze();
     }
 
     public void PostFreeze()
