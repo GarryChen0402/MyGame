@@ -31,6 +31,29 @@ public class InteractionManager
             () => CompleteBreakSession(entity), completeTime, entity, dimCoord, null);
     }
 
+    // Left-click on a mob (crosshair-hit entity): instant hit - CompleteTime 0
+    // settles the session on the very next process tick, so a click lands the
+    // damage immediately (no swing animation/cool-down in v1). The session
+    // target goes into Session.entity; the interaction layer stays as the
+    // trigger hook for future attack events (swing animation, cool-down).
+    public void HandleAttackEntity(Entity attacker, MobEntity target)
+    {
+        attacker.SetSession("minecraft:attack", InteractionSessionTargetType.Entity,
+            () => CompleteAttackSession(attacker), 0f, target, default, null);
+    }
+
+    // Swing callback fired on session completion: resolves the hit damage from
+    // the attacker's AttackPoint (a ValueEntry - crit modifiers roll here) and
+    // hurts the session target. Non-player attackers fall back to 1 (mob AI
+    // melee will feed BaseDamage when it lands, §4.2 MeleeAttackGoal).
+    private static void CompleteAttackSession(Entity attacker)
+    {
+        InteractionSessionContext ctx = attacker.Session;
+        if(!(ctx.entity is MobEntity mob) || mob.IsDead)return;   // died mid-swing
+        float damage = attacker is Player player ? player.AttackPoint.CurrentValue : 1f;
+        mob.Hurt(damage);
+    }
+
     // Break callback fired on session completion: collects the drops before the
     // break removes the block, breaks it, then spawns the drops at the block
     // center +0.5 up with a random horizontal kick (P5 of the item drop dev

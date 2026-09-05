@@ -40,9 +40,15 @@ public class Entity // Data Class
         if (Session.Completed)return;
         // Interrupt when the action is no longer held; IsDown also gates on the
         // active input context, so opening a panel stops an in-progress break.
-        if(!KeyBindingManager.Instance.IsDown(Session.bindingFullName))Session.Completed = true;
+        // Instant sessions (CompleteTime <= 0, e.g. the click attack) settle on
+        // the next tick without requiring the key to stay held - one click edge
+        // creates one session, which completes exactly once.
+        if(Session.CompleteTime > 0 && !KeyBindingManager.Instance.IsDown(Session.bindingFullName))Session.Completed = true;
         if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
-        // else if(Session.TargetType == InteractionSessionTargetType.Entity && ())// TODO: add the raycast to raycast the entity
+        // Entity swing: keep going only while the crosshair stays on the session
+        // target (the raycast result refreshes every frame) and it is alive.
+        else if(Session.TargetType == InteractionSessionTargetType.Entity && (CurrentRaycastHitResult.HitEntity != Session.entity
+                 || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
         else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
         if (Session.Completed)
         {

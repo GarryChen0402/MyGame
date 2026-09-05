@@ -31,6 +31,11 @@ public class Player : Entity, ICraftingGridHost
 
         inventory = new Inventory(36, false);
         InitCrafting();
+
+        AttackPoint = new(1);
+        AttackPoint.AddNewPart("critical", new ChancedModifier());
+        AttackPoint.TrySetParam("critical", "chance", 0.8f);
+        AttackPoint.TrySetParam("critical", "baseRatio", 5f);
     }
 
     private void InitCrafting()
@@ -140,4 +145,6 @@ public class Player : Entity, ICraftingGridHost
         }
         return dt;
     }
+
+    public ValueEntry AttackPoint;
 }

@@ -71,7 +71,7 @@ public class ValueEntry
     {
         if(MultiParts.ContainsKey(id))return false;
         MultiParts[id] = unit;
-        return false;
+        return true;
     }
 
     public bool TryGetParam(string unitId, string paramKey, out float value)
@@ -86,5 +86,9 @@ public class ValueEntry
         if(!MultiParts.ContainsKey(unitId))return false;
         return MultiParts[unitId].TrySetParam(paramKey, value);
     }
+
+    public void SetBaseValue(float val)
+        => baseValue = val;
+    
     
 }

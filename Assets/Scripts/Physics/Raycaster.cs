@@ -112,10 +112,10 @@ public static class Raycaster
         if (entityT < blockT)
         {
             hit = entityHit;
-            string entityName = hit.HitEntity is MobEntity mob && mob.Definition != null
-                ? mob.Definition.FullName
-                : hit.HitEntity.GetType().Name;
-            Debug.Log($"[Raycaster] entity hit: {entityName} at {hit.HitPoint}, distance {hit.Distance:F2}");
+            // string entityName = hit.HitEntity is MobEntity mob && mob.Definition != null
+            //     ? mob.Definition.FullName
+            //     : hit.HitEntity.GetType().Name;
+            // Debug.Log($"[Raycaster] entity hit: {entityName} at {hit.HitPoint}, distance {hit.Distance:F2}");
             return true;
         }
         return hit.IsHit;

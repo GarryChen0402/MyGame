@@ -107,11 +107,16 @@ public class PlayerInputHandler : IInputHandler
                 Debug.Log($"Slot {player.SelectedSlotIndex}: (empty)");
         }
 
-        // Left-click break (P4 of the item drop dev plan): empty-hand or held
-        // item both break; drop spawning is wired in P5.
+        // Left-click (P4 of the item drop dev plan): a mob under the crosshair
+        // takes priority over breaking - swing session hits it; otherwise the
+        // block break runs (empty-hand or held item both break).
         if (keys.WasPressed("minecraft:attack"))
         {
-            if (player.CurrentRaycastHitResult.IsHit)
+            if (player.CurrentRaycastHitResult.HitEntity is MobEntity mob)
+            {
+                InteractionManager.Instance.HandleAttackEntity(player, mob);
+            }
+            else if (player.CurrentRaycastHitResult.IsHit)
             {
                 if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
                 Vector3Int coord = player.CurrentRaycastHitResult.BlockDimensionCoord;
