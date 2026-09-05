@@ -1,6 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// Runs before the default-order logic tick (GameLoopDriver -> WorldManager ->
+// EntityManager.Update): the active handler writes the player's target speed
+// into Entity.Motion here so the same frame's TickPhysics consumes it - a
+// later order would lag every movement one frame behind the input.
+[DefaultExecutionOrder(-100)]
 public class InputHandlerManager : MonoBehaviour
 {
     private static InputHandlerManager instance = null;

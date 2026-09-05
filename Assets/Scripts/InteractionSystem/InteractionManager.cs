@@ -42,16 +42,24 @@ public class InteractionManager
             () => CompleteAttackSession(attacker), 0f, target, default, null);
     }
 
+    // Knockback impulse handed to Hurt on a landed hit (horizontal m/s;
+    // one shared value in v1 - no weapon/modifier scaling yet).
+    private const float PlayerKnockbackSpeed = 5f;
+
     // Swing callback fired on session completion: resolves the hit damage from
     // the attacker's AttackPoint (a ValueEntry - crit modifiers roll here) and
-    // hurts the session target. Non-player attackers fall back to 1 (mob AI
-    // melee will feed BaseDamage when it lands, §4.2 MeleeAttackGoal).
+    // hurts the session target. Non-player attackers fall back to 1 (mob-side
+    // melee will feed MobDefinition.BaseDamage through the AI Attack state).
     private static void CompleteAttackSession(Entity attacker)
     {
         InteractionSessionContext ctx = attacker.Session;
         if(!(ctx.entity is MobEntity mob) || mob.IsDead)return;   // died mid-swing
         float damage = attacker is Player player ? player.AttackPoint.CurrentValue : 1f;
-        mob.Hurt(damage);
+        Vector3 dir = mob.Position - attacker.Position;
+        dir.y = 0f;
+        if(dir.sqrMagnitude > 1e-6f)dir.Normalize();
+        else dir = Quaternion.Euler(0, attacker.yaw, 0) * Vector3.forward;   // overlapping: use the attacker's facing
+        mob.Hurt(damage, dir * PlayerKnockbackSpeed);
     }
 
     // Break callback fired on session completion: collects the drops before the

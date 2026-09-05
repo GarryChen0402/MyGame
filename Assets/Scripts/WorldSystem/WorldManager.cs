@@ -229,7 +229,7 @@ public class WorldManager
         WorldSaveManager.Instance.Tick(dt);
         EntityManager.Instance.Update(dt);
         BlockEntityManager.Instance.Tick(dt);
-        ItemEntityManager.Instance.Update(dt);
+        ItemEntityManager.Instance.Update();
     }
 }
 

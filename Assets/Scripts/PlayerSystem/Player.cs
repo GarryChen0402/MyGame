@@ -9,6 +9,10 @@ public class Player : Entity, ICraftingGridHost
     // MC: 1.8-tall player box, eyes sit at 1.62 above the feet.
     public const float EyeHeight = 1.62f;
 
+    // Last TickPhysics ground result (Entity.OnGround), exposed to the input
+    // layer so jump impulses only fire from the ground.
+    public bool IsOnGround => OnGround;
+
     private float harvestSpeedMultiply = 1.0f;
 
     // Personal 2x2 crafting (design doc Docs/玩家界面-模型预览组件与2x2个人合成

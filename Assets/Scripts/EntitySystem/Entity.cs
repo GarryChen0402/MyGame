@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.Video;
 
 public class Entity // Data Class
 {
@@ -18,6 +19,13 @@ public class Entity // Data Class
     // item use; updated by the input layer).
     public int SelectedSlotIndex;
 
+    public const float Gravity = 16f;
+    public const float HurtInvincibleSeconds = 0.5f;
+
+    public Vector3 Motion;
+    public float InvincibleTimer;
+    protected bool OnGround;
+
     public Entity()
     {
         EventBus.Instance.Publish(new SummonEntityEvent(){entity = this});
@@ -33,8 +41,27 @@ public class Entity // Data Class
 
     public virtual void OnUpdate(float deltaTime)
     {
+        TickInvincible(deltaTime);
+        TickPhysics(deltaTime);
         ProcessInteractionSession(deltaTime);
     }
+
+    protected void TickInvincible(float deltaTime)
+        => InvincibleTimer = Mathf.Max(0f, InvincibleTimer - deltaTime);
+    
+    protected virtual void TickPhysics(float dt)
+    {
+        Motion.y -= Gravity * dt;
+        Vector3 desired = Motion * dt;
+        MoveResult r = PhysicsManager.Instance.MoveEntity(this, desired);
+        OnGround = r.OnGround;
+        if(r.OnGround)Motion.y = 0f;
+        if(Mathf.Abs(r.Motion.x) < Mathf.Abs(desired.x) - 1e-4f)Motion.x = 0f;
+        if(Mathf.Abs(r.Motion.y) < Mathf.Abs(desired.y) - 1e-4f)Motion.y = 0f;
+        if(Mathf.Abs(r.Motion.z) < Mathf.Abs(desired.z) - 1e-4f)Motion.z = 0f;
+    }
+    
+
     public virtual void ProcessInteractionSession(float dt)
     {
         if (Session.Completed)return;
@@ -48,7 +75,7 @@ public class Entity // Data Class
         // Entity swing: keep going only while the crosshair stays on the session
         // target (the raycast result refreshes every frame) and it is alive.
         else if(Session.TargetType == InteractionSessionTargetType.Entity && (CurrentRaycastHitResult.HitEntity != Session.entity
-                 || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
+                || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
         else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
         if (Session.Completed)
         {

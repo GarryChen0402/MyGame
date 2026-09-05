@@ -9,9 +9,9 @@ public class PlayerInputHandler : IInputHandler
 
     private float horizontalMoveSpeed = 5;
 
-    private float verticalMoveSpeed = 5;
-
     private float mouseSensitivity = 2f;
+
+    private const float JumpSpeed = 6.4f;   // m/s: jump height ~6.4^2/(2*16) ~= 1.28m (MC ~1.25 blocks)
 
     private const float RaycastReach = 4.5f;
     public PlayerInputHandler()
@@ -69,22 +69,24 @@ public class PlayerInputHandler : IInputHandler
         //     Debug.Log("Looking at air");
 
         Vector2 moveDir = Vector2.zero;
-        int horizontalMove = 0;
         if(keys.IsDown("minecraft:forward"))moveDir.x += 1;
         if(keys.IsDown("minecraft:back"))moveDir.x -= 1;
         if(keys.IsDown("minecraft:left"))moveDir.y -= 1;
         if(keys.IsDown("minecraft:right"))moveDir.y += 1;
-        if(keys.IsDown("minecraft:ascend"))horizontalMove += 1;
-        if(keys.IsDown("minecraft:descend"))horizontalMove -= 1;
 
         float yawRad = player.yaw * Mathf.Deg2Rad;
         Vector3 moveDirection = new Vector3(Mathf.Sin(yawRad), 0, Mathf.Cos(yawRad)).normalized;
         Vector3 right = new(Mathf.Cos(yawRad), 0, -Mathf.Sin(yawRad));   // 绕 Y 顺时针 90°
-        Vector3 motion = (moveDirection * moveDir.x + right * moveDir.y) * horizontalMoveSpeed
-                       + Vector3.up * horizontalMove * verticalMoveSpeed;
-        motion *= Time.deltaTime;
 
-        player.Move(motion);
+        // Unified motion (Docs/受击击退与无敌帧实现方案.md): input drives only
+        // the horizontal target speed - immediate set, no inertia; vertical is
+        // gravity-integrated by Entity.TickPhysics. Jump fires on a grounded
+        // edge press only.
+        Vector3 target = (moveDirection * moveDir.x + right * moveDir.y) * horizontalMoveSpeed;
+        player.Motion.x = target.x;
+        player.Motion.z = target.z;
+        if(keys.WasPressed("minecraft:jump") && player.IsOnGround)
+            player.Motion.y = JumpSpeed;
     }
 
     private void InteractionHandler(KeyBindingManager keys)

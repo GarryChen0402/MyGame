@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Drives every live item drop once per rendered frame. Mirrors
-// BlockEntityManager's shape: chunks own the data (Chunk.ItemEntities), this
-// manager keeps a reference set of living drops only and ticks them. Unlike
-// BlockEntityManager there is no 20Hz accumulator - item physics is integrated
-// per rendered frame with deltaTime (design doc §5).
+// Keeps the live reference set of item drops and re-parents drops that cross
+// chunk borders once their move settles. Ticking itself lives in
+// EntityManager.Update (the Entity ctor auto-registers every ItemEntity, so
+// drops tick exactly once per frame from there - v1 also ticked them from
+// here, which integrated the physics twice per frame). Chunks own the data
+// (Chunk.ItemEntities), see design doc 掉落物ItemEntity实现方案.md.
 public class ItemEntityManager
 {
     public static ItemEntityManager Instance { get; } = new();
@@ -33,15 +34,14 @@ public class ItemEntityManager
         if(entity != null)tracked.Remove(entity);
     }
 
-    // Frame driver, mounted in WorldManager.Tick (GameLoopDriver) next to
-    // BlockEntityManager.Tick.
-    public void Update(float deltaTime)
+    // Frame driver, mounted in WorldManager.Tick after EntityManager.Update:
+    // the frame's movement has already settled, so chunk ownership can follow
+    // the drop's new position.
+    public void Update()
     {
         if(tracked.Count == 0)return;
         tickBuffer.Clear();
         tickBuffer.AddRange(tracked);   // snapshot: despawn mid-update can't break iteration
-        foreach(var entity in tickBuffer)
-            if(tracked.Contains(entity))entity.OnUpdate(deltaTime);
         foreach(var entity in tickBuffer)
             if(tracked.Contains(entity))VerifyOwnership(entity);
     }
@@ -82,7 +82,7 @@ public class ItemEntityManager
         var entity = new ItemEntity();   // ctor publishes SummonEntity -> PhysicsManager registers the AABB
         entity.DimensionId = dimensionId;
         entity.Stack = stack;
-        entity.MotionSpeed = motion ?? Vector3.zero;
+        entity.Motion = motion ?? Vector3.zero;
         entity.PickupDelay = pickupDelay;
         entity.SetPosition(position);
         chunk.RegisterItemEntity(entity);   // into Chunk.ItemEntities + tracked
@@ -96,6 +96,7 @@ public class ItemEntityManager
     public void DespawnItemEntity(ItemEntity entity)
     {
         if(entity == null || !tracked.Remove(entity))return;
+        EntityManager.Instance.Unregister(entity);   // leave the tick set or EntityManager.Update keeps ticking the corpse
         if(entity.OwnerChunk != null)
         {
             entity.OwnerChunk.ItemEntities.Remove(entity);

@@ -7,7 +7,6 @@ using UnityEngine;
 public class ItemEntity : Entity
 {
     public ItemStack Stack;          // carried whole stack (one stack = one drop)
-    public Vector3 MotionSpeed;      // m/s (project convention, NOT m/tick)
     public float LifeTime;           // seconds alive: despawn timer + bob phase
     public float PickupDelay;        // seconds before pickup allowed (break 0.5 / toss 2.0)
     public float DespawnTime = 300f; // 5 minutes (vanilla 6000 ticks)
@@ -39,33 +38,14 @@ public class ItemEntity : Entity
 
     // Per-frame update, deltaTime in seconds (design doc §5). All quantities
     // are seconds-based, so the integration is frame-rate independent.
+    // Physics runs inside base.OnUpdate -> TickPhysics (overridden below).
+    // The Entity ctor registers every drop into EntityManager, so drops tick
+    // exactly once per frame here (single-path tick; ItemEntityManager no
+    // longer calls OnUpdate - v1 double-ticked drops from both managers).
     public override void OnUpdate(float dt)
     {
         if(PickupDelay > 0f)PickupDelay = Mathf.Max(0f, PickupDelay - dt);
-
-        // Air drag applies to the pre-gravity velocity, then gravity adds in
-        // (vanilla order): drag 0.667/s = vanilla 0.98 per tick (0.98^20).
-        MotionSpeed *= Mathf.Pow(0.667f, dt);
-        MotionSpeed.y -= 16f * dt;   // gravity 16 m/s^2 (vanilla 0.04 /tick^2)
-
-        bool onGround = MoveAndSettle(dt);
-        if(onGround)
-        {
-            // Landing friction (design doc §5 note, hand-tuned): one hard cut
-            // on the touchdown frame, then a slow decay while resting.
-            if(wasOnGround)
-            {
-                MotionSpeed.x *= Mathf.Pow(0.05f, dt);
-                MotionSpeed.z *= Mathf.Pow(0.05f, dt);
-            }
-            else
-            {
-                MotionSpeed.x *= 0.3f;
-                MotionSpeed.z *= 0.3f;
-            }
-        }
-        wasOnGround = onGround;
-
+        base.OnUpdate(dt);
         TickMerge(dt);
         TryPickup();
 
@@ -94,13 +74,44 @@ public class ItemEntity : Entity
         ItemEntityManager.Instance.DespawnItemEntity(this);
     }
 
+    // Drop physics: air drag and landing friction rules differ from
+    // player/mob (drag 0.667/s = vanilla 0.98 per tick; hard 0.3 cut on the
+    // touchdown frame then 0.05/s decay while resting), so the whole set is
+    // overridden instead of calling base.TickPhysics.
+    protected override void TickPhysics(float dt)
+    {
+        // Air drag applies to the pre-gravity velocity, then gravity adds in
+        // (vanilla order): drag 0.667/s = vanilla 0.98 per tick (0.98^20).
+        Motion *= Mathf.Pow(0.667f, dt);
+        Motion.y -= Gravity * dt;   // gravity 16 m/s^2 (vanilla 0.04 /tick^2)
+
+        bool onGround = MoveAndSettle(dt);
+        OnGround = onGround;
+        if(onGround)
+        {
+            // Landing friction (design doc §5 note, hand-tuned): one hard cut
+            // on the touchdown frame, then a slow decay while resting.
+            if(wasOnGround)
+            {
+                Motion.x *= Mathf.Pow(0.05f, dt);
+                Motion.z *= Mathf.Pow(0.05f, dt);
+            }
+            else
+            {
+                Motion.x *= 0.3f;
+                Motion.z *= 0.3f;
+            }
+        }
+        wasOnGround = onGround;
+    }
+
     // Sweeps the displacement (PhysicsManager axis-separated) and zeroes the
     // vertical speed on ground contact so resting drops stop falling.
     private bool MoveAndSettle(float dt)
     {
-        MoveResult result = PhysicsManager.Instance.MoveEntity(this, MotionSpeed * dt);
+        MoveResult result = PhysicsManager.Instance.MoveEntity(this, Motion * dt);
         if(!result.OnGround)return false;
-        MotionSpeed.y = 0f;
+        Motion.y = 0f;
         return true;
     }
 

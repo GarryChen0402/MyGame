@@ -500,8 +500,9 @@ public class Minecraft : IMod
         RegisterKeyBinding("back", KeyCode.S, "movement", "minecraft:player_input_handler");
         RegisterKeyBinding("left", KeyCode.A, "movement", "minecraft:player_input_handler");
         RegisterKeyBinding("right", KeyCode.D, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("ascend", KeyCode.Space, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("descend", KeyCode.LeftShift, "movement", "minecraft:player_input_handler");
+        // Space jumps (MC-style; the ascend/descend flight keys went away with
+        // the unified gravity physics, see Docs/受击击退与无敌帧实现方案.md).
+        RegisterKeyBinding("jump", KeyCode.Space, "movement", "minecraft:player_input_handler");
         RegisterKeyBinding("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
         RegisterKeyBinding("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
         // Widget smoke-test UI (UI 组件化重构设计方案 §3.4): opens the tab /

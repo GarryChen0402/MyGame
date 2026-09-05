@@ -6,6 +6,14 @@ public class MobEntity : Entity
     public float CurrentHealth {get; private set;} = 0;
     public ValueEntry MaxHealth {get; private set;}
 
+    private const float ExternalDamping = 3f;
+    protected override void TickPhysics(float dt)
+    {
+        Motion.x *= Mathf.Pow(ExternalDamping, dt);
+        Motion.z *= Mathf.Pow(ExternalDamping, dt);
+        base.TickPhysics(dt);
+    }
+
     public MobEntity()
     {
         EntityManager.Instance.Register(this);
@@ -42,10 +50,15 @@ public class MobEntity : Entity
     private float deathTimer;
     private const float DeathDelaySeconds = 1.5f;   // visual margin (design doc §4.6)
 
-    public void Hurt(float damage)
+    public void Hurt(float damage, Vector3 knockbackVelocity = default)
     {
         if(IsDead)return;
+        if(InvincibleTimer > 0)return;
         CurrentHealth = Mathf.Clamp(CurrentHealth - damage, 0, MaxHealth.CurrentValue);
+        InvincibleTimer = HurtInvincibleSeconds;
+        if(knockbackVelocity != Vector3.zero)
+            Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
+
         Debug.Log($"[Mob] {MobName} took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
         EventBus.Instance.Publish(new HurtEntity(){entity = this, amount = damage});
         if(CurrentHealth <= 0)Dead();
