@@ -7,7 +7,7 @@ public class PhysicsManager
     private static readonly PhysicsManager instance = new();
     public static PhysicsManager Instance => instance;
 
-    private readonly Dictionary<Entity, List<AABB>> entites = new();
+    public readonly Dictionary<Entity, List<AABB>> entites = new();
 
     private PhysicsManager()
     {

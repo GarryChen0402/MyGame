@@ -61,7 +61,7 @@ public class PlayerInputHandler : IInputHandler
         Vector3 dir = Quaternion.Euler(player.pitch, player.yaw, 0) * Vector3.forward;
         RaycastHit hit = default;
         if(WorldManager.Instance.TryGetDimension(player.DimensionId, out Dimension dim))
-            hit = Raycaster.Raycast(dim, eye, dir, RaycastReach, out hit) ? hit : default;
+            hit = Raycaster.Raycast(dim, eye, dir, RaycastReach, out hit, player) ? hit : default;
         player.CurrentRaycastHitResult = hit;
         // if(hit.IsHit)
         //     Debug.Log($"Looking at block {hit.BlockDimensionCoord}, dist {hit.Distance:F2}, normal {hit.Normal}");

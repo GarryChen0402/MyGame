@@ -1,5 +1,11 @@
 using UnityEngine;
 
+public enum RaycastHitType
+{
+    Block,
+    Mob
+}
+
 public readonly struct RaycastHit
 {
     public readonly Vector3Int BlockDimensionCoord;
@@ -7,20 +13,24 @@ public readonly struct RaycastHit
     public readonly Vector3 HitPoint;
     public readonly float Distance;
     public readonly bool IsHit;
+    public readonly RaycastHitType HitType;
+    public readonly Entity HitEntity;   // non-null when the hit is a mob
 
-    public RaycastHit(Vector3Int coord, Vector3 norm, Vector3 hitpoint, float dis)
+    public RaycastHit(Vector3Int coord, Vector3 norm, Vector3 hitpoint, float dis, RaycastHitType hitType, Entity entity = null)
     {
         BlockDimensionCoord = coord;
         Normal = norm;
         HitPoint = hitpoint;
         Distance = dis;
         IsHit = true;
+        HitType = hitType;
+        HitEntity = entity;
     }
 }
 
 public static class Raycaster
 {
-    public static bool Raycast(Dimension dim, Vector3 origin, Vector3 dir, float maxDistance, out RaycastHit hit)
+    public static bool Raycast(Dimension dim, Vector3 origin, Vector3 dir, float maxDistance, out RaycastHit hit, Entity ignore = null)
     {
         hit = default;
         Vector3Int originCoord = Dimension.WorldPosToDimensionCoord(origin);
@@ -52,8 +62,9 @@ public static class Raycaster
 
                 if(bestT <= maxDistance)
                 {
-                    hit = new RaycastHit(originCoord, bestNormal, origin + dir * bestT, bestT);
-                    return true;
+                    hit = new RaycastHit(originCoord, bestNormal, origin + dir * bestT, bestT, RaycastHitType.Block);
+                    // return true;
+                    break;
                 }
             }
 
@@ -76,7 +87,38 @@ public static class Raycaster
                 tMaxZ += tDeltaZ;
             }
         }
-        return false;
+        // Entity (mob) pass: nearest registered entity box along the ray.
+        // boxT == 0 (origin inside a box) is skipped so overlapping a mob never
+        // locks the crosshair onto it; blocks already matched are kept unless
+        // the entity hit is strictly closer.
+        float blockT = hit.IsHit ? hit.Distance : float.PositiveInfinity;
+        float entityT = float.PositiveInfinity;
+        RaycastHit entityHit = default;
+        foreach (var pair in PhysicsManager.Instance.entites)
+        {
+            if (pair.Key == ignore) continue;
+            foreach (var box in pair.Value)
+            {
+                if (RayAABB(origin, dir, box, out float boxT, out Vector3 normal)
+                    && boxT > 1e-4f && boxT < entityT)
+                {
+                    entityT = boxT;
+                    entityHit = new RaycastHit(default, normal, origin + dir * boxT,
+                                               boxT, RaycastHitType.Mob, pair.Key);
+                }
+            }
+        }
+
+        if (entityT < blockT)
+        {
+            hit = entityHit;
+            string entityName = hit.HitEntity is MobEntity mob && mob.Definition != null
+                ? mob.Definition.FullName
+                : hit.HitEntity.GetType().Name;
+            Debug.Log($"[Raycaster] entity hit: {entityName} at {hit.HitPoint}, distance {hit.Distance:F2}");
+            return true;
+        }
+        return hit.IsHit;
 
     }
     private static float NextBoundaryTime(float origin, int coord, float dir, float tDelta)
