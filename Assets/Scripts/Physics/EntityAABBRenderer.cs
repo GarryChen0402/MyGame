@@ -6,12 +6,12 @@ public class EntityAABBRenderer : MonoBehaviour
     private List<List<AABB>> allEntityAABBs = new();
     private void Awake()
     {
-        EventBus.Instance.Subscribe<SummonEntity>(OnSummonEntity);
+        EventBus.Instance.Subscribe<SummonEntityEvent>(OnSummonEntity);
         EventBus.Instance.Subscribe<DestroyEntity>(OnDestroyEntity);
         RefreshAABBLists();
     }
 
-    private void OnSummonEntity(SummonEntity evt)
+    private void OnSummonEntity(SummonEntityEvent evt)
     {
         RefreshAABBLists();
     }

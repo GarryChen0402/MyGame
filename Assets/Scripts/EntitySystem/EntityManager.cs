@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 public class EntityManager
 {
@@ -11,7 +12,7 @@ public class EntityManager
 
     private EntityManager()
     {
-        EventBus.Instance.Subscribe<SummonEntity>((evt)=> Register(evt.entity));
+        EventBus.Instance.Subscribe<SummonEntityEvent>((evt)=> Register(evt.entity));
     }
 
     public void Register(Entity entity)
@@ -36,5 +37,17 @@ public class EntityManager
 
         foreach(var e in pendingAddList)Register(e);
         foreach(var e in pendingRemoveList)Unregister(e);
+    }
+
+    public static bool SummonMobEntity(Vector3 targetPos, string MobDefinitionId)
+    {
+        if (!ResourceSystem.Instance.MobDefinitions.TryGetResourceWithFullName(MobDefinitionId, out var def))
+        {
+            Debug.LogWarning($"[EntityManager] unknown mob definition '{MobDefinitionId}'");
+            return false;
+        }
+        var target = new MobEntity();
+        target.Init(def, targetPos);
+        return true;
     }
 }

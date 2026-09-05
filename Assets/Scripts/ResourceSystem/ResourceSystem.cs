@@ -45,6 +45,9 @@ public partial class ResourceSystem
     public ResourceRegistryTable<IInputHandler> InputHandlers {get;} = new();
     // Input actions (physical key -> action table, MC KeyMapping style)
     public ResourceRegistryTable<KeyBinding> KeyBindings {get;} = new();
+    //MobDefinition
+    public ResourceRegistryTable<MobDefinition> MobDefinitions {get;} = new();
+
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
     private Texture2D blockAtlas;

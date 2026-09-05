@@ -11,7 +11,7 @@ public class PhysicsManager
 
     private PhysicsManager()
     {
-        EventBus.Instance.Subscribe<SummonEntity>(OnSummonEntity);
+        EventBus.Instance.Subscribe<SummonEntityEvent>(OnSummonEntity);
         EventBus.Instance.Subscribe<DestroyEntity>(OnDestroyEntity);
     }
 
@@ -24,7 +24,7 @@ public class PhysicsManager
     private void UnRegister(Entity entity)
         => entites.Remove(entity);
 
-    private void OnSummonEntity(SummonEntity evt)
+    private void OnSummonEntity(SummonEntityEvent evt)
         => Register(evt.entity);
     
     private void OnDestroyEntity(DestroyEntity evt)

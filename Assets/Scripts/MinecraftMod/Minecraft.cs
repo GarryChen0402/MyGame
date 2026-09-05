@@ -1,5 +1,6 @@
 
 using System.Collections.Generic;
+using Unity.Burst.Intrinsics;
 using UnityEngine;
 
 public class Minecraft : IMod
@@ -504,6 +505,30 @@ public class Minecraft : IMod
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
         RegisterKeyBinding("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
+
+
+        // Mob Entity
+        var zombie = new MobDefinition()
+        {
+            modId = ModId,
+            name = "zombie",
+            Category = new()
+            {
+                "undead"
+            },
+            BaseMaxHealth = 20,
+            BaseDamage = 2,
+            BaseMoveSpeed = 5,
+            CollisionBoxes = new()
+            {
+                new AABB()
+                {
+                    MinRange = new Vector3(-0.3f, 0, -0.3f),
+                    MaxRange = new Vector3( 0.3f, 1.8f, 0.3f)
+                }
+            }
+        };
+        ResourceSystem.Instance.MobDefinitions.Register(zombie);
 
         //Break block sprite
         for(int i = 0; i < 10; i++)

@@ -1,6 +1,6 @@
 
 
-public class SummonEntity : GameEvent
+public class SummonEntityEvent : GameEvent
 {
     public Entity entity;
 }

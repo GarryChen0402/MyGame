@@ -20,7 +20,7 @@ public class Entity // Data Class
 
     public Entity()
     {
-        EventBus.Instance.Publish(new SummonEntity(){entity = this});
+        EventBus.Instance.Publish(new SummonEntityEvent(){entity = this});
     }
 
     public void OnDestroy() => EventBus.Instance.Publish(new DestroyEntity(){entity = this});
