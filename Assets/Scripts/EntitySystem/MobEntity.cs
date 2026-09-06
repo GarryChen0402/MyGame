@@ -1,11 +1,8 @@
 using System;
 using UnityEngine;
-public class MobEntity : Entity
+public class MobEntity : LivingEntity
 {
     public MobDefinition Definition {get; private set;} = null;
-
-    public float CurrentHealth {get; private set;} = 0;
-    public ValueEntry MaxHealth {get; private set;}
 
     // Head heading + lock flag (data layer, same shape as Entity.yaw): MobAI
     // evolves HeadYaw toward the look target while pursuing and sets
@@ -84,65 +81,38 @@ public class MobEntity : Entity
         }
     }
 
-    public bool IsDead {get; private set;} = false;
-
-    // Last TickPhysics ground result, exposed for AI jump gating (same shape
-    // as Player.IsOnGround).
-    public bool IsOnGround => OnGround;
     private float deathTimer;
     private const float DeathDelaySeconds = 1.5f;   // visual margin (design doc §4.6)
 
-    // Hurt/death event main handlers (registered once in the static ctor): the
-    // hurt event applies the damage flow, the death event runs the corpse state
-    // transition. A victim instance implies the type is already initialized, so
-    // registration always precedes any publish.
+    // Hurt event main handler (registered once in the static ctor): the mob
+    // hurt channel stays eventified - LivingEntity.Hurt dispatches the shared
+    // flow from here. The death event is *not* subscribed: MobEntity.Dead
+    // publishes it, and a self-subscription would re-enter Dead on its own
+    // broadcast. A victim instance implies the type is already initialized,
+    // so registration always precedes any publish.
     private static readonly Action<MobEntityHurtEvent> hurtHandler = OnHurtEvent;
-    private static readonly Action<MobEntityDeathEvent> deathHandler = OnDeathEvent;
 
     static MobEntity()
     {
         EventBus.Instance.Subscribe(hurtHandler);
-        EventBus.Instance.Subscribe(deathHandler);
     }
 
     private static void OnHurtEvent(MobEntityHurtEvent evt)
         => evt.entity.Hurt(evt.attacker, evt.amount, evt.knockbackVelocity);
 
-    private static void OnDeathEvent(MobEntityDeathEvent evt)
-        => evt.entity.Dead();
-
-    public void Hurt(Entity attacker, float damage, Vector3 knockbackVelocity = default)
+    // Death state transition, dispatched by LivingEntity.Hurt at zero health
+    // (virtual Dead entry; the hurt channel above stays eventified). Settles
+    // the corpse state first, then broadcasts the death event so LootManager
+    // reacts to a stable corpse - same frame as the lethal hit, published
+    // exactly once (no subscriber here, so no re-entry).
+    protected override void Dead(Entity attacker)
     {
-        if(IsDead)return;
-        if(InvincibleTimer > 0)return;
-        CurrentHealth = Mathf.Clamp(CurrentHealth - damage, 0, MaxHealth.CurrentValue);
-        InvincibleTimer = HurtInvincibleSeconds;
-        if(knockbackVelocity != Vector3.zero)
-            Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
-
-        Debug.Log($"[Mob] {MobName} took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
-        if(CurrentHealth <= 0f)
-            // Death published at the lethal hit: this hit's attacker is the killer
-            // (window-immune hits never reach this line); Dead() runs as the
-            // death event's main handler.
-            EventBus.Instance.Publish(new MobEntityDeathEvent(){entity = this, attacker = attacker});
-    }
-
-    public void Heal(float heal)
-    {
-        if(IsDead)return;
-        CurrentHealth = Mathf.Clamp(CurrentHealth + heal, 0, MaxHealth.CurrentValue);
-    }
-    // Death state transition, run as the death event's main handler (the only
-    // caller - external killers publish MobEntityDeathEvent instead, so the
-    // broadcast is never bypassed).
-    private void Dead()
-    {
-        if(IsDead)return;   // idempotent: hurt-triggered and event-driven calls converge on one flow
+        if(IsDead)return;   // idempotent: one corpse state per entity
         IsDead = true;
         AI?.Stop();         // unsubscribe PlayerDeadEvent - the corpse no longer senses
         Session.Completed = true;   // a corpse never settles a swing (silent: no Interrupted event)
         Debug.Log($"[Mob] {MobName} died");
+        EventBus.Instance.Publish(new MobEntityDeathEvent(){entity = this, attacker = attacker});
     }
 
     private string MobName => Definition != null ? Definition.FullName : GetType().Name;

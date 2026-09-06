@@ -51,7 +51,9 @@ public class ZombieAttackState : AIState
                 d.y = 0f;
                 if(d.sqrMagnitude > 1e-6f)d.Normalize();
                 else d = Quaternion.Euler(0f, mob.yaw, 0f) * Vector3.forward;   // overlap fallback: own heading
-                player.Hurt(damage, d * knockbackSpeed);
+                // attacker = this mob: the player channel ignores it today, but
+                // future source-aware effects (burn damage scaling etc.) read it.
+                player.Hurt(mob, damage, d * knockbackSpeed);
             },
             interval, target, default, null))
         {

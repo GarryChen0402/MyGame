@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Player : Entity, ICraftingGridHost
+public class Player : LivingEntity, ICraftingGridHost
 {
     private static Player instance = new();
     public static Player Instance => instance;
@@ -10,14 +10,8 @@ public class Player : Entity, ICraftingGridHost
     public const float EyeHeight = 1.62f;
 
     public const float MaxHealthValue = 20f;   // MC player 20 HP; no def resource in v1
-    public ValueEntry MaxHealth {get; private set;}
-    public float CurrentHealth {get; private set;}
 
     private const float HurtKnockbackDamping = 3f;   // hurt-window horizontal friction (slide ~ speed/3, mob-scale)
-
-    // Last TickPhysics ground result (Entity.OnGround), exposed to the input
-    // layer so jump impulses only fire from the ground.
-    public bool IsOnGround => OnGround;
 
     private float harvestSpeedMultiply = 1.0f;
 
@@ -172,28 +166,16 @@ public class Player : Entity, ICraftingGridHost
         base.TickPhysics(dt);
     }
 
-    // Mirror of MobEntity.Hurt (design doc §4): invincibility gate -> damage ->
-    // window -> horizontal knockback write. Death keeps the entity in place
-    // (PlayerDeadEvent, no death event) - respawn semantics land later.
-    public void Hurt(float damage, Vector3 knockbackVelocity = default)
+    // Player death channel keeps its own shape (design doc §4 separation):
+    // hurt itself enters non-eventified through the shared virtual
+    // LivingEntity.Hurt; at zero health Dead broadcasts PlayerDeadEvent, then
+    // runs v1's instant full-HP reset in place. No corpse state - IsDead never
+    // turns true, the player keeps playing.
+    protected override void Dead(Entity attacker)
     {
-        if(InvincibleTimer > 0f)return;
-        CurrentHealth = Mathf.Clamp(CurrentHealth - damage, 0f, MaxHealth.CurrentValue);
-        InvincibleTimer = HurtInvincibleSeconds;
-        if(knockbackVelocity != Vector3.zero)
-            Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
-
-        Debug.Log($"[Player] took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
-
-        // (no hurt notification: player-side damage stays non-eventified until
-        // the player hurt eventification task; PlayerDeadEvent below is the
-        // only player broadcast)
-        if(CurrentHealth <= 0f)
-        {
-            EventBus.Instance.Publish(new PlayerDeadEvent());   // zombie AI unsubscribes its chase lock
-            CurrentHealth = MaxHealth.CurrentValue;             // v1: instant full reset in place
-            // TODO full death flow (respawn / scene reset) replaces the instant reset
-        }
+        EventBus.Instance.Publish(new PlayerDeadEvent());   // zombie AI unsubscribes its chase lock
+        CurrentHealth = MaxHealth.CurrentValue;             // v1: instant full reset in place
+        // TODO full death flow (respawn / scene reset) replaces the instant reset
     }
 
     public ValueEntry AttackPoint;

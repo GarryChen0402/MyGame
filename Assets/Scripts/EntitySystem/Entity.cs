@@ -95,8 +95,10 @@ public class Entity // Data Class
             if(Session.TargetType == InteractionSessionTargetType.Block && (!CurrentRaycastHitResult.IsHit || CurrentRaycastHitResult.BlockDimensionCoord != Session.blockDimCoord))Session.Completed = true;
             // Entity swing: keep going only while the crosshair stays on the session
             // target (the raycast result refreshes every frame) and it is alive.
+            // (Players never set IsDead - the v1 reset keeps them alive - so the
+            // LivingEntity check behaves exactly like the former MobEntity one.)
             else if(Session.TargetType == InteractionSessionTargetType.Entity && (CurrentRaycastHitResult.HitEntity != Session.entity
-                    || (Session.entity is MobEntity mob && mob.IsDead)))Session.Completed = true;
+                    || (Session.entity is LivingEntity living && living.IsDead)))Session.Completed = true;
             else if(Session.TargetType == InteractionSessionTargetType.Item && GetCurrentHoldingItemStack() != Session.itemStack)Session.Completed = true;
         }
         if (Session.Completed)
