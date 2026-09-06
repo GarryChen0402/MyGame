@@ -16,13 +16,17 @@ public class ProcessingWorkContainer : WorkContainer
     // {"universal:processing"} (WorkContainerConfig.SupportedRecipeTypes).
     private readonly List<string> supportedRecipeTypes;
 
-    // Temporary flat fuel value until ItemDefinition gains a real burn-time field.
-    public const int FUEL_BURN_TICKS = 200;
+    // Burn time now lives on the fuel item: ItemDefinition.CustomDatas under
+    // the key below (coal registers 1600 ticks, vanilla's 80 s). A "fuel"-tagged
+    // item without the value is treated as unburnable.
+    private const string HeatValueKey = "minecraft:heat_value";
+    private string rejectedFuelFullName;   // last fuel rejected for a missing burn value (warn once)
 
     public InventoryDataContainer Input, Output, Fuel;
     public int CurrentTickProgress;   // ticks burned so far (vanilla cookingProgress)
     public int TotalTickTime;         // target ticks for the current recipe
     public int FuelLeftTickTime;      // remaining fuel ticks (vanilla litTime)
+    public int CurrentFuelTotalTicks; // total ticks of the lit fuel piece (vanilla burnTime, fire gauge denominator)
     public RecipeContent CurrentRecipe;
 
     public ProcessingWorkContainer(WorkContainerConfig config)
@@ -87,9 +91,10 @@ public class ProcessingWorkContainer : WorkContainer
                 }
             }
         }
-        else if (canRun && TryConsumeFuel())
+        else if (canRun && TryConsumeFuel(out int burnTicks))
         {
-            FuelLeftTickTime = FUEL_BURN_TICKS;   // lit fire starts next tick
+            FuelLeftTickTime = burnTicks;             // lit fire starts next tick
+            CurrentFuelTotalTicks = burnTicks;
             changed = true;
         }
         if (changed) MarkDirty();
@@ -150,14 +155,41 @@ public class ProcessingWorkContainer : WorkContainer
         return true;
     }
 
-    private bool TryConsumeFuel()
+    private bool TryConsumeFuel(out int burnTicks)
     {
+        burnTicks = 0;
         for (int i = 0; i < Fuel.Inv.itemStacks.Count; i++)
         {
             var slot = Fuel.Inv.GetItemStackAt(i);
             if (slot == null || slot.IsEmpty()) continue;
+            if (slot.itemId == 0
+                || !ResourceSystem.Instance.ItemDefinitions
+                    .TryGetResourceWithNumberId(slot.itemId, out var def)
+                || !TryGetBurnTicks(def, out burnTicks))
+                continue;
             Fuel.Inv.TryConsumeItemAt(i, 1);
             return true;
+        }
+        return false;
+    }
+
+    // Burn time is read from the item definition's CustomDatas (coal registers
+    // 1600 ticks). A missing/zero value means the item never lights; warn once
+    // per item kind instead of spamming every tick it sits in the fuel slot.
+    private bool TryGetBurnTicks(ItemDefinition def, out int burnTicks)
+    {
+        burnTicks = 0;
+        if (def.CustomDatas != null
+            && def.CustomDatas.TryGetValue(HeatValueKey, out var raw)
+            && raw is CustomDataValue<int> typed && typed.Value > 0)
+        {
+            burnTicks = typed.Value;
+            return true;
+        }
+        if (rejectedFuelFullName != def.FullName)
+        {
+            rejectedFuelFullName = def.FullName;
+            Debug.LogWarning($"[ProcessingWorkContainer] {def.FullName} is tagged as fuel but has no valid {HeatValueKey}, won't burn");
         }
         return false;
     }
@@ -216,6 +248,9 @@ public class ProcessingWorkContainer : WorkContainer
         CurrentTickProgress = save.progress;
         TotalTickTime = save.totalTicks;
         FuelLeftTickTime = save.fuelLeft;
+        // The lit piece's total ticks are not persisted; approximate from the
+        // saved remainder so the fire gauge decays instead of dividing by zero.
+        CurrentFuelTotalTicks = save.fuelLeft;
         // Re-match now so Tick resumes instead of restarting: a matching recipe
         // with the same total ticks keeps the progress; anything else (input
         // changed, recipe gone) falls back to a fresh start.

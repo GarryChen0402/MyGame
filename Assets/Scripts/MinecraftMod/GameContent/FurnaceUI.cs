@@ -140,7 +140,7 @@ public class FurnaceUI : UIBehavior
     {
         if(work == null)return;
         fireProgress.Progress = work.FuelLeftTickTime <= 0 ? 0f
-            : (float)work.FuelLeftTickTime / ProcessingWorkContainer.FUEL_BURN_TICKS;
+            : (float)work.FuelLeftTickTime / Mathf.Max(1, work.CurrentFuelTotalTicks);
         cookProgress.Progress = work.TotalTickTime <= 0 ? 0f
             : (float)work.CurrentTickProgress / work.TotalTickTime;
         inputSlot.Refresh();

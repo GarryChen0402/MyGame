@@ -326,7 +326,11 @@ public class Minecraft : IMod
             name = "coal",
             LayerTextures = new string[] { $"{ModId}:coal" },
             MaxStack = 64,
-            Tags = new() { "fuel" }
+            Tags = new() { "fuel" },
+            CustomDatas = new()
+            {
+                ["minecraft:heat_value"] = CustomDataValueFactory.Of(1600)
+            }
         });
 
         
