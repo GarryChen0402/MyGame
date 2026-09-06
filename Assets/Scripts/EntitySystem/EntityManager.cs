@@ -35,6 +35,12 @@ public class EntityManager
         foreach(var entity in entities)entity.OnUpdate(dt);
         InUpdating = false;
 
+        // Unified entity-entity push pass: runs after every entity finished its
+        // own move + block collision this frame. Pending spawns are flushed
+        // after it - a just-spawned entity has not moved yet and sits the pass
+        // out (design doc 生物实体碰撞-代码设计 §3).
+        EntityPushResolver.RunPass(entities);
+
         foreach(var e in pendingAddList)Register(e);
         foreach(var e in pendingRemoveList)Unregister(e);
     }
