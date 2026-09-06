@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -5,6 +6,21 @@ public class Player : LivingEntity, ICraftingGridHost
 {
     private static Player instance = new();
     public static Player Instance => instance;
+
+    // Player hurt channel main handler (mob-symmetric, design doc 规则 §4 切分):
+    // the attacker publishes PlayerHurtEvent and this static ctor registration
+    // applies the shared Hurt flow synchronously. Death stays broadcast-only
+    // (Dead publishes PlayerDeadEvent; no self-subscription, it would re-enter
+    // Dead on its own broadcast).
+    private static readonly Action<PlayerHurtEvent> hurtHandler = OnHurtEvent;
+
+    static Player()
+    {
+        EventBus.Instance.Subscribe(hurtHandler);
+    }
+
+    private static void OnHurtEvent(PlayerHurtEvent evt)
+        => evt.player.Hurt(evt.attacker, evt.amount, evt.knockbackVelocity);
 
     // MC: 1.8-tall player box, eyes sit at 1.62 above the feet.
     public const float EyeHeight = 1.62f;
@@ -167,13 +183,14 @@ public class Player : LivingEntity, ICraftingGridHost
     }
 
     // Player death channel keeps its own shape (design doc §4 separation):
-    // hurt itself enters non-eventified through the shared virtual
-    // LivingEntity.Hurt; at zero health Dead broadcasts PlayerDeadEvent, then
-    // runs v1's instant full-HP reset in place. No corpse state - IsDead never
-    // turns true, the player keeps playing.
+    // hurt enters eventified - the attacker publishes PlayerHurtEvent and the
+    // static handler above runs the shared virtual LivingEntity.Hurt. At zero
+    // health Dead broadcasts PlayerDeadEvent with the killer, then runs v1's
+    // instant full-HP reset in place. No corpse state - IsDead never turns
+    // true, the player keeps playing.
     protected override void Dead(Entity attacker)
     {
-        EventBus.Instance.Publish(new PlayerDeadEvent());   // zombie AI unsubscribes its chase lock
+        EventBus.Instance.Publish(new PlayerDeadEvent { attacker = attacker });   // zombie AI releases its chase lock
         CurrentHealth = MaxHealth.CurrentValue;             // v1: instant full reset in place
         // TODO full death flow (respawn / scene reset) replaces the instant reset
     }
