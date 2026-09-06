@@ -552,6 +552,11 @@ public class Minecraft : IMod
         };
         ResourceSystem.Instance.MobDefinitions.Register(zombie);
 
+        // Buff types: demo regeneration buff (lifecycle verification only,
+        // heal-through-tick, design doc Docs/Buff系统-代码设计.md §7).
+        ResourceSystem.Instance.BuffDefinitions.Register(new RegenBuffDefinition
+        { modId = "minecraft", name = "regeneration" });
+
         // AI spec: wiring logic registered once, behavior numbers ride as JSON
         // in ConfigJson (WorkContainer split: logic in C#, numbers as data).
         ResourceSystem.Instance.AIDefinitions.Register(new AIDefinition
