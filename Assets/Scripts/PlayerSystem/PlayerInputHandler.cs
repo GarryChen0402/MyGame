@@ -134,112 +134,12 @@ public class PlayerInputHandler : IInputHandler
 
         if (keys.WasPressed("minecraft:use_item"))
         {
-            if (player.IsHoldingItem())
-            {
-                ItemUseResult result = new();
-                ItemStack currentHoldingItemStack = player.inventory.GetItemStackAt(player.SelectedSlotIndex);
-                if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(currentHoldingItemStack.itemId, out var itemDef))return;
-                if (player.CurrentRaycastHitResult.IsHit)
-                {
-                    if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
-                    var stateId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
-                    if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var def))return;
-                    var blockDef = def.Block;
-                    var blockId = def.BlockId;
-                    if (blockDef.HasBlockEntity)
-                    {
-                        if(!WorldManager.Instance.TryGetBlockEntity(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, out BlockEntity blockEntity))
-                            return;
-                        var evt = new UseItemOnBlockEntity()
-                        {
-                            entity = player,
-                            HoldingItem = currentHoldingItemStack,
-                            ItemDef = itemDef,
-                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                            HitNormal = player.CurrentRaycastHitResult.Normal,
-                            BlockId = blockId,
-                            BlockDef = blockDef,
-                            blockEntity = blockEntity,
-                            BlockEntityDef = blockEntity.Definition,
-                        };
-                        EventBus.Instance.Publish(evt);
-                        result = evt.Result;
-                    }
-                    else
-                    {
-                        var evt = new UseItemOnStaticBlock()
-                        {
-                            entity = player,
-                            HoldingItem = currentHoldingItemStack,
-                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                            HitNormal = player.CurrentRaycastHitResult.Normal,
-                            ItemDef = itemDef,
-                            BlockId = blockId,
-                            BlockDef = blockDef
-                        };
-                        EventBus.Instance.Publish(evt);
-                        result = evt.Result;
-                    }
-
-                    // if(result.UseSuccess)currentHoldingItemStack.TryConsumeItem(result.ConsumeAmount);
-                }
-                else
-                {
-                    //Use Item no block hit
-                    var evt = new UseItemEvent()
-                    {
-                        entity = player,
-                        HoldingItem = currentHoldingItemStack,
-                        HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                        HitNormal = player.CurrentRaycastHitResult.Normal,
-                        ItemDef = itemDef,
-                        Result = result
-                    };
-                    EventBus.Instance.Publish(evt);
-                    result = evt.Result;
-                }
-                player.ConsumeItemUseResult(result);
-            }
-            else
-            {
-                if (player.CurrentRaycastHitResult.IsHit)
-                {
-                    if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
-                    var stateId = dim.GetBlockAt(player.CurrentRaycastHitResult.BlockDimensionCoord);
-                    if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var def))return;
-                    var blockDef = def.Block;
-                    var blockId = def.BlockId;
-                    if(!blockDef.HasBlockEntity)
-                    {
-                        var evt = new InteractWithStaticBlock()
-                        {
-                            entity = player,
-                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                            HitNormal = player.CurrentRaycastHitResult.Normal,
-                            BlockId = blockId,
-                            BlockDef = blockDef
-                        };
-                        EventBus.Instance.Publish(evt);
-                    }
-                    else
-                    {
-                        // The block has a BE: the chunk hosting it is always
-                        // enabled (the ray just hit it), so the lookup must succeed.
-                        if(!WorldManager.Instance.TryGetBlockEntity(player.DimensionId, player.CurrentRaycastHitResult.BlockDimensionCoord, out BlockEntity blockEntity)) return;
-                        var evt = new InteractWithBlockEntity()
-                        {
-                            entity = player,
-                            HitBlockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord,
-                            HitNormal = player.CurrentRaycastHitResult.Normal,
-                            BlockId = blockId,
-                            BlockDef = blockDef,
-                            blockEntity = blockEntity,
-                            BlockEntityDef = blockEntity.Definition
-                        };
-                        EventBus.Instance.Publish(evt);
-                    }
-                }
-            }
+            // Right-click funnels into the session pipeline (rule doc §3.1):
+            // InteractionManager resolves the target (block entity / static
+            // block / air) and the held item; the settled session re-publishes
+            // the original interaction events. A session in flight (mining,
+            // eating) silently rejects the click (session slot gate).
+            InteractionManager.Instance.HandleUseItem(player);
         }
     }
 

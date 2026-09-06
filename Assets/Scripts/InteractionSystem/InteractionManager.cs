@@ -3,6 +3,12 @@ using UnityEngine;
 
 public class InteractionManager
 {
+    // Binding names the session pipeline gates on (KeyBinding ids; IsDown also
+    // consults the active input context). Mining/attacking share the attack
+    // binding, the right-click use pipeline has its own.
+    public const string AttackBindingName = "minecraft:attack";
+    public const string UseBindingName = "minecraft:use_item";
+
     private static InteractionManager instance = new();
     public static InteractionManager Instance => instance;
 
@@ -14,6 +20,10 @@ public class InteractionManager
         EventBus.Instance.Subscribe<InteractWithStaticBlock>(OnInteractWithStaticBlock);
         EventBus.Instance.Subscribe<InteractWithBlockEntity>(OnInteractWithBlockEntity);
         EventBus.Instance.Subscribe<UseItemOnBlockEntity>(OnUseItemOnBlockEntity);
+        // Right-click on air (no block hit): the settlement of an Item-target
+        // session publishes this. (Formerly unsubscribed - the input layer
+        // published it into the void.)
+        EventBus.Instance.Subscribe<UseItemEvent>(OnUseItemEvent);
     }
 
 
@@ -27,7 +37,7 @@ public class InteractionManager
         // The session driver (Entity.ProcessInteractionSession) accumulates the
         // hold time and fires OnComplete once it reaches CompleteTime; the
         // callback consumes entity.Session as its context (single source).
-        entity.SetSession("minecraft:attack", InteractionSessionTargetType.Block,
+        entity.SetSession(AttackBindingName, InteractionSessionTargetType.Block,
             () => CompleteBreakSession(entity), completeTime, entity, dimCoord, null);
     }
 
@@ -38,8 +48,145 @@ public class InteractionManager
     // trigger hook for future attack events (swing animation, cool-down).
     public void HandleAttackEntity(Entity attacker, MobEntity target)
     {
-        attacker.SetSession("minecraft:attack", InteractionSessionTargetType.Entity,
+        attacker.SetSession(AttackBindingName, InteractionSessionTargetType.Entity,
             () => CompleteAttackSession(attacker), 0f, target, default, null);
+    }
+
+    // Right-click entry: every use/interact intent funnels into the session
+    // pipeline (rule doc §3.1). Resolution splits on what the raycast hit and
+    // what the operator holds: block-entity targets run on block-owned timing
+    // (0 for now), static-block and air targets run on the held item's UseTime
+    // (0 = instant click). Settlement re-publishes the pre-session interaction
+    // events, so the ItemBehavior/block-entity consumers stay untouched. An
+    // in-flight session (mining, eating) silently rejects the request.
+    public void HandleUseItem(Entity entity)
+    {
+        ItemStack held = entity.IsHoldingItem() ? entity.GetCurrentHoldingItemStack() : null;
+        ItemDefinition heldDef = null;
+        if(held != null && !ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(held.itemId, out heldDef))return;
+        var hit = entity.CurrentRaycastHitResult;
+        if(!hit.IsHit)
+        {
+            // Item used on air: only a held item acts - its UseTime gates the
+            // hold (eating/drinking). Empty-handed on air is nothing.
+            if(heldDef == null)return;
+            entity.SetSession(UseBindingName, InteractionSessionTargetType.Item,
+                () => CompleteUseSession(entity), heldDef.UseTime, null, default, held);
+            return;
+        }
+        if(!WorldManager.Instance.TryGetDimension(entity.DimensionId, out var dim))return;
+        ushort stateId = dim.GetBlockAt(hit.BlockDimensionCoord);
+        if(stateId == 0)return;   // air under the crosshair: nothing to interact with
+        if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var state))return;
+        BlockDefinition blockDef = state.Block;
+        // A block-entity host chunk is always enabled (the ray just hit it),
+        // so a missing BE means the target shifted between the raycast and the
+        // session start - drop the click (same guard the input layer ran).
+        if(blockDef.HasBlockEntity
+            && !WorldManager.Instance.TryGetBlockEntity(entity.DimensionId, hit.BlockDimensionCoord, out _))return;
+        bool hasBE = blockDef.HasBlockEntity;
+        // §3.1 timing split: BE targets use block-owned timing (0 until block
+        // entities define one); static-block targets use the held item's.
+        float completeTime = hasBE || heldDef == null ? 0f : heldDef.UseTime;
+        entity.SetSession(UseBindingName, InteractionSessionTargetType.Block,
+            () => CompleteUseSession(entity), completeTime, null, hit.BlockDimensionCoord, held, hit.Normal);
+    }
+
+    // Settled use/interact session (rule doc §3.3): re-publishes the
+    // interaction event the intent mapped to - payload rebuilt from the locked
+    // session context - then feeds the use result into the operator's consume
+    // path. Runs inside the settlement (same frame for instant sessions).
+    private static void CompleteUseSession(Entity entity)
+    {
+        InteractionSessionContext ctx = entity.Session;
+        bool holding = ctx.itemStack != null && !ctx.itemStack.IsEmpty();
+        Vector3Int coord = ctx.blockDimCoord;
+        if(ctx.TargetType == InteractionSessionTargetType.Item)
+        {
+            var evt = new UseItemEvent
+            {
+                entity = entity,
+                HoldingItem = ctx.itemStack,
+                ItemDef = ctx.ItemDef,
+                HitBlockCoord = coord,
+                HitNormal = ctx.HitNormal,
+                Result = new ItemUseResult()
+            };
+            EventBus.Instance.Publish(evt);
+            entity.ConsumeItemUseResult(evt.Result);
+            return;
+        }
+        // Block target: whether the target hosted a block entity at session
+        // start picks the BE variant (resolved into ctx by SetSession).
+        bool withBE = ctx.blockEntity != null;
+        if(holding)
+        {
+            ItemUseResult result = new();
+            if(withBE)
+            {
+                var evt = new UseItemOnBlockEntity
+                {
+                    entity = entity,
+                    HoldingItem = ctx.itemStack,
+                    ItemDef = ctx.ItemDef,
+                    HitBlockCoord = coord,
+                    HitNormal = ctx.HitNormal,
+                    BlockId = ctx.blockId,
+                    BlockDef = ctx.BlockDef,
+                    blockEntity = ctx.blockEntity,
+                    BlockEntityDef = ctx.BlockEntityDef,
+                    Result = result
+                };
+                EventBus.Instance.Publish(evt);
+                result = evt.Result;
+            }
+            else
+            {
+                var evt = new UseItemOnStaticBlock
+                {
+                    entity = entity,
+                    HoldingItem = ctx.itemStack,
+                    ItemDef = ctx.ItemDef,
+                    HitBlockCoord = coord,
+                    HitNormal = ctx.HitNormal,
+                    BlockId = ctx.blockId,
+                    BlockDef = ctx.BlockDef,
+                    Result = result
+                };
+                EventBus.Instance.Publish(evt);
+                result = evt.Result;
+            }
+            entity.ConsumeItemUseResult(result);
+            return;
+        }
+        // Empty-handed interaction: open/activate the target (BE) or the plain
+        // notification (static block).
+        if(withBE)
+        {
+            var evt = new InteractWithBlockEntity
+            {
+                entity = entity,
+                HitBlockCoord = coord,
+                HitNormal = ctx.HitNormal,
+                BlockId = ctx.blockId,
+                BlockDef = ctx.BlockDef,
+                blockEntity = ctx.blockEntity,
+                BlockEntityDef = ctx.BlockEntityDef
+            };
+            EventBus.Instance.Publish(evt);
+        }
+        else
+        {
+            var evt = new InteractWithStaticBlock
+            {
+                entity = entity,
+                HitBlockCoord = coord,
+                HitNormal = ctx.HitNormal,
+                BlockId = ctx.blockId,
+                BlockDef = ctx.BlockDef
+            };
+            EventBus.Instance.Publish(evt);
+        }
     }
 
     // Knockback impulse handed to Hurt on a landed hit (horizontal m/s;
@@ -116,6 +263,9 @@ public class InteractionManager
     public void OnUseItemOnStaticBlock(UseItemOnStaticBlock evt)
     {
         Debug.Log("Use item on static Block");
+        // Items without a behavior id (plain tools etc.) use nothing - skip
+        // before the registry lookup, a null key would throw.
+        if(string.IsNullOrEmpty(evt.ItemDef.ItemBehaivorId))return;
         if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(evt.ItemDef.ItemBehaivorId, out var behavior))return;
         evt.Result = behavior.OnRightUseToBlock(evt.entity, evt.HoldingItem);
         Debug.Log("Use item on static Block done");
@@ -139,6 +289,7 @@ public class InteractionManager
     public void OnUseItemEvent(UseItemEvent evt)
     {
         Debug.Log("Use item no block");
+        if(string.IsNullOrEmpty(evt.ItemDef.ItemBehaivorId))return;   // no behavior: nothing to use (null-key guard, see OnUseItemOnStaticBlock)
         if(!ResourceSystem.Instance.ItemBehaviors.TryGetResourceWithFullName(evt.ItemDef.ItemBehaivorId, out var behavior))return;
         evt.Result = behavior.OnRightUse(evt.entity, evt.HoldingItem);
     }

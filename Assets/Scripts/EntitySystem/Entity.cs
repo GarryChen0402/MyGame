@@ -32,6 +32,9 @@ public class Entity // Data Class
 
     public Entity()
     {
+        // Session slot starts idle: Completed true = "no session in flight"
+        // (the SetSession gate rejects new requests while one is active).
+        Session.Completed = true;
         EventBus.Instance.Publish(new SummonEntityEvent(){entity = this});
     }
 
@@ -106,20 +109,39 @@ public class Entity // Data Class
 
         if(Session.Durantion >= Session.CompleteTime)
         {
-            Session.OnComplete.Invoke();
-            Session.Completed = true;
-            EventBus.Instance.Publish(new InteractionSessionContextCompletedEvent(){Operator = this, Ctx = Session});
+            SettleCompletedSession();
         }
-        
+
     }
+
+    // Settles the running session: the Completed flag flips before the success
+    // callback runs - an exception thrown inside a callback (or one of its
+    // event subscribers) must not wedge the session slot open, or the frame
+    // loop would re-settle it forever. Shared by the frame accumulation path
+    // above and the instant path inside SetSession.
+    private void SettleCompletedSession()
+    {
+        Session.Completed = true;
+        Session.OnComplete.Invoke();
+        EventBus.Instance.Publish(new InteractionSessionContextCompletedEvent(){Operator = this, Ctx = Session});
+    }
+
     public virtual float GetSessionUpdateTime(InteractionSessionTargetType targetType, float dt) => dt;
 
     public virtual bool IsHoldingItem() => false;
     public virtual ItemStack GetCurrentHoldingItemStack() => null;
     
     public InteractionSessionContext Session {get; private set;} = new();
-    public void SetSession(string bindingFullName, InteractionSessionTargetType type, Action OnComplete, float CompleteTime, Entity entity = null, Vector3Int blockCoord = default, ItemStack itemStack = null)
+    // One session slot per entity: an in-flight session (not yet Completed)
+    // rejects a new request (returns false) so the operator keeps mining/
+    // eating undisturbed - the requester just drops its click. Settles
+    // instantly (CompleteTime <= 0) inside this call: the operator's frame
+    // state (raycast, held stack) is still the one the click saw, so the use
+    // lands against its original target - equivalent to the pre-session
+    // publish-and-settle flow the interaction events used to run on.
+    public bool SetSession(string bindingFullName, InteractionSessionTargetType type, Action OnComplete, float CompleteTime, Entity entity = null, Vector3Int blockCoord = default, ItemStack itemStack = null, Vector3 hitNormal = default)
     {
+        if(!Session.Completed)return false;
         Session.bindingFullName = bindingFullName;
         Session.CompleteTime = CompleteTime;
         Session.Durantion = 0;
@@ -128,6 +150,7 @@ public class Entity // Data Class
         Session.blockDimCoord = blockCoord;
         Session.entity = entity;
         Session.itemStack = itemStack;
+        Session.HitNormal = hitNormal;
         Session.OnComplete = OnComplete;
         if(itemStack != null && ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemStack.itemId, out var itemDefinition))
             Session.ItemDef = itemDefinition;
@@ -159,6 +182,8 @@ public class Entity // Data Class
             Ctx = Session
         });
 
+        if(CompleteTime <= 0f)SettleCompletedSession();   // instant sessions settle on the click frame
+        return true;
     }
 
     // Abort an in-progress session without completing it (used by AI states

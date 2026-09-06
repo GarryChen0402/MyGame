@@ -32,6 +32,12 @@ public class CrackBlockRenderer : MonoBehaviour
         public int lastStage = -1;
     }
 
+    // Mining sessions only: Block target + the attack binding. Right-click use
+    // sessions (placing etc.) share the Block target type and must not crack.
+    private static bool IsMiningSession(InteractionSessionContext ctx)
+        => ctx.TargetType == InteractionSessionTargetType.Block
+            && ctx.bindingFullName == InteractionManager.AttackBindingName;
+
     private void Awake()
     {
         EventBus.Instance.Subscribe<InteractionSessionContextStartEvent>(OnInteractionSessionStart);
@@ -64,14 +70,14 @@ public class CrackBlockRenderer : MonoBehaviour
 
     private void OnInteractionSessionStart(InteractionSessionContextStartEvent evt)
     {
-        if(evt.Ctx.TargetType != InteractionSessionTargetType.Block)return;
+        if(!IsMiningSession(evt.Ctx))return;
         BlockBreakStages[evt.Ctx.blockDimCoord] = 0;
         AnyChanged = true;
     }
 
     private void OnInteractionSessionTick(InteractionSessionContextTickEvent evt)
     {
-        if(evt.Ctx.TargetType != InteractionSessionTargetType.Block)return;
+        if(!IsMiningSession(evt.Ctx))return;
         var blockCoord = evt.Ctx.blockDimCoord;
         int newstage = GetBlockBreakStage(evt.Ctx.Durantion, evt.Ctx.CompleteTime);
         if(BlockBreakStages.TryGetValue(blockCoord, out int stage) && stage == newstage)return;
@@ -81,14 +87,14 @@ public class CrackBlockRenderer : MonoBehaviour
 
     private void OnInteractionSessionInterupted(InteractionSessionContextInteruptedEvent evt)
     {
-        if(evt.Ctx.TargetType != InteractionSessionTargetType.Block)return;
+        if(!IsMiningSession(evt.Ctx))return;
         BlockBreakStages.Remove(evt.Ctx.blockDimCoord);
         AnyChanged = true;
     }
 
     private void OnInteractionSessionCompleteded(InteractionSessionContextCompletedEvent evt)
     {
-        if(evt.Ctx.TargetType != InteractionSessionTargetType.Block)return;
+        if(!IsMiningSession(evt.Ctx))return;
         BlockBreakStages.Remove(evt.Ctx.blockDimCoord);
         AnyChanged = true;
     }

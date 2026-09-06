@@ -23,6 +23,10 @@ public class InteractionSessionContext
     // public EntityDefinition EntityDef;
 
     public Vector3Int blockDimCoord;
+    // Hit face normal of the raycast the session was started from (block-target
+    // sessions only; the completed session re-publishes it with the original
+    // interaction events, whose consumers derive facing/placement from it).
+    public Vector3 HitNormal;
     public ushort blockId;
     public BlockDefinition BlockDef;
     public BlockEntity blockEntity;

@@ -41,7 +41,7 @@ public class ZombieAttackState : AIState
         var target = Brain.Context.Target;   // non-null by transition guarantee; guarded anyway
         if(target == null)return;
         mob.Session.IsAIControlled = true;   // exempt from player-facing interruption rules (design doc §6.1); SetSession keeps the flag
-        mob.SetSession("minecraft:attack", InteractionSessionTargetType.Entity,
+        if(!mob.SetSession(InteractionManager.AttackBindingName, InteractionSessionTargetType.Entity,
             () =>
             {
                 // Settlement guard: Dead() already settles the session, so this
@@ -53,6 +53,12 @@ public class ZombieAttackState : AIState
                 else d = Quaternion.Euler(0f, mob.yaw, 0f) * Vector3.forward;   // overlap fallback: own heading
                 player.Hurt(damage, d * knockbackSpeed);
             },
-            interval, target, default, null);
+            interval, target, default, null))
+        {
+            // Slot busy: Tick only re-swings once the previous blow settled
+            // (Completed), so this is a defensive path - aborting resets the
+            // slot and the next Tick retries instead of wedging the state.
+            mob.AbortInteractionSession();
+        }
     }
 }
