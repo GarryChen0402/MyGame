@@ -17,4 +17,7 @@ public class MobDefinition : ResourceType
     public string ModelId;
 
     public List<AABB> CollisionBoxes;
+
+    // Loot table full names (LootSystem); null/empty = no drops on death.
+    public List<string> LootTables = null;
 }

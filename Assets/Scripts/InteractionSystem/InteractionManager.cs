@@ -72,20 +72,44 @@ public class InteractionManager
 
     // Break callback fired on session completion: collects the drops before the
     // break removes the block, breaks it, then spawns the drops at the block
-    // center +0.5 up with a random horizontal kick (P5 of the item drop dev
-    // plan: full break -> drop chain).
+    // center +0.5 up with a random horizontal kick. Drops = the definition's
+    // loot tables + the block entity's inventory dump (a DataContainer removal
+    // mechanism, not loot's business - kept here because the removal path has
+    // no dimension/spawn context yet).
     private static void CompleteBreakSession(Entity entity)
     {
         InteractionSessionContext ctx = entity.Session;
         if(!WorldManager.Instance.TryGetDimension(entity.DimensionId, out var dim))return;
 
-        List<ItemStack> drops = DropResolver.Collect(dim, ctx.blockDimCoord);   // read the old block before the break removes it
-        if(!WorldManager.Instance.TryBreakBlockAt(entity.DimensionId, ctx.blockDimCoord, fromInteraction: true))return;
+        var drops = new List<ItemStack>();
 
+        // (1) Definition loot: rolls every table referenced by the block def.
+        ushort stateId = dim.GetBlockAt(ctx.blockDimCoord);
+        BlockDefinition blockDef = stateId != 0 ? ResourceSystem.Instance.GetState(stateId)?.Block : null;
+        if(blockDef != null && blockDef.LootTables != null)
+        {
+            var lootCtx = new LootContext
+            {
+                Operator = entity,
+                heldItem = entity.GetCurrentHoldingItemStack()   // Player override; null elsewhere
+            };
+            foreach(var tableName in blockDef.LootTables)
+                if(ResourceSystem.Instance.LootTables.TryGetResourceWithFullName(tableName, out var table))
+                    LootRoller.Roll(table, lootCtx, drops);
+        }
+
+        // (2) Block-entity inventory dump on break (read before the break).
+        if(dim.TryGetBlockEntity(ctx.blockDimCoord, out BlockEntity be))
+            foreach(var container in be.DataContainers.Values)
+                if(container is InventoryDataContainer inv)
+                    foreach(var stack in inv.Inv.itemStacks)
+                        if(stack != null && !stack.IsEmpty())
+                            drops.Add(new ItemStack { itemId = stack.itemId, amount = stack.amount });
+
+        if(!WorldManager.Instance.TryBreakBlockAt(entity.DimensionId, ctx.blockDimCoord, fromInteraction: true))return;
+        if(drops.Count == 0)return;
         Vector3 spawnPos = new(ctx.blockDimCoord.x + 0.5f, ctx.blockDimCoord.y + 1f, ctx.blockDimCoord.z + 0.5f);
-        foreach(ItemStack stack in drops)
-            ItemEntityManager.Instance.SpawnItemEntity(entity.DimensionId, spawnPos, stack,
-                new Vector3(Random.Range(-3f, 3f), 0f, Random.Range(-3f, 3f)), 0.5f);
+        LootManager.Instance.SpawnDrops(entity.DimensionId, spawnPos, drops, 3f);
     }
 
 

@@ -24,6 +24,8 @@ public class BlockDefinition : ResourceType
     public string BlockEntityDefinitionFullName = null;
     public float Hardness = 1;
     public string HarvestToolTag = null;
+    // Loot table full names (LootSystem); null/empty = no drops on break.
+    public List<string> LootTables = null;
     // Initial state when the player places this block. Vanilla 1.16+ stair
     // rules: clicking a side face faces the block the way that face points
     // (the back leans against the clicked block); clicking top/bottom uses the

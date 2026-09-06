@@ -85,7 +85,8 @@ public class Minecraft : IMod
                 ["right"]  = $"{ModId}:stone"
             },
             Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
-            Hardness = 1.5f
+            Hardness = 1.5f,
+            LootTables = new() { $"{ModId}:stone" }
             // AABBs = new()
             // {
             //     new AABB(0, 0, 0, 1, 1, 1)
@@ -316,7 +317,8 @@ public class Minecraft : IMod
             {
                 "minecraft:diamond_sword"
             },
-            MaxStack = 1
+            MaxStack = 1,
+            Tags = new() { "sword" }   // demo loot condition: zombie table bonus group
         });
 
         // Coal: fuel-tagged item, accepted by the furnace fuel slot filter.
@@ -545,7 +547,8 @@ public class Minecraft : IMod
                     MinRange = new Vector3(-0.3f, 0, -0.3f),
                     MaxRange = new Vector3( 0.3f, 1.8f, 0.3f)
                 }
-            }
+            },
+            LootTables = new() { $"{ModId}:zombie" }
         };
         ResourceSystem.Instance.MobDefinitions.Register(zombie);
 
@@ -572,10 +575,47 @@ public class Minecraft : IMod
         //Break block sprite
         for(int i = 0; i < 10; i++)
         {
-            ResourceSystem.Instance.RegisterTexture(ModId, $"crack_{i}", 
+            ResourceSystem.Instance.RegisterTexture(ModId, $"crack_{i}",
                 Resources.Load<Texture2D>($"Textures/Overlay/breakStageSprite-{i}")
             );
         }
+
+        // ---- loot tables: stone keeps dropping itself, zombie drops coal ----
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "stone",
+            Groups = new()
+            {
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:stone", Amount = 1 }, Weight = 1f }
+                } }
+            }
+        });
+
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "zombie",
+            Groups = new()
+            {
+                // 50%: one coal, any killer (conditions gate the groups).
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:coal", Amount = 1 }, Weight = 0.5f }
+                } },
+                // +20% when a player wielding a sword killed it (demo condition
+                // group: killer = death-event attacker since the hurt eventification).
+                new LootGroup
+                {
+                    Condition = ConditionGroup.And(new OperatorIsPlayerCondition(),
+                                                   new OperatorHoldsTagCondition("sword")),
+                    Entries = new()
+                    {
+                        new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:coal", Amount = 1 }, Weight = 0.2f }
+                    }
+                }
+            }
+        });
 
     }
 

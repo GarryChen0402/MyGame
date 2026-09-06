@@ -114,6 +114,7 @@ public static class GameBootstrap
         _ = EntityManager.Instance;
         _ = BlockEntityManager.Instance;   // subscribes BlockChanged/ChunkUnloaded before any chunk event
         _ = ItemEntityManager.Instance;
+        _ = LootManager.Instance;   // ctor subscribes MobEntityDeathEvent before any kill
         _ = KeyBindingManager.Instance;   // subscribes to BootstrapCompleted (validation + override load)
         EnsureGameLoopDriver();
     }

@@ -49,6 +49,8 @@ public partial class ResourceSystem
     public ResourceRegistryTable<MobDefinition> MobDefinitions {get;} = new();
     // Mob AI behavior specs: assembly logic + per-species behavior numbers
     public ResourceRegistryTable<AIDefinition> AIDefinitions {get;} = new();
+    // Loot tables (block/mob definitions reference them by FullName)
+    public ResourceRegistryTable<LootTableDefinition> LootTables {get;} = new();
 
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
@@ -99,6 +101,8 @@ public partial class ResourceSystem
         KeyBindings.Freeze();
         MobDefinitions.Freeze();      // historically unfrozen; frozen now with AIDefinitions
         AIDefinitions.Freeze();
+        ValidateLootReferences();     // loot refs log errors, do not abort startup
+        LootTables.Freeze();
     }
 
     public void PostFreeze()
