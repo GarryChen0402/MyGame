@@ -174,7 +174,7 @@ public class Player : Entity, ICraftingGridHost
 
     // Mirror of MobEntity.Hurt (design doc §4): invincibility gate -> damage ->
     // window -> horizontal knockback write. Death keeps the entity in place
-    // (PlayerDeadEvent, no DeathEntity) - respawn semantics land later.
+    // (PlayerDeadEvent, no death event) - respawn semantics land later.
     public void Hurt(float damage, Vector3 knockbackVelocity = default)
     {
         if(InvincibleTimer > 0f)return;
@@ -184,8 +184,10 @@ public class Player : Entity, ICraftingGridHost
             Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
 
         Debug.Log($"[Player] took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
-        EventBus.Instance.Publish(new HurtEntity(){entity = this, amount = damage});
 
+        // (no hurt notification: player-side damage stays non-eventified until
+        // the player hurt eventification task; PlayerDeadEvent below is the
+        // only player broadcast)
         if(CurrentHealth <= 0f)
         {
             EventBus.Instance.Publish(new PlayerDeadEvent());   // zombie AI unsubscribes its chase lock

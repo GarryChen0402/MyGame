@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 public class MobEntity : Entity
 {
@@ -91,7 +92,26 @@ public class MobEntity : Entity
     private float deathTimer;
     private const float DeathDelaySeconds = 1.5f;   // visual margin (design doc §4.6)
 
-    public void Hurt(float damage, Vector3 knockbackVelocity = default)
+    // Hurt/death event main handlers (registered once in the static ctor): the
+    // hurt event applies the damage flow, the death event runs the corpse state
+    // transition. A victim instance implies the type is already initialized, so
+    // registration always precedes any publish.
+    private static readonly Action<MobEntityHurtEvent> hurtHandler = OnHurtEvent;
+    private static readonly Action<MobEntityDeathEvent> deathHandler = OnDeathEvent;
+
+    static MobEntity()
+    {
+        EventBus.Instance.Subscribe(hurtHandler);
+        EventBus.Instance.Subscribe(deathHandler);
+    }
+
+    private static void OnHurtEvent(MobEntityHurtEvent evt)
+        => evt.entity.Hurt(evt.attacker, evt.amount, evt.knockbackVelocity);
+
+    private static void OnDeathEvent(MobEntityDeathEvent evt)
+        => evt.entity.Dead();
+
+    public void Hurt(Entity attacker, float damage, Vector3 knockbackVelocity = default)
     {
         if(IsDead)return;
         if(InvincibleTimer > 0)return;
@@ -101,8 +121,11 @@ public class MobEntity : Entity
             Motion = new Vector3(knockbackVelocity.x, Motion.y, knockbackVelocity.z);
 
         Debug.Log($"[Mob] {MobName} took {damage:F1} damage -> {CurrentHealth:F1}/{MaxHealth.CurrentValue:F1} health");
-        EventBus.Instance.Publish(new HurtEntity(){entity = this, amount = damage});
-        if(CurrentHealth <= 0)Dead();
+        if(CurrentHealth <= 0f)
+            // Death published at the lethal hit: this hit's attacker is the killer
+            // (window-immune hits never reach this line); Dead() runs as the
+            // death event's main handler.
+            EventBus.Instance.Publish(new MobEntityDeathEvent(){entity = this, attacker = attacker});
     }
 
     public void Heal(float heal)
@@ -110,23 +133,25 @@ public class MobEntity : Entity
         if(IsDead)return;
         CurrentHealth = Mathf.Clamp(CurrentHealth + heal, 0, MaxHealth.CurrentValue);
     }
-    public void Dead()
+    // Death state transition, run as the death event's main handler (the only
+    // caller - external killers publish MobEntityDeathEvent instead, so the
+    // broadcast is never bypassed).
+    private void Dead()
     {
-        if(IsDead)return;   // idempotent: hurt-triggered and external calls converge on one flow
+        if(IsDead)return;   // idempotent: hurt-triggered and event-driven calls converge on one flow
         IsDead = true;
         AI?.Stop();         // unsubscribe PlayerDeadEvent - the corpse no longer senses
         Session.Completed = true;   // a corpse never settles a swing (silent: no Interrupted event)
         Debug.Log($"[Mob] {MobName} died");
-        EventBus.Instance.Publish(new DeathEntity(){entity = this});
     }
 
     private string MobName => Definition != null ? Definition.FullName : GetType().Name;
 
     // Death flow: the corpse lingers for DeathDelaySeconds (death anim/other
-    // DeathEntity subscribers watch it), then self-removes - the same removal
-    // path as despawn: unregister from the tick set, then OnDestroy publishes
-    // DestroyEntity so PhysicsManager forgets the AABBs and EntityRenderManager
-    // destroys the shell.
+    // MobEntityDeathEvent subscribers watch it), then self-removes - the same
+    // removal path as despawn: unregister from the tick set, then OnDestroy
+    // publishes DestroyEntity so PhysicsManager forgets the AABBs and
+    // EntityRenderManager destroys the shell.
     public override void OnUpdate(float deltaTime)
     {
         // AI decides before base physics so its Motion writes are consumed by

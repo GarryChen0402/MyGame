@@ -59,7 +59,15 @@ public class InteractionManager
         dir.y = 0f;
         if(dir.sqrMagnitude > 1e-6f)dir.Normalize();
         else dir = Quaternion.Euler(0, attacker.yaw, 0) * Vector3.forward;   // overlapping: use the attacker's facing
-        mob.Hurt(damage, dir * PlayerKnockbackSpeed);
+        // The attacker enters the damage channel through the hurt event;
+        // MobEntity's main handler applies damage/knockback synchronously from
+        // this publish (Publish dispatches inline, so the blow still lands
+        // within this callback).
+        EventBus.Instance.Publish(new MobEntityHurtEvent
+        {
+            entity = mob, attacker = attacker,
+            amount = damage, knockbackVelocity = dir * PlayerKnockbackSpeed
+        });
     }
 
     // Break callback fired on session completion: collects the drops before the
