@@ -229,6 +229,7 @@ public class WorldManager
         WorldSaveManager.Instance.Tick(dt);
         EntityManager.Instance.Update(dt);
         BlockEntityManager.Instance.Tick(dt);
+        RandomTickSystem.Instance.Tick(dt);   // MC random ticks: 20Hz block-domain step (design doc 随机刻系统-代码设计 §3)
         ItemEntityManager.Instance.Update();
     }
 }

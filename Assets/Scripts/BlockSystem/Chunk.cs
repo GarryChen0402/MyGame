@@ -82,6 +82,24 @@ public class Chunk
         return ok;
     }
 
+    // Replace-style write: overwrites whatever occupies the cell (random-tick
+    // conversions like grass spreading onto dirt). Same event + dirty-mark
+    // behavior as a normal edit; NOT the break-then-place sequence, so no drop
+    // path and no double BlockChangedEvent ever fires.
+    public bool ForceSetBlockAt(Vector3Int chunkLocalCoord, ushort stateId)
+    {
+        if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;
+        int subChunkIndex = DimensionYCoordToSubChunkYIndex(chunkLocalCoord.y);
+        if(subChunks[subChunkIndex] == null)subChunks[subChunkIndex] = CreateNewSubChunk(subChunkIndex);
+        bool ok = subChunks[subChunkIndex].SetBlockAt(SubChunk.BlockCoordToSubChunkLocalCoord(chunkLocalCoord), stateId);
+        if(ok && !SilentMode)
+        {
+            MarkModified();
+            EventBus.Instance.Publish(new BlockChangedEvent(this, chunkLocalCoord, stateId));
+        }
+        return ok;
+    }
+
     public bool TryBreakBlockAt(Vector3Int chunkLocalCoord, bool fromInteraction = false)
     {
         if(!IsCorrectChunkLocalCoord(chunkLocalCoord))return false;

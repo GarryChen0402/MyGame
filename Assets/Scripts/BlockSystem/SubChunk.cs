@@ -116,6 +116,17 @@ public class SubChunk
         return true;
     }
 
+    // Replace-style write: overwrites whatever occupies the cell (random-tick
+    // conversions etc.). TrySetBlockAt refuses occupied cells on purpose - that
+    // guard is for placing into empty cells, and a conversion target is always
+    // occupied.
+    public bool SetBlockAt(Vector3Int subChunkLocalCoord, ushort stateId)
+    {
+        if(!IsCorrectCoord(subChunkLocalCoord))return false;
+        blockData[SubChunkLocalCoordToIndex(subChunkLocalCoord)] = stateId;
+        return true;
+    }
+
     public bool TryBreakBlockAt(Vector3Int subChunkLocalCoord)
     {
         if(!IsCorrectCoord(subChunkLocalCoord))return false;

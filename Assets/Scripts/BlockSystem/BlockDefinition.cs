@@ -26,6 +26,11 @@ public class BlockDefinition : ResourceType
     public string HarvestToolTag = null;
     // Loot table full names (LootSystem); null/empty = no drops on break.
     public List<string> LootTables = null;
+
+    // Random-tick hook (design docs 随机刻系统-规则设计/代码设计): a non-null
+    // delegate marks this block as randomly ticking - RandomTickSystem samples
+    // it and calls the handler with a RandomTickContext when a random tick hits.
+    public System.Action<RandomTickContext> RandomTick = null;
     // Initial state when the player places this block. Vanilla 1.16+ stair
     // rules: clicking a side face faces the block the way that face points
     // (the back leans against the clicked block); clicking top/bottom uses the

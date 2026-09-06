@@ -12,6 +12,12 @@ public class Minecraft : IMod
     // Cached block ids used by biome fill columns.
     private static ushort grassId, dirtId, stoneId;
 
+    // Default state ids for the grass random-tick spread, resolved lazily on
+    // first use: GetDefaultState needs the PostFreeze state table, which does
+    // not exist during registration (sentinel ushort.MaxValue = unresolved).
+    private static ushort grassDefaultStateId = ushort.MaxValue;
+    private static ushort dirtDefaultStateId = ushort.MaxValue;
+
     private static DimensionDefinition testDi = new()
     {
         modId = ModId,
@@ -244,6 +250,7 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
         ResourceSystem.Instance.RegisterBlock(grassDefinition);
+        grassDefinition.RandomTick = GrassSpreadRandomTick;   // random tick demo: grass spread (design doc 随机刻系统-代码设计 §6)
         ResourceSystem.Instance.RegisterBlock(stairDefinition);
         ResourceSystem.Instance.RegisterBlock(cobblestoneDefinition);
         ResourceSystem.Instance.RegisterBlock(furnaceDefinition);
@@ -622,6 +629,32 @@ public class Minecraft : IMod
             }
         });
 
+    }
+
+    // Grass random tick (design doc 随机刻系统-代码设计 §6): vanilla
+    // SpreadableBlock geometry - up to 4 attempts per hit, offsets x/z +-1 and
+    // y in [-3, +1] (3x5x3 window, spreads downhill up to 3). The project has
+    // no light system, so vanilla's "bright cell above the target" gate is
+    // replaced by the structural air gate: only dirt whose above cell is air
+    // turns into grass (rules doc §4 R4; a covered dirt stays dirt forever).
+    private static void GrassSpreadRandomTick(RandomTickContext ctx)
+    {
+        if (grassDefaultStateId == ushort.MaxValue || dirtDefaultStateId == ushort.MaxValue)
+        {
+            grassDefaultStateId = ResourceSystem.Instance.GetDefaultState(grassId);
+            dirtDefaultStateId = ResourceSystem.Instance.GetDefaultState(dirtId);
+        }
+        var rng = ctx.Random;
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            int tx = ctx.Pos.x + rng.Next(-1, 2);
+            int ty = ctx.Pos.y + rng.Next(-3, 2);
+            int tz = ctx.Pos.z + rng.Next(-1, 2);
+            var target = new Vector3Int(tx, ty, tz);
+            if (ctx.GetStateId(target) != dirtDefaultStateId) continue;   // only plain dirt
+            if (!ctx.IsAir(target + Vector3Int.up)) continue;             // air gate above the target
+            ctx.TrySetBlockState(target, grassDefaultStateId);
+        }
     }
 
     // 平原填充:地表草方块,下 3 格泥土,再下石头;洞穴(密度 ≤ 0)处留空。
