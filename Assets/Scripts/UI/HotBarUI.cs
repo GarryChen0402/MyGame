@@ -8,10 +8,7 @@ public class HotBarUI : UIBehavior
     [SerializeField]
     private List<SlotUI> itemIcons = new();
 
-    // Cached slot contents for dirty checking; UI is refreshed only on change.
-    private readonly ushort[] cachedItemIds = new ushort[9];
-    private readonly int[] cachedAmounts = new int[9];
-
+    private bool bound;
     private void Awake()
     {
         if(instance == null)instance = this;
@@ -34,20 +31,21 @@ public class HotBarUI : UIBehavior
 
     }
 
+    // Phase C: reads the resident backpack mirror instead of the live
+    // inventory. SlotUI.Refresh diffs internally, so a per-frame sweep only
+    // re-renders changed slots. Hotbar slots never bind interactive - they
+    // stay unclickable, exactly like before.
     private void Update()
     {
-        if(Player.Instance == null)return;
-        var inventory = Player.Instance.inventory;
-        for(int i = 0; i < 9; i++)
+        var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
+        if(mirror == null)return;   // resident sources register when the player is created
+        if(!bound)
         {
-            var stack = inventory.GetItemStackAt(i);
-            ushort id = stack?.itemId ?? 0;
-            int amount = stack?.amount ?? 0;
-            if(cachedItemIds[i] == id && cachedAmounts[i] == amount)continue;
-            cachedItemIds[i] = id;
-            cachedAmounts[i] = amount;
-            itemIcons[i].SetItemStack(stack);
+            for(int i = 0; i < itemIcons.Count; i++)itemIcons[i].BindDisplay(mirror, i);
+            bound = true;
+            return;
         }
+        for(int i = 0; i < itemIcons.Count; i++)itemIcons[i].Refresh();
     }
 
     public static UIDefinition hotbarDefinition = new()

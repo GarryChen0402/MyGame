@@ -17,6 +17,12 @@ public class Player : LivingEntity, ICraftingGridHost
     static Player()
     {
         EventBus.Instance.Subscribe(hurtHandler);
+        // Resident mirror sources bind here (Phase C rule R-C1-0): the static
+        // instance above is fully constructed by this point, and the call
+        // rides on the first static access of Player - exactly the current
+        // creation point, never earlier (a premature Player would fire
+        // SummonEntityEvent before the logic managers subscribe).
+        MirrorSync.Instance.RegisterPlayerSources();
     }
 
     private static void OnHurtEvent(PlayerHurtEvent evt)
@@ -39,6 +45,13 @@ public class Player : LivingEntity, ICraftingGridHost
     // same-process stand-in for a network report packet; rule B1: the slot is
     // exactly where a Phase D network input would land).
     public PlayerIntent Intent { get; } = new();
+
+    // Cursor-held stack (Phase C rule R-C1-6): the former UIManager.
+    // HeldItemStack moved into logic state. ContainerCommandProcessor is its
+    // only writer (slot click/drag settlements); the UI sees it through the
+    // held mirror. Never persisted, and it intentionally keeps the legacy
+    // linger-across-close semantics (design doc §9).
+    public ItemStack CursorStack = new();
 
     // Tick-start Motion snapshot (design doc §4.1/§4.4): the validation
     // envelope's baseline, alongside the PrevPosition/PrevYaw/PrevPitch

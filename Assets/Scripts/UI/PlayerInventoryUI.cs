@@ -32,10 +32,13 @@ public class PlayerInventoryUI : UIBehavior
                 var slotUI = go.AddComponent<SlotUI>();
                 go.transform.SetParent(transform, false);
                 go.transform.localPosition = new Vector3(xPos[x], yPos[y], 0);
-                slotUI.SetItemStack(Player.Instance.inventory.GetItemStackAt(y * 9 + x));
                 slots.Add(slotUI);
             }
         }
+        // No display bind here: the mirror registers when the player is
+        // created, which may be after this panel is built (UIManager.Awake
+        // pre-fabricates it) - reading Player here would move the creation
+        // point earlier. OnEnable binds once the player exists.
     }
 
     public static UIDefinition playerInvUIDefinition = new()
@@ -52,32 +55,31 @@ public class PlayerInventoryUI : UIBehavior
         }
     };
 
+    // Phase C: display + click address bind to the resident backpack mirror
+    // (addresses are resolved by ContainerCommandProcessor, no accessor is
+    // held here). Binding is idempotent, so re-binding on every show keeps
+    // the display in sync with the mirror registration.
     private void OnEnable()
     {
-        // Rebind click access (player slots have no container policy) and the
-        // displayed stack; both point at the same Inventory slot objects.
+        var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
         for(int i = 0; i < 36; i++)
-        {
-            slots[i].Bind(new PlayerSlotAccess(Player.Instance.inventory, i));
-            slots[i].SetItemStack(Player.Instance.inventory.GetItemStackAt(i));
-        }
+            slots[i].BindInteractive(mirror, i, new SlotAddr { scope = SlotScope.PlayerInventory, slot = i });
     }
 
-    // Click resolution mutates the bound stacks in place; Refresh sweeps every
-    // slot to reflect merges / swaps / quick-moves.
+    // Refresh sweeps every slot to reflect merges / swaps / quick-moves.
     public override void Refresh()
     {
         for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
     }
 
     // Live sync while the panel is open: SlotUI.Refresh is nearly free when
-    // nothing changed (it compares its last-rendered state against the bound
-    // stack and only re-renders the 3D icon on a difference), so a per-frame
-    // sweep also picks up direct inventory writes - give commands, pickups,
+    // nothing changed (it compares its last-rendered state against the mirror
+    // and only re-renders the 3D icon on a difference), so a per-frame sweep
+    // also picks up direct inventory writes - give commands, pickups,
     // crafting - that never pass through the click path. Unity skips Update
     // on inactive GameObjects, so this runs only while the panel is visible.
     private void Update()
     {
-        for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
+        Refresh();
     }
 }

@@ -5,16 +5,8 @@ using UnityEngine.UI;
 
 public class CraftingTableUI : UIBehavior
 {
-    private BlockEntity target = null;
-    private CraftingWorkContainer work = null;   // work container of the bound BE
     private SlotUI[] gridSlots = new SlotUI[9];
     private SlotUI resultSlot = null;
-
-    // Click access points of the 3x3 grid + the result slot, rebuilt whenever
-    // the UI binds to a new block entity (10 slots -> shift-move direction
-    // and reachable-slot list come out right via the base ContainerSlots).
-    private readonly List<ISlotAccess> containerSlots = new();
-    public override IReadOnlyList<ISlotAccess> ContainerSlots => containerSlots;
 
     private void Awake()
     {
@@ -44,38 +36,32 @@ public class CraftingTableUI : UIBehavior
         resultGo.transform.localPosition = new Vector3(200, 0, 0);
     }
 
+    // Phase C: the open data is the pure-view PanelModel (no BE reference).
+    // Canonical slot order of the workbench model: 0..8 grid cells, 9 result.
+    // Every SetData re-binds all ten slots: slots beyond the model (or a slot
+    // left over from a previous session) go display-only, so stale addresses
+    // can never linger. Preview refresh/clear on open/close moved to the
+    // logic side (OpenPanel/ClosePanel commands).
     public override void SetData(object data)
     {
-        if(data is not BlockEntity be)return;
-        if(target == be)
-        {
-            work?.RefreshPreview();   // OnDisable cleared the preview on close
-            Refresh();
-            return;
-        }
-        containerSlots.Clear();
-        target = be;
-        work = null;
-        foreach(var wc in be.WorkContainers)
-            if(wc is CraftingWorkContainer cwc){ work = cwc; break; }
-        if(work == null)return;
-
+        if(data is not PanelModel model)return;
         for(int i = 0; i < gridSlots.Length; i++)
         {
-            var access = new CraftingGridSlotAccess(work.Grid, i, work);
-            gridSlots[i].Bind(access);
-            gridSlots[i].SetItemStack(access.Get());
-            containerSlots.Add(access);
+            var view = i < model.Slots.Count ? model.Slots[i] : null;
+            gridSlots[i].BindInteractive(view?.Mirror, view?.SlotIndex ?? 0, new SlotAddr
+            {
+                scope = SlotScope.Panel,
+                panelModelId = model.ModelId,
+                slot = i
+            });
         }
-        var resultAccess = new CraftingResultSlotAccess(work.Result, 0, work);
-        resultSlot.Bind(resultAccess);
-        resultSlot.SetItemStack(resultAccess.Get());
-        containerSlots.Add(resultAccess);
-
-        // The grid persists across sessions/UI opens: rebuild the live preview
-        // (grid containers only hold materials; the preview never saved).
-        work.RefreshPreview();
-        Refresh();
+        var resultView = gridSlots.Length < model.Slots.Count ? model.Slots[gridSlots.Length] : null;
+        resultSlot.BindInteractive(resultView?.Mirror, resultView?.SlotIndex ?? 0, new SlotAddr
+        {
+            scope = SlotScope.Panel,
+            panelModelId = model.ModelId,
+            slot = gridSlots.Length
+        });
     }
 
     public override void Refresh()
@@ -84,9 +70,12 @@ public class CraftingTableUI : UIBehavior
         resultSlot.Refresh();
     }
 
-    // UI close clears the virtual preview result (never-consumed materials)
-    // so a later block break or save cannot leak it into drops or disk.
-    private void OnDisable() => work?.ClearPreview();
+    // Per-frame mirror sweep while the panel is visible: captures the echo of
+    // every click/drag settlement and the live 3x3 preview.
+    private void Update()
+    {
+        Refresh();
+    }
 
     public static UIDefinition craftingTableUIDefinition = new()
     {

@@ -14,12 +14,6 @@ public class PlayerUI : UIBehavior
     private SlotUI[] gridSlots = new SlotUI[4];
     private SlotUI resultSlot = null;
 
-    // Click access points of the 2x2 grid + the result slot (5 slots ->
-    // shift-move direction and reachable-slot list come out right via the
-    // base ContainerSlots, exactly like CraftingTableUI).
-    private readonly List<ISlotAccess> containerSlots = new();
-    public override IReadOnlyList<ISlotAccess> ContainerSlots => containerSlots;
-
     // Placeholder skin mapping until the player gains a real skin texture; all
     // six faces share one registered texture (same setup as EntityVisualTest).
     private static readonly Dictionary<string, string> PlayerFaceTextures = new()
@@ -55,47 +49,39 @@ public class PlayerUI : UIBehavior
 
         // 2x2 crafting grid, row-major with rows top-to-bottom (index =
         // row*2+col), 110 px pitch; result slot to the right, workbench habit.
-        var player = Player.Instance;
+        // Phase C: display + click addresses bind the resident mirrors
+        // (scope PlayerCrafting, canonical slot order: grid 0-3, result 4).
+        var ms = MirrorSync.Instance;
         for(int i = 0; i < gridSlots.Length; i++)
         {
             var go = new GameObject($"Crafting Slot {i}");
             gridSlots[i] = go.AddComponent<SlotUI>();
             go.transform.SetParent(transform, false);
             go.transform.localPosition = new Vector3(85 + (i % 2) * 110, 110 - (i / 2) * 110, 0);
-            var access = new CraftingGridSlotAccess(player.CraftingGrid, i, player);
-            gridSlots[i].Bind(access);
-            gridSlots[i].SetItemStack(access.Get());
-            containerSlots.Add(access);
+            gridSlots[i].BindInteractive(ms.PlayerCraftGridMirror, i,
+                new SlotAddr { scope = SlotScope.PlayerCrafting, slot = i });
         }
         var resultGo = new GameObject("Crafting Result Slot");
         resultSlot = resultGo.AddComponent<SlotUI>();
         resultGo.transform.SetParent(transform, false);
         resultGo.transform.localPosition = new Vector3(375f, 55f, 0f);
-        var resultAccess = new CraftingResultSlotAccess(player.CraftingResult, 0, player);
-        resultSlot.Bind(resultAccess);
-        resultSlot.SetItemStack(resultAccess.Get());
-        containerSlots.Add(resultAccess);
+        resultSlot.BindInteractive(ms.PlayerCraftResultMirror, 0,
+            new SlotAddr { scope = SlotScope.PlayerCrafting, slot = gridSlots.Length });
     }
 
-    private void OnEnable()
-    {
-        // OnDisable cleared the preview result on close; materials stay in
-        // the grid, so re-match to show a still-matching recipe again.
-        Player.Instance.Crafting?.RefreshPreview();
-        Refresh();
-    }
-
+    // Preview refresh on open moved to the logic side (OpenPlayerInventory);
+    // the mirror sweep picks the result up within one render frame.
     public override void Refresh()
     {
         foreach(var slot in gridSlots)slot.Refresh();
         resultSlot.Refresh();
     }
 
-    // UI close clears the virtual preview result (never-consumed materials)
-    // so it cannot leak into the player save as a phantom stack.
-    private void OnDisable()
+    // Per-frame mirror sweep while the panel is visible: captures the echo of
+    // every click/drag settlement and the live 2x2 preview.
+    private void Update()
     {
-        if(Player.Instance?.Crafting != null)Player.Instance.Crafting.ClearPreview();
+        Refresh();
     }
 
     public static UIDefinition playerUIDefinition = new()

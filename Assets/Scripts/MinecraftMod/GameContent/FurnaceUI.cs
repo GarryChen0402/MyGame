@@ -6,18 +6,12 @@ using UnityEngine.UI;
 
 public class FurnaceUI : UIBehavior
 {
-    private BlockEntity targetFurance = null;
     private SlotUI inputSlot = null;
     private SlotUI fuelSlot = null;
     private SlotUI outputSlot = null;
     private ProgressBarUI fireProgress = null;   // fuel burn gauge above the fuel slot
     private ProgressBarUI cookProgress = null;   // recipe progress arrow
-    private ProcessingWorkContainer work = null; // work container of the bound BE
-
-    // Click access points of this furnace's three containers (input/fuel/
-    // output), rebuilt whenever the UI binds to a new block entity.
-    private readonly List<ISlotAccess> containerSlots = new();
-    public override IReadOnlyList<ISlotAccess> ContainerSlots => containerSlots;
+    private FurnaceProgressView progress = null; // progress mirror of the open session
 
     private void Awake()
     {
@@ -76,34 +70,28 @@ public class FurnaceUI : UIBehavior
         cookProgress = craftProgressGo.GetComponent<ProgressBarUI>();
     }
 
+    // Phase C: the open data is the pure-view PanelModel (no BE reference).
+    // Canonical slot order of the furnace model: 0 = input, 1 = fuel,
+    // 2 = output; a shorter model (future container configs) leaves the
+    // remaining layout slots display-only and unclickable.
     public override void SetData(object data)
     {
-        if (data is not BlockEntity be) return;
-        if(targetFurance == be)
-        {
-            Refresh();
-            return;
-        }
-        containerSlots.Clear();
-        targetFurance = be;
-        work = null;
-        foreach(var wc in be.WorkContainers)
-            if(wc is ProcessingWorkContainer pwc){ work = pwc; break; }
-        BindContainerSlot("input", inputSlot);
-        BindContainerSlot("fuel", fuelSlot);
-        BindContainerSlot("output", outputSlot);
+        if (data is not PanelModel model) return;
+        progress = model.Progress;
+        BindSlot(inputSlot, model, 0);
+        BindSlot(fuelSlot, model, 1);
+        BindSlot(outputSlot, model, 2);
     }
 
-    // Resolves one named container of the BE, binds the slot's click access
-    // point and shows its content (same slot object the click logic mutates).
-    private void BindContainerSlot(string name, SlotUI slotUI)
+    private static void BindSlot(SlotUI slotUI, PanelModel model, int slot)
     {
-        var container = targetFurance.GetDataContainer<InventoryDataContainer>(name);
-        if(container == null)return;
-        var access = new ContainerSlotAccess(container, 0);
-        slotUI.Bind(access);
-        slotUI.SetItemStack(access.Get());
-        containerSlots.Add(access);
+        var view = slot < model.Slots.Count ? model.Slots[slot] : null;
+        slotUI.BindInteractive(view?.Mirror, view?.SlotIndex ?? 0, new SlotAddr
+        {
+            scope = SlotScope.Panel,
+            panelModelId = model.ModelId,
+            slot = slot
+        });
     }
 
     public static UIDefinition furanceUIDefinition = new()
@@ -134,18 +122,20 @@ public class FurnaceUI : UIBehavior
         return bar;
     }
 
-    // Pushes the work container's live tick state into the two gauges while
-    // the panel is open (Update stops when the UI is hidden).
+    // Pushes the mirrored tick state into the two gauges while the panel is
+    // open (Update stops when the UI is hidden): the sync layer copies the
+    // work container's four ints every render frame, so the gauges and slots
+    // always read the last settled tick.
     private void Update()
     {
-        if(work == null)return;
-        fireProgress.Progress = work.FuelLeftTickTime <= 0 ? 0f
-            : (float)work.FuelLeftTickTime / Mathf.Max(1, work.CurrentFuelTotalTicks);
-        cookProgress.Progress = work.TotalTickTime <= 0 ? 0f
-            : (float)work.CurrentTickProgress / work.TotalTickTime;
-        inputSlot.Refresh();
-        fuelSlot.Refresh();
-        outputSlot.Refresh();
+        if(progress != null)
+        {
+            fireProgress.Progress = progress.FuelLeftTickTime <= 0 ? 0f
+                : (float)progress.FuelLeftTickTime / Mathf.Max(1, progress.CurrentFuelTotalTicks);
+            cookProgress.Progress = progress.TotalTickTime <= 0 ? 0f
+                : (float)progress.CurrentTickProgress / progress.TotalTickTime;
+        }
+        Refresh();
     }
 
     public override void Refresh()

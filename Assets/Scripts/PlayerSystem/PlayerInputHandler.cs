@@ -25,11 +25,13 @@ public class PlayerInputHandler : IInputHandler
     {
         if(player == null)return;
         var keys = KeyBindingManager.Instance;
-        // Open the player UI. Closing is handled by UIInputHandler, which owns
-        // the input stack while any panel is open - this handler is not updated
-        // then, so the action can never double-fire.
+        // Open the player UI through the command entry (Phase C): the entry
+        // runs the open action (2x2 preview refresh) before showing the panel.
+        // Closing is handled by UIInputHandler, which owns the input stack
+        // while any panel is open - this handler is not updated then, so the
+        // action can never double-fire.
         if(keys.WasPressed("minecraft:open_inventory"))
-            UIManager.Instance?.OpenUI("minecraft:player_ui");
+            ContainerCommandProcessor.Instance.OpenPlayerInventory();
         // Widget smoke-test UI (default T).
         if(keys.WasPressed("minecraft:open_widget_test"))
             UIManager.Instance?.OpenUI("minecraft:widget_test");

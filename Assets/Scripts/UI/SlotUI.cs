@@ -14,7 +14,6 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
 
     private ItemIconRenderer Icon;
     private TextMeshProUGUI Text;
-    private ItemStack itemStack;
     private Outline highlight;
     private GameObject hoverOverlay;                    // translucent white hover highlight
     private static Sprite whiteSprite;                  // generated 1x1 solid sprite
@@ -82,36 +81,55 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         hoverOverlay.SetActive(false);
     }
 
-    // Bind the slot to an item stack and refresh the icon and count label.
-    public void SetItemStack(ItemStack stack)
-    {
-        itemStack = stack;
-        // if(stack == null || stack.IsEmpty())
-        // {
-        //     Icon.gameObject.SetActive(false);
-        //     Text.text = "";
-        //     return;
-        // }
+    // ---- mirror binding (Phase C: display reads a ContainerMirror slot) ----
 
-        // Icon.gameObject.SetActive(true);
-        // Icon.SetItem(stack.itemId);
-        // Text.text = stack.amount > 1 ? stack.amount.ToString() : "";
+    // Display-only slot (hotbar): shows the mirror value, never interactive.
+    // A null mirror renders empty - bindings may precede the resident player
+    // registration during startup, and panels with no data (widget test) show
+    // blank slots that stay unclickable.
+    public void BindDisplay(ContainerMirror mirror, int slotIndex)
+    {
+        this.mirror = mirror;
+        this.slotIndex = slotIndex;
+        addr = null;
+        shown = false;   // first Refresh after a bind always renders
         Refresh();
     }
 
+    // Interactive slot: display plus the address the click/drag commands
+    // settle through (see ContainerCommandProcessor; a null address slot is
+    // display-only and never clickable).
+    public void BindInteractive(ContainerMirror mirror, int slotIndex, SlotAddr addr)
+    {
+        this.mirror = mirror;
+        this.slotIndex = slotIndex;
+        this.addr = addr;
+        shown = false;
+        Refresh();
+    }
+
+    public SlotAddr? Addr => addr;
+
     public void Refresh()
     {
-        if(itemStack == null)return;
-        bool empty = itemStack.IsEmpty();
+        // Value read from the mirror; out-of-range / unbound renders empty.
+        ushort id = 0;
+        int amount = 0;
+        if(mirror != null && slotIndex >= 0 && slotIndex < mirror.Capacity)
+        {
+            var slot = mirror.GetSlot(slotIndex);
+            id = slot.itemId;
+            amount = slot.amount;
+        }
+        bool empty = amount == 0;
         // Skip when the rendered state already matches: Refresh may be polled
         // every frame (furnace work tick) and Icon.SetItem re-renders a 3D
         // model into a RenderTexture, which must not run on unchanged slots.
-        if(shown && shownItemId == itemStack.itemId
-           && shownAmount == (empty ? 0 : itemStack.amount)) return;
+        if(shown && shownItemId == id && shownAmount == (empty ? 0 : amount)) return;
         shown = true;
-        shownItemId = itemStack.itemId;
-        shownAmount = empty ? 0 : itemStack.amount;
-        if(itemStack == null || empty)
+        shownItemId = id;
+        shownAmount = empty ? 0 : amount;
+        if(empty)
         {
             Icon.gameObject.SetActive(false);
             Text.text = "";
@@ -119,12 +137,13 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         }
 
         Icon.gameObject.SetActive(true);
-        Icon.SetItem(itemStack.itemId);
-        Text.text = itemStack.amount > 1 ? itemStack.amount.ToString() : "";
+        Icon.SetItem(id);
+        Text.text = amount > 1 ? amount.ToString() : "";
     }
-    private ISlotAccess access;
-    public ISlotAccess Access => access;
-    public void Bind(ISlotAccess access) => this.access = access;
+
+    private ContainerMirror mirror;
+    private int slotIndex;
+    private SlotAddr? addr;
 
     // Managed by the UIManager drag session; the outline is drawn on the slot
     // background image so it never covers the icon.

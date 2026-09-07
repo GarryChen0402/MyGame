@@ -46,9 +46,14 @@ public class BlockEntity
     // disk and must be saved (the same dirty flag player edits set).
     public void MarkDirty() => OwnerChunk?.MarkModifiedByBlockEntity();
 
+    // Phase C: the panel session factory builds the mirror bindings and the
+    // pure-view PanelModel on the logic side; the UI receives only the model
+    // (rule R-C1-4: no BlockEntity reference reaches a panel).
     public void OnInteract(Entity entity, BlockEntityDefinition definition)
     {
-        if(definition.UIFullName.Length > 0)UIManager.Instance.OpenUI(definition.UIFullName, this);
+        if(definition.UIFullName.Length == 0)return;
+        var model = ContainerCommandProcessor.Instance.OpenPanel(this);
+        UIManager.Instance.OpenUI(definition.UIFullName, model);
     }
 }
 

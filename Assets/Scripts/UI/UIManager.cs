@@ -60,6 +60,10 @@ public class UIManager : MonoBehaviour
 
     private UIBehavior currentUI = null;
     private bool CurrentUIhasInputHandler = false;
+    // Panel model id of the UI this manager opened (data as PanelModel); the
+    // close command needs it to tear down the BE session (logic side). 0 =
+    // no session (player UI / widget test / editors).
+    private int currentModelId;
     private void Start()
     {
         // if(ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))
@@ -88,6 +92,7 @@ public class UIManager : MonoBehaviour
             if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
             CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
             // if(inputHandler != null)InputHandlerManager.Instance.Push(inputHandler);
+            if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
             return;
         }
 
@@ -95,18 +100,23 @@ public class UIManager : MonoBehaviour
         if(uiDef.Kind == UIKind.HUD)uiGo.transform.SetParent(HUDRoot.transform, false);
         else if(uiDef.Kind == UIKind.Tooltip)uiGo.transform.SetParent(TooltipRoot.transform, false);
         else uiGo.transform.SetParent(SinglePanelRoot.transform, false);
-        
+
         currentUI = uiGo.GetComponent<UIBehavior>();
         currentUI.SetData(data);
         currentUI.Open();
         if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
         CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
+        if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
         UICache[uiId] = currentUI;
     }
 
     public void CloseUI()
     {
         CancelDrag();   // panel closed mid-drag: drop the session untouched
+        // Panel close command first (logic side): BE sessions run their close
+        // action and deregister their mirror bindings (rule R-C1-0b).
+        if(currentModelId != 0)ContainerCommandProcessor.Instance.ClosePanel(currentModelId);
+        currentModelId = 0;
         currentUI?.Close();
         if(currentUI != null && CurrentUIhasInputHandler)
         {
@@ -117,40 +127,33 @@ public class UIManager : MonoBehaviour
         if(PlayerInventoryRoot != null)PlayerInventoryRoot.SetActive(false);
     }
 
-    // Entry point of every slot click (SlotUI.OnPointerClick → here): gate the
-    // click, resolve it against the held stack, then refresh every open panel.
+    // Entry point of every slot click (SlotUI.OnPointerClick → here): gate
+    // the click, then settle it as a command (rule R-C1-0b). No same-frame
+    // explicit refresh: the mirror sync + per-frame panel sweep echo the
+    // change within one render frame (the approved ≤1-frame semantics).
     public void HandleSlotClicked(SlotUI slotUI, PointerEventData eventData)
     {
         if(currentUI == null)return;
-        if(slotUI == null || slotUI.Access == null)return;   // display-only slot: not clickable
+        var addr = slotUI == null ? null : slotUI.Addr;
+        if(addr == null)return;   // display-only slot: not clickable
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         bool rightClick = eventData.button == PointerEventData.InputButton.Right;
-        if(shift)SlotClickProcessor.QuickMove(slotUI.Access, currentUI.ContainerSlots);
-        else SlotClickProcessor.Click(slotUI.Access, rightClick, HeldItemStack);
-        RefreshVisibleSlots();
-    }
-
-    // Refresh the main panel and the linked player inventory panel after a
-    // click; both Refresh()s rebind from the same slot objects the click
-    // mutated, so a full sweep is simpler than tracking changed slots.
-    private void RefreshVisibleSlots()
-    {
-        currentUI?.Refresh();
-        if(PlayerInventoryRoot != null && PlayerInventoryRoot.TryGetComponent<UIBehavior>(out var invUi))
-            invUi.Refresh();
+        var processor = ContainerCommandProcessor.Instance;
+        if(shift)processor.QuickMove(addr.Value);
+        else processor.Click(addr.Value, rightClick);
     }
 
     // ---- drag-to-distribute session (Docs/物品拖拽分配交互实现方案.md §4) ----
 
-    // Active while a drag is in progress: the source is the held stack, and
+    // Active while a drag is in progress: the cursor stack is the source, and
     // every slot hovered over (deduped) receives one settlement on release.
     // Slot contents never change mid-drag, so collection order and validity
-    // are exactly what DragEnd settles over. Hovered slots keep their
-    // SlotUI so the session can drive the accept/reject outlines.
+    // are exactly what DragEnd settles over. Hovered slots keep their SlotUI
+    // so the session can drive the accept/reject outlines; the carried stack
+    // itself lives on the logic side (Player.CursorStack).
     private class DragSession
     {
         public bool Right;
-        public ItemStack Carried;                    // UIManager.HeldItemStack reference
         public readonly List<SlotUI> TargetUis = new();
         public SlotUI Rejected;                      // hovered but cannot receive (red outline)
     }
@@ -167,27 +170,28 @@ public class UIManager : MonoBehaviour
     internal void HandleDragBegin(SlotUI slotUI, PointerEventData eventData)
     {
         if(currentUI == null)return;
-        if(slotUI == null || slotUI.Access == null)return;   // display-only slot: not draggable
-        if(activeDrag != null)return;                        // one drag at a time
+        var addr = slotUI == null ? null : slotUI.Addr;
+        if(addr == null)return;   // display-only slot: not draggable
+        if(activeDrag != null)return;   // one drag at a time
 
-        var carried = HeldItemStack;
-        if(carried == null || carried.IsEmpty())
+        var processor = ContainerCommandProcessor.Instance;
+        var heldMirror = MirrorSync.Instance.PlayerHeldMirror;
+        bool cursorEmpty = heldMirror == null || heldMirror.Content.IsEmpty;
+        if(cursorEmpty)
         {
             // One-gesture pick-up: an empty cursor picks the source slot up
             // (left = whole, right = half) so a press-and-drag works like
-            // vanilla; the emptied source slot never receives the spread.
-            var src = slotUI.Access;
-            var t = src.Get();
-            if(t == null || t.IsEmpty() || !src.CanTake())return;   // nothing to pick: no session
-            SlotClickProcessor.Click(src, eventData.button == PointerEventData.InputButton.Right, carried);
-            RefreshVisibleSlots();
+            // vanilla; the emptied source slot never receives the spread. The
+            // command returns whether the cursor now holds items - the mirror
+            // would only reflect the pickup on the next frame.
+            bool picked = processor.Click(addr.Value,
+                eventData.button == PointerEventData.InputButton.Right);
+            if(!picked)return;   // nothing to pick: no session
         }
-        if(carried == null || carried.IsEmpty())return;
 
         activeDrag = new DragSession
         {
-            Right = eventData.button == PointerEventData.InputButton.Right,
-            Carried = carried
+            Right = eventData.button == PointerEventData.InputButton.Right
         };
         PollPointer();
     }
@@ -200,10 +204,9 @@ public class UIManager : MonoBehaviour
         activeDrag = null;
         ClearDragHighlights(session);
         if(session.TargetUis.Count == 0)return;   // never hovered a receivable slot: keep the items
-        var accesses = new List<ISlotAccess>(session.TargetUis.Count);
-        foreach(var targetUi in session.TargetUis)accesses.Add(targetUi.Access);
-        SlotClickProcessor.DragEnd(accesses, session.Right, session.Carried);
-        RefreshVisibleSlots();
+        var targets = new List<SlotAddr>(session.TargetUis.Count);
+        foreach(var targetUi in session.TargetUis)targets.Add(targetUi.Addr.Value);
+        ContainerCommandProcessor.Instance.DragEnd(targets, session.Right);
     }
 
     // Drops the session without touching any slot data (panel closed mid-drag:
@@ -249,10 +252,12 @@ public class UIManager : MonoBehaviour
         }
         CurrentHoverSlotUI = hover;                    // hover slot during drag (null = outside)
 
-        if(hover == null || hover.Access == null)return;          // outside any operable slot
-        if(activeDrag.TargetUis.Contains(hover))return;           // already accepted: outline stays
+        if(hover == null || hover.Addr == null)return;           // outside any operable slot
+        if(activeDrag.TargetUis.Contains(hover))return;          // already accepted: outline stays
 
-        if(!SlotClickProcessor.CanReceive(hover.Access, activeDrag.Carried))
+        // Receive check goes through the query command - mirrors carry no
+        // policy, so the drag validation must ask the logic side.
+        if(!ContainerCommandProcessor.Instance.CanReceive(hover.Addr.Value))
         {
             if(activeDrag.Rejected != hover)
             {
@@ -265,6 +270,5 @@ public class UIManager : MonoBehaviour
         hover.SetDragHighlight(SlotUI.DragHighlight.Accept);
     }
 
-    public ItemStack HeldItemStack{get; set;} = new();
     public SlotUI CurrentHoverSlotUI {get; set;} = null;
 }

@@ -15,20 +15,40 @@ public class GameLoopDriver : MonoBehaviour
 {
     private const int MaxCatchUpTicks = 5;
 
+    // Debug acceptance toggle (rule R-C2-7, delivered at the end of C-1):
+    // freezes tick settlement while render frames keep running. Mirror sync
+    // still runs under the freeze but copies unchanged values - so the UI
+    // going still is a structural guarantee, not a render bug. The
+    // accumulator is not drained, so unfreezing never bursts the backlog.
+    public static bool PauseLogic;
+
     private float accumulator;
 
     private void Update()
     {
-        accumulator += Time.deltaTime;
-        int ticks = 0;
-        while(accumulator >= GameClock.TickInterval && ticks < MaxCatchUpTicks)
+        if(Input.GetKeyDown(KeyCode.F8))
         {
-            accumulator -= GameClock.TickInterval;
-            GameClock.TickCount++;
-            WorldManager.Instance.Tick(GameClock.TickInterval);
-            ticks++;
+            PauseLogic = !PauseLogic;
+            Debug.Log($"[GameLoopDriver] logic {(PauseLogic ? "FROZEN (F8 to resume)" : "resumed")}");
         }
-        GameClock.Alpha = Mathf.Clamp01(accumulator / GameClock.TickInterval);
+        if(!PauseLogic)
+        {
+            accumulator += Time.deltaTime;
+            int ticks = 0;
+            while(accumulator >= GameClock.TickInterval && ticks < MaxCatchUpTicks)
+            {
+                accumulator -= GameClock.TickInterval;
+                GameClock.TickCount++;
+                WorldManager.Instance.Tick(GameClock.TickInterval);
+                ticks++;
+            }
+        }
+        GameClock.Alpha = PauseLogic ? 0f : Mathf.Clamp01(accumulator / GameClock.TickInterval);
+
+        // Mirror sync point (Phase C rule R-C1-0): after the fixed ticks ran
+        // (or after a frozen frame, copying identical values), refresh every
+        // bound mirror for the render side of this frame.
+        MirrorSync.Instance.Sync();
     }
 
     private void OnApplicationQuit()

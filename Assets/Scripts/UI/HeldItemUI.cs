@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // Cursor-held stack renderer (方案 §5.3): SlotUI-style icon + amount label
-// that follows the mouse while UIManager.HeldItemStack is non-empty. Tooltip
+// that follows the mouse while the player's cursor stack is non-empty. Tooltip
 // kind: it lives on the topmost TooltipRoot so it overlays every panel, but
 // having no Graphic itself it never swallows clicks.
 public class HeldItemUI : UIBehavior
@@ -11,6 +11,8 @@ public class HeldItemUI : UIBehavior
     private RectTransform rt;
     private ItemIconRenderer Icon;
     private TextMeshProUGUI Text;
+    private int cachedVersion = -1;
+    private ushort cachedItemId;
     private int cachedAmount;
 
     private void Awake()
@@ -48,22 +50,27 @@ public class HeldItemUI : UIBehavior
     // Update, so an empty HeldItemUI could never wake up to notice a pickup.
     private void Update()
     {
-        var held = UIManager.Instance == null ? null : UIManager.Instance.HeldItemStack;
-        bool empty = held == null || held.IsEmpty();
+        // Phase C: reads the held mirror (player cursor stack value copy).
+        // Mirror sync runs before this Update every render frame, so the
+        // version gate below renders exactly on the frame the change lands.
+        var held = MirrorSync.Instance == null ? null : MirrorSync.Instance.PlayerHeldMirror;
+        bool empty = held == null || held.Content.IsEmpty;
         bool iconActive = Icon.gameObject.activeSelf;
         if(iconActive != !empty)Icon.gameObject.SetActive(!empty);
         if(empty)return;
 
-        // Re-render every frame while holding: a single small offscreen draw is
-        // negligible, and an unconditional render self-heals a dropped first
-        // frame (observed: the first-ever held render could come up blank and
-        // only recover once any other item was picked up).
-        Icon.SetItem(held.itemId);
-
-        if(held.amount != cachedAmount)
+        // Render only when the mirrored content changed (version, then values
+        // as a safety net): every pickup / drop / merge / swap bumps the
+        // version, so a first held render can never be skipped.
+        if(cachedVersion != held.Version
+           || cachedItemId != held.Content.itemId
+           || cachedAmount != held.Content.amount)
         {
-            cachedAmount = held.amount;
-            Text.text = held.amount > 1 ? held.amount.ToString() : "";
+            cachedVersion = held.Version;
+            cachedItemId = held.Content.itemId;
+            cachedAmount = held.Content.amount;
+            Icon.SetItem(held.Content.itemId);
+            Text.text = held.Content.amount > 1 ? held.Content.amount.ToString() : "";
         }
 
         var parentRt = (RectTransform)transform.parent;

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 public class UIBehavior : MonoBehaviour
@@ -9,9 +8,8 @@ public class UIBehavior : MonoBehaviour
     public void Open() => gameObject.SetActive(true);
     public void Close() => gameObject.SetActive(false);
 
+    // Per-frame poll entry of the panel's own slots (reads mirrors; Unity
+    // skips Update on inactive panels, so this may also run from a periodic
+    // sweep where a panel has no Update).
     public virtual void Refresh() {}
-
-    // Panels that host container slots (furnace input/fuel/output) expose them
-    // here so UIManager can shift-move backpack items into the open container.
-    public virtual IReadOnlyList<ISlotAccess> ContainerSlots => null;
 }

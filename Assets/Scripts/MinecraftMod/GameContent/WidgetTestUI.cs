@@ -44,7 +44,8 @@ public class WidgetTestUI : UIBehavior
 
         var giveGo = UIButtonWidget.CreateNewButton("Give Dirt", null, page);
         Place(giveGo, new Vector2(60, -40), new Vector2(130, 40));
-        giveGo.GetComponent<UIButtonWidget>().OnClick.AddListener(() => GiveItems("minecraft:dirt", input.GetValue()));
+        giveGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
+            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:dirt", input.GetValue()));
 
         return page;
     }
@@ -61,11 +62,13 @@ public class WidgetTestUI : UIBehavior
 
         var stoneGo = UIButtonWidget.CreateNewButton("Give Stone", null, page);
         Place(stoneGo, new Vector2(-90, -40), new Vector2(150, 40));
-        stoneGo.GetComponent<UIButtonWidget>().OnClick.AddListener(() => GiveItems("minecraft:stone", input.GetValue()));
+        stoneGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
+            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:stone", input.GetValue()));
 
         var cobbleGo = UIButtonWidget.CreateNewButton("Give Cobblestone", null, page);
         Place(cobbleGo, new Vector2(90, -40), new Vector2(150, 40));
-        cobbleGo.GetComponent<UIButtonWidget>().OnClick.AddListener(() => GiveItems("minecraft:cobblestone", input.GetValue()));
+        cobbleGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
+            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:cobblestone", input.GetValue()));
 
         return page;
     }
@@ -132,30 +135,6 @@ public class WidgetTestUI : UIBehavior
     {
         go.transform.localPosition = position;
         ((RectTransform)go.transform).sizeDelta = size;
-    }
-
-    // Grants `amount` of the named item in MaxStack chunks; stops when the
-    // backpack cannot hold more. Returns how much actually landed.
-    private static int GiveItems(string fullName, int amount)
-    {
-        if(amount <= 0)return 0;
-        var rs = ResourceSystem.Instance;
-        if(!rs.ItemDefinitions.TryGetResourceWithFullName(fullName, out var def))return 0;
-        if(!rs.ItemDefinitions.TryGetNumberId(fullName, out ushort id))return 0;
-        var inventory = Player.Instance?.inventory;
-        if(inventory == null)return 0;
-
-        int remaining = amount;
-        while(remaining > 0)
-        {
-            int piece = Mathf.Min(remaining, def.MaxStack);
-            var stack = new ItemStack { itemId = id, amount = piece };
-            if(!inventory.TryAddItemStack(stack))break;   // full: grant what fits, drop the rest
-            remaining -= piece;
-        }
-        int granted = amount - remaining;
-        Debug.Log($"WidgetTest: granted {granted}/{amount} {def.FullName}");
-        return granted;
     }
 
     public static UIDefinition widgetTestUIDefinition = new()
