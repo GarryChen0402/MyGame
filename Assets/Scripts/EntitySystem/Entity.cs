@@ -6,6 +6,11 @@ using UnityEngine.Video;
 
 public class Entity // Data Class
 {
+    // Stable instance id (Phase C R-C2-2): keys the render shell table and
+    // identifies publishers in view-event DTOs. Logic never consumes it.
+    public readonly int EntityId;
+    private static int nextEntityId = 1;
+
     public List<AABB> AABBs = new();
     public AABB MainBox => AABBs[0];
     
@@ -40,13 +45,21 @@ public class Entity // Data Class
 
     public Entity()
     {
+        EntityId = nextEntityId++;
         // Session slot starts idle: Completed true = "no session in flight"
         // (the SetSession gate rejects new requests while one is active).
         Session.Completed = true;
         EventBus.Instance.Publish(new SummonEntityEvent(){entity = this});
     }
 
-    public void OnDestroy() => EventBus.Instance.Publish(new DestroyEntity(){entity = this});
+    public void OnDestroy()
+    {
+        EventBus.Instance.Publish(new DestroyEntity(){entity = this});   // logic dereg chain (PhysicsManager AABB)
+        // Render-side teardown (rule R-C2-3): the shell manager subscribed to
+        // the DTO event pair, so its table can key on EntityId alone.
+        MirrorSync.Instance.UnregisterEntityMirror(EntityId);
+        EventBus.Instance.Publish(new EntityShellDespawnEvent(){entityId = EntityId});
+    }
 
     public void Move(Vector3 motion)
     {
@@ -122,17 +135,35 @@ public class Entity // Data Class
         }
         if (Session.Completed)
         {
-            EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Operator = this, Ctx = Session});
+            EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Data = SessionSnapshot()});
             return;
         }
         Session.Durantion += GetSessionUpdateTime(Session.TargetType, dt);
-        EventBus.Instance.Publish(new InteractionSessionContextTickEvent(){Operator = this, Ctx = Session});
+        EventBus.Instance.Publish(new InteractionSessionContextTickEvent(){Data = SessionSnapshot()});
 
         if(Session.Durantion >= Session.CompleteTime)
         {
             SettleCompletedSession();
         }
 
+    }
+
+    // Pure-data snapshot of the running session for the render-facing events
+    // (rule R-C2-3): values are read at publish time, so a subscriber always
+    // sees the settled state of the tick that fired the event.
+    private SessionEventData SessionSnapshot()
+    {
+        var s = Session;
+        return new SessionEventData
+        {
+            operatorId = EntityId,
+            targetType = s.TargetType,
+            bindingFullName = s.bindingFullName,
+            isAIControlled = s.IsAIControlled,
+            blockDimCoord = s.blockDimCoord,
+            durantion = s.Durantion,
+            completeTime = s.CompleteTime
+        };
     }
 
     // Settles the running session: the Completed flag flips before the success
@@ -144,7 +175,7 @@ public class Entity // Data Class
     {
         Session.Completed = true;
         Session.OnComplete.Invoke();
-        EventBus.Instance.Publish(new InteractionSessionContextCompletedEvent(){Operator = this, Ctx = Session});
+        EventBus.Instance.Publish(new InteractionSessionContextCompletedEvent(){Data = SessionSnapshot()});
     }
 
     public virtual float GetSessionUpdateTime(InteractionSessionTargetType targetType, float dt) => dt;
@@ -173,11 +204,12 @@ public class Entity // Data Class
         Session.itemStack = itemStack;
         Session.HitNormal = hitNormal;
         Session.OnComplete = OnComplete;
+        ushort stateId = 0;
         if(itemStack != null && ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemStack.itemId, out var itemDefinition))
             Session.ItemDef = itemDefinition;
         if(WorldManager.Instance.TryGetDimension(DimensionId, out var dim))
         {
-            ushort stateId = dim.GetBlockAt(blockCoord);
+            stateId = dim.GetBlockAt(blockCoord);
             if(ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var blockState))
             {
                 Session.blockId = blockState.BlockId;
@@ -197,10 +229,15 @@ public class Entity // Data Class
                 }
             }
         }
+        // The mined target's state id rides the Start payload so the crack
+        // overlay can build its geometry without a render-side block query
+        // (design C-2 §8.1); the block cannot change mid-session without the
+        // frame interruption rule above firing first.
+        var startData = SessionSnapshot();
+        startData.blockStateId = stateId;
         EventBus.Instance.Publish(new InteractionSessionContextStartEvent()
         {
-            Operator = this,
-            Ctx = Session
+            Data = startData
         });
 
         if(CompleteTime <= 0f)SettleCompletedSession();   // instant sessions settle on the click frame
@@ -214,7 +251,7 @@ public class Entity // Data Class
     {
         if(Session.Completed)return;
         Session.Completed = true;
-        EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Operator = this, Ctx = Session});
+        EventBus.Instance.Publish(new InteractionSessionContextInteruptedEvent(){Data = SessionSnapshot()});
     }
 
     public virtual void ConsumeItemUseResult(ItemUseResult result){}

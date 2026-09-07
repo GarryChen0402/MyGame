@@ -18,6 +18,11 @@ public class CrackBlockRenderer : MonoBehaviour
     public readonly Dictionary<Vector3Int, int> BlockBreakStages = new();
     public bool AnyChanged { get; private set; } = true;
 
+    // Mined target state id per coordinate, captured at session Start from the
+    // event DTO (rule R-C2-3/R-C2-6): overlay geometry builds from this cache
+    // instead of a render-side block query. Session lifetime only - removed
+    // together with the stage entry.
+    private readonly Dictionary<Vector3Int, int> blockStateIds = new();
     private readonly Dictionary<Vector3Int, CrackOverlay> overlays = new();
     private static Material crackMaterial;
     private static Rect[] stageRects;   // atlas rect per stage, cached on first use
@@ -34,9 +39,9 @@ public class CrackBlockRenderer : MonoBehaviour
 
     // Mining sessions only: Block target + the attack binding. Right-click use
     // sessions (placing etc.) share the Block target type and must not crack.
-    private static bool IsMiningSession(InteractionSessionContext ctx)
-        => ctx.TargetType == InteractionSessionTargetType.Block
-            && ctx.bindingFullName == InteractionManager.AttackBindingName;
+    private static bool IsMiningSession(SessionEventData data)
+        => data.targetType == InteractionSessionTargetType.Block
+            && data.bindingFullName == InteractionManager.AttackBindingName;
 
     private void Awake()
     {
@@ -70,16 +75,17 @@ public class CrackBlockRenderer : MonoBehaviour
 
     private void OnInteractionSessionStart(InteractionSessionContextStartEvent evt)
     {
-        if(!IsMiningSession(evt.Ctx))return;
-        BlockBreakStages[evt.Ctx.blockDimCoord] = 0;
+        if(!IsMiningSession(evt.Data))return;
+        BlockBreakStages[evt.Data.blockDimCoord] = 0;
+        blockStateIds[evt.Data.blockDimCoord] = evt.Data.blockStateId;
         AnyChanged = true;
     }
 
     private void OnInteractionSessionTick(InteractionSessionContextTickEvent evt)
     {
-        if(!IsMiningSession(evt.Ctx))return;
-        var blockCoord = evt.Ctx.blockDimCoord;
-        int newstage = GetBlockBreakStage(evt.Ctx.Durantion, evt.Ctx.CompleteTime);
+        if(!IsMiningSession(evt.Data))return;
+        var blockCoord = evt.Data.blockDimCoord;
+        int newstage = GetBlockBreakStage(evt.Data.durantion, evt.Data.completeTime);
         if(BlockBreakStages.TryGetValue(blockCoord, out int stage) && stage == newstage)return;
         BlockBreakStages[blockCoord] = newstage;
         AnyChanged = true;
@@ -87,15 +93,17 @@ public class CrackBlockRenderer : MonoBehaviour
 
     private void OnInteractionSessionInterupted(InteractionSessionContextInteruptedEvent evt)
     {
-        if(!IsMiningSession(evt.Ctx))return;
-        BlockBreakStages.Remove(evt.Ctx.blockDimCoord);
+        if(!IsMiningSession(evt.Data))return;
+        BlockBreakStages.Remove(evt.Data.blockDimCoord);
+        blockStateIds.Remove(evt.Data.blockDimCoord);
         AnyChanged = true;
     }
 
     private void OnInteractionSessionCompleteded(InteractionSessionContextCompletedEvent evt)
     {
-        if(!IsMiningSession(evt.Ctx))return;
-        BlockBreakStages.Remove(evt.Ctx.blockDimCoord);
+        if(!IsMiningSession(evt.Data))return;
+        BlockBreakStages.Remove(evt.Data.blockDimCoord);
+        blockStateIds.Remove(evt.Data.blockDimCoord);
         AnyChanged = true;
     }
 
@@ -133,10 +141,11 @@ public class CrackBlockRenderer : MonoBehaviour
     // ExtendModelMesh expects.
     private void CreateOverlay(Vector3Int coord, int stage)
     {
-        var dim = WorldRenderer.Instance != null ? WorldRenderer.Instance.CurrentRenderDimension : null;
-        if(dim == null)return;
-        ushort stateId = dim.GetBlockAt(coord);
-        if(stateId == 0)return;
+        // Rule R-C2-6: the mined target's state id comes from the cache the
+        // Start handler captured from the event DTO - no render-side block
+        // query, no dimension access.
+        if(!blockStateIds.TryGetValue(coord, out int cachedId) || cachedId == 0)return;
+        ushort stateId = (ushort)cachedId;
         BlockState state = ResourceSystem.Instance.GetState(stateId);
         if(state == null || !ResourceSystem.Instance.CustomModels.TryGetResourceWithFullName(state.ModelId, out var model))return;
 

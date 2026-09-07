@@ -489,6 +489,10 @@ public class Minecraft : IMod
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new UIInputHandler());
+        // Early-touch the shell manager singleton: since the Attach direct
+        // calls became spawn events (Phase C R-C2-3) nothing else instantiates
+        // it, and a spawn before its ctor subscribed would lose the shell.
+        _ = EntityRenderManager.Instance;
 
         // ---- input actions (default bindings; players rebind via overrides,
         // game code only ever polls action ids, never physical keys) ----

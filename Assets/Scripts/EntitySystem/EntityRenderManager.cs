@@ -2,58 +2,59 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Owns the render shell of every live dynamic entity - one GameObject per
-// entity, keyed here so a despawn can destroy the GO. Data/logic stay in the
-// entity classes; shells only read entity data one-way each frame.
-// The table is filled by Attach, which the spawn entry points call once the
-// entity's data is complete (SummonEntityEvent fires too early - in the Entity
-// ctor - before Stack/Definition exist, so it carries no buildable info), and
-// emptied event-driven by DestroyEntity: the removal flow publishes it through
-// entity.OnDestroy(), so shells that are not managed here are simply ignored.
+// entity, keyed by EntityId (rule R-C2-2) so a despawn can destroy the GO.
+// Shell assembly is event-driven: the logic spawn entries publish
+// EntityShellSpawnEvent once the entity's data is complete (the former Attach
+// direct calls are gone - rule R-C2-0); EntityShellDespawnEvent, published
+// from Entity.OnDestroy, removes the GO. Shells only read entity mirrors
+// one-way each frame.
 public class EntityRenderManager
 {
     public static EntityRenderManager Instance { get; } = new();
 
-    private readonly Dictionary<Entity, GameObject> shells = new();
+    private readonly Dictionary<int, GameObject> shells = new();
     private Transform dynamicRoot;
 
     private EntityRenderManager()
     {
-        EventBus.Instance.Subscribe<DestroyEntity>(OnDestroyEntity);
+        EventBus.Instance.Subscribe<EntityShellSpawnEvent>(OnShellSpawn);
+        EventBus.Instance.Subscribe<EntityShellDespawnEvent>(OnShellDespawn);
     }
 
-    // No-op for unknown entity kinds (Player keeps its own renderer), for
-    // data-less entities and for ones already attached (idempotent).
-    public void Attach(Entity entity)
+    // No-op for unknown kinds (Player keeps its own renderer), missing data
+    // and already-shelled entities (idempotent). Assembly data all comes from
+    // the DTO - no entity field is read here.
+    private void OnShellSpawn(EntityShellSpawnEvent evt)
     {
-        if(entity == null || shells.ContainsKey(entity))return;
-        if(entity is ItemEntity item)AttachItem(item);
-        else if(entity is MobEntity mob)AttachMob(mob);
+        if(evt.mirror == null || shells.ContainsKey(evt.entityId))return;
+        if(evt.isItem)AttachItem(evt);
+        else AttachMob(evt);
     }
 
-    private void AttachItem(ItemEntity entity)
+    private void AttachItem(EntityShellSpawnEvent evt)
     {
-        if(entity.Stack == null)return;
-        var go = new GameObject($"Item Drop {entity.Stack.itemId}");
+        if(evt.itemId == 0)return;
+        var go = new GameObject($"Item Drop {evt.itemId}");
         go.transform.SetParent(DynamicRoot, false);
         // Meshes span 1m; the 0.25 scale matches the entity's physics box.
         go.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-        go.AddComponent<EntityRenderer>().Bind(entity);
-        shells[entity] = go;
+        go.AddComponent<EntityRenderer>().Bind(evt.mirror, evt.itemId);
+        shells[evt.entityId] = go;
     }
 
-    private void AttachMob(MobEntity entity)
+    private void AttachMob(EntityShellSpawnEvent evt)
     {
-        if(entity.Definition == null || string.IsNullOrEmpty(entity.Definition.ModelId))return;
-        if(!ResourceSystem.Instance.EntityModels.TryGetResourceWithFullName(entity.Definition.ModelId, out var model))return;
+        if(string.IsNullOrEmpty(evt.modelId))return;
+        if(!ResourceSystem.Instance.EntityModels.TryGetResourceWithFullName(evt.modelId, out var model))return;
         var visual = EntityVisualBuilder.Build(model, null, null, DynamicRoot);
         if(visual?.Root == null)return;   // missing/unbuildable source already logged by the builder
-        visual.Root.gameObject.AddComponent<MobVisualSync>().Bind(entity, visual);
-        shells[entity] = visual.Root.gameObject;
+        visual.Root.gameObject.AddComponent<MobVisualSync>().Bind(evt.mirror, visual);
+        shells[evt.entityId] = visual.Root.gameObject;
     }
 
-    private void OnDestroyEntity(DestroyEntity evt)
+    private void OnShellDespawn(EntityShellDespawnEvent evt)
     {
-        if(shells.Remove(evt.entity, out var go))Object.Destroy(go);
+        if(shells.Remove(evt.entityId, out var go))Object.Destroy(go);
     }
 
     // All shells live under one lazy "DynamicEntities" root so they can be

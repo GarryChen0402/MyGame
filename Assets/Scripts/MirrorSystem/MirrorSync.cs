@@ -18,6 +18,7 @@ public class MirrorSync
     public ContainerMirror PlayerCraftGridMirror { get; private set; }   // 4
     public ContainerMirror PlayerCraftResultMirror { get; private set; } // 1
     public HeldMirror PlayerHeldMirror { get; private set; }
+    public PlayerMirror PlayerMirror { get; private set; }               // camera read side (rule R-C2-5)
 
     // ---- per-render-frame sync point (GameLoopDriver.Update tail) ----
 
@@ -40,6 +41,28 @@ public class MirrorSync
         PlayerCraftResultMirror = AddContainerBinding(p.CraftingResult.Inv);
         PlayerHeldMirror = new HeldMirror();
         bindings.Add(new HeldBinding { Mirror = PlayerHeldMirror, Source = p.CursorStack });
+        PlayerMirror = new PlayerMirror();
+        bindings.Add(new PlayerBinding { Mirror = PlayerMirror, Source = p });
+    }
+
+    // ---- entity mirrors (logic spawn entries register; rule R-C1-0c/R-C2-1) ----
+
+    // Called by the logic spawn entry points once the entity's data is
+    // complete (mob Init / item placement); the returned mirror rides the
+    // EntityShellSpawnEvent to the shell manager.
+    public EntityMirror RegisterEntityMirror(Entity entity)
+    {
+        var mirror = new EntityMirror(entity.EntityId);
+        bindings.Add(new EntityBinding { Mirror = mirror, Source = entity });
+        mirror.ApplyFrom(entity);   // initial snapshot: ready before any shell binds
+        return mirror;
+    }
+
+    // Called from Entity.OnDestroy; the shell manager removes its GO through
+    // the EntityShellDespawnEvent published alongside.
+    public void UnregisterEntityMirror(int entityId)
+    {
+        bindings.RemoveAll(b => b is EntityBinding eb && eb.Mirror != null && eb.Mirror.EntityId == entityId);
     }
 
     // ---- panel session bindings (ContainerCommandProcessor.OpenPanel calls) ----
@@ -127,5 +150,24 @@ public class MirrorSync
         public ProcessingWorkContainer Source;
 
         public override void Sync() => View?.Apply(Source);
+    }
+
+    // PlayerMirror source: the player singleton (never replaced in v1).
+    private class PlayerBinding : Binding
+    {
+        public PlayerMirror Mirror;
+        public Player Source;
+
+        public override void Sync() => Mirror?.ApplyFrom(Source);
+    }
+
+    // One entity mirror per live logic entity; entries live exactly as long
+    // as the entity (RegisterEntityMirror/UnregisterEntityMirror).
+    private class EntityBinding : Binding
+    {
+        public EntityMirror Mirror;
+        public Entity Source;
+
+        public override void Sync() => Mirror?.ApplyFrom(Source);
     }
 }

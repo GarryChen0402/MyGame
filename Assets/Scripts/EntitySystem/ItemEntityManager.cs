@@ -86,7 +86,16 @@ public class ItemEntityManager
         entity.PickupDelay = pickupDelay;
         entity.SetPosition(position);
         chunk.RegisterItemEntity(entity);   // into Chunk.ItemEntities + tracked
-        EntityRenderManager.Instance.Attach(entity);
+        // Shell data channel (rule R-C2-3): mirror registration + spawn event
+        // once the stack/position are set - replaces the former Attach call.
+        var mirror = MirrorSync.Instance.RegisterEntityMirror(entity);
+        EventBus.Instance.Publish(new EntityShellSpawnEvent
+        {
+            entityId = entity.EntityId,
+            isItem = true,
+            itemId = entity.Stack.itemId,
+            mirror = mirror
+        });
     }
 
     // Total despawn: idempotent (tracked membership is the sentinel). Removes

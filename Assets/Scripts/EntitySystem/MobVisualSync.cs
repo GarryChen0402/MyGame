@@ -1,11 +1,12 @@
 using System;
 using UnityEngine;
 
-// Render shell sync + semantic animation driver for one MobEntity (design doc:
-// Mob渲染动画控制-代码设计). Reads entity data one-way every frame - shells
-// never write entity fields. Position maps the main box pivot; rotation is a
-// pure mapping of the heading (Euler(pitch, yaw, 0), PlayerRenderer precedent)
-// so heading evolution stays in the data/behavior layer.
+// Render shell sync + semantic animation driver for one mob (design doc:
+// Mob渲染动画控制-代码设计, rule R-C2-2). Reads the entity mirror one-way
+// every frame - shells never touch entity data. Position maps the main box
+// pivot; rotation is a pure mapping of the heading (Euler(pitch, yaw, 0),
+// PlayerRenderer precedent) so heading evolution stays in the data/behavior
+// layer.
 //
 // Animation: the prefab's own Animator is driven from a semantic state ladder
 // (dead -> attack window -> hurt stun -> moving -> idle). State existence is
@@ -14,7 +15,7 @@ using UnityEngine;
 // clips fire exactly once each (window flags), never restarted by the ladder.
 public class MobVisualSync : MonoBehaviour
 {
-    private MobEntity entity;
+    private EntityMirror mirror;
     private Animator animator;
     private Transform headPart;   // semantic "head" node of the rig; null = nothing to swivel
 
@@ -31,9 +32,12 @@ public class MobVisualSync : MonoBehaviour
 
     private Action<InteractionSessionContextStartEvent> attackHandler;   // kept for unsubscribe by reference
 
-    public void Bind(MobEntity entity, EntityVisual visual)
+    // Called by EntityRenderManager's spawn handler once the mob's data is
+    // complete - the mirror was registered and snapshot at that point, so no
+    // "box not ready yet" state exists (the former AABBs.Count gate is gone).
+    public void Bind(EntityMirror mirror, EntityVisual visual)
     {
-        this.entity = entity;
+        this.mirror = mirror;
         if(visual != null)
         {
             animator = visual.Animator;
@@ -64,11 +68,12 @@ public class MobVisualSync : MonoBehaviour
     // Attack trigger: the mob's own AI sessions publish this at SetSession
     // (IsAIControlled is set just before). Player sessions carry Operator =
     // Player and never drive a mob's clip. Plays exactly once per swing; the
-    // ladder below waits for the clip to finish before falling back.
+    // ladder below waits for the clip to finish before falling back. Identity
+    // compares on the DTO operatorId (rule R-C2-3), never a logic reference.
     private void OnInteractionStart(InteractionSessionContextStartEvent evt)
     {
         if(animator == null || !hasAttack || attackActive)return;
-        if(evt.Operator != (Entity)entity || !evt.Ctx.IsAIControlled)return;
+        if(evt.Data.operatorId != mirror?.EntityId || !evt.Data.isAIControlled)return;
         attackActive = true;
         Unfreeze();
         animator.Play(attackHash, 0, 0f);
@@ -76,16 +81,16 @@ public class MobVisualSync : MonoBehaviour
 
     private void Update()
     {
-        if(entity == null || entity.AABBs.Count == 0)return;
+        if(mirror == null)return;
         // Partial-tick interpolation between tick states (design doc 固定Tick
         // 时钟与渲染插值改造-代码设计.md §4): logic steps at 20Hz, so the shell
         // lerps prev->current with GameClock.Alpha. Pure mapping - never writes
         // entity data back.
         float alpha = GameClock.Alpha;
-        transform.position = Vector3.Lerp(entity.PrevPosition, entity.Position, alpha);
+        transform.position = Vector3.Lerp(mirror.PrevPosition, mirror.Position, alpha);
         transform.rotation = Quaternion.Euler(
-            Mathf.LerpAngle(entity.PrevPitch, entity.pitch, alpha),
-            Mathf.LerpAngle(entity.PrevYaw, entity.yaw, alpha), 0f);
+            Mathf.LerpAngle(mirror.PrevPitch, mirror.Pitch, alpha),
+            Mathf.LerpAngle(mirror.PrevYaw, mirror.Yaw, alpha), 0f);
         if(animator != null)UpdateAnimation();
     }
 
@@ -94,14 +99,14 @@ public class MobVisualSync : MonoBehaviour
     // own the head as soon as the lock ends (wander) or the entity dies.
     private void LateUpdate()
     {
-        if(entity == null || entity.AABBs.Count == 0 || headPart == null)return;
-        if(entity.IsDead || !entity.HeadLocked)return;   // dead/unlocked: the animation owns the head
+        if(mirror == null || headPart == null)return;
+        if(mirror.IsDead || !mirror.HeadLocked)return;   // dead/unlocked: the animation owns the head
         // Pure mapping of the data-layer heading, clamped to the rig's neck
-        // range - a visual constraint, never a write-back to entity data. Both
-        // angles are interpolated first so a 27deg/tick head turn stays smooth.
+        // range - a visual constraint, never a write-back. Both angles are
+        // interpolated first so a 27deg/tick head turn stays smooth.
         float alpha = GameClock.Alpha;
-        float bodyYaw = Mathf.LerpAngle(entity.PrevYaw, entity.yaw, alpha);
-        float headYaw = Mathf.LerpAngle(entity.PrevHeadYaw, entity.HeadYaw, alpha);
+        float bodyYaw = Mathf.LerpAngle(mirror.PrevYaw, mirror.Yaw, alpha);
+        float headYaw = Mathf.LerpAngle(mirror.PrevHeadYaw, mirror.HeadYaw, alpha);
         float swivel = Mathf.Clamp(Mathf.DeltaAngle(bodyYaw, headYaw),
                                    -HeadSwivelRange, HeadSwivelRange);
         headPart.localRotation = Quaternion.Euler(0f, swivel, 0f);
@@ -112,7 +117,7 @@ public class MobVisualSync : MonoBehaviour
     // thaws. Every Play is guarded by the HasState probe cached at Bind.
     private void UpdateAnimation()
     {
-        if(entity.IsDead)
+        if(mirror.IsDead)
         {
             if(dieStarted)return;   // single-shot clip plays out in place
             dieStarted = true;
@@ -137,14 +142,14 @@ public class MobVisualSync : MonoBehaviour
             return;
         }
 
-        if(entity.InvincibleTimer > 0f)   // hurt stun: knockback slide plays out frozen
+        if(mirror.InvincibleTimer > 0f)   // hurt stun: knockback slide plays out frozen
         {
             SetFrozen(true);
             return;
         }
 
-        Vector3 m = entity.Motion;
-        float hSpeed = Mathf.Sqrt(m.x * m.x + m.z * m.z);
+        var m = mirror.MotionXZ;
+        float hSpeed = Mathf.Sqrt(m.x * m.x + m.y * m.y);
         if(hSpeed > WalkSpeedThreshold)
         {
             Unfreeze();

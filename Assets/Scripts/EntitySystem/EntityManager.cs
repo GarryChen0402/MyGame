@@ -59,7 +59,17 @@ public class EntityManager
         }
         var target = new MobEntity();
         target.Init(def, targetPos);
-        EntityRenderManager.Instance.Attach(target);   // shell, once the data is ready
+        // Shell data channel (rule R-C2-3): register the entity mirror and
+        // publish the spawn event now that the data is complete - replaces the
+        // former EntityRenderManager.Attach direct call.
+        var mirror = MirrorSync.Instance.RegisterEntityMirror(target);
+        EventBus.Instance.Publish(new EntityShellSpawnEvent
+        {
+            entityId = target.EntityId,
+            isItem = false,
+            modelId = def.ModelId,
+            mirror = mirror
+        });
         return true;
     }
 }

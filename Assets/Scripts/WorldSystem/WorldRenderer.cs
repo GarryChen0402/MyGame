@@ -53,7 +53,7 @@ public class WorldRenderer : MonoBehaviour
         // scene camera.
         foreach(var renderer in chunkRenderers.Values)Destroy(renderer.gameObject);
         chunkRenderers.Clear();
-        WorldManager.Instance.ForceLoadAround(Player.Instance.Position);
+        WorldManager.Instance.ForceLoadAround(PlayerMirrorPosition());
         // Chunks enabled before the dimension was set never fired ChunkLoaded
         // (the handler was still ignoring events), so sync them now.
         SyncExistingRenderers();
@@ -197,12 +197,21 @@ public class WorldRenderer : MonoBehaviour
         DispatchEntry(chunk, entry);
     }
 
+    // World-render load/sort center (rule R-C2-5): reads the PlayerMirror
+    // instead of Player.Instance. Null-gated - before the mirror binding
+    // exists (player not spawned yet) the center degrades to the origin,
+    // matching the "player not created yet" semantics of the old direct read.
+    private Vector3 PlayerMirrorPosition()
+        => MirrorSync.Instance != null && MirrorSync.Instance.PlayerMirror != null
+            ? MirrorSync.Instance.PlayerMirror.Position
+            : Vector3.zero;
+
     private void DispatchRebuildTasks()
     {
-        // Near-first sorting center: the authoritative player position read
-        // directly (read-only access is allowed - rules R2); at 20Hz it lags a
-        // frame at most, fine for a dispatch heuristic.
-        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(Player.Instance.Position);
+        // Near-first sorting center from the PlayerMirror (rule R-C2-5):
+        // MirrorSync refreshes it before this Update runs, so the center is
+        // current-frame; at 20Hz it lags a tick at most, fine for a heuristic.
+        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(PlayerMirrorPosition());
         // Candidates in dispatch priority order: Important, Initial, then Normal,
         // nearest chunks first within a type. Chunks with a task in flight or ready
         // are skipped here; the entry stays queued and DispatchPendingEntry
