@@ -23,17 +23,6 @@ public class WorldManager
     private readonly List<ChunkGenTask> genInflight = new();
     private const int MaxConcurrentChunkGens = 6;
 
-    // Controller: the only place that decides which chunks are loaded. Called by the
-    // view (WorldRenderer) with the raw player position; detects chunk crossings here.
-    public void OnPlayerMoved(Vector3 worldPos)
-    {
-        Vector2Int coord = Dimension.WorldPosToChunkCoord(worldPos);
-        if(coord == lastPlayerChunkCoord)return;
-        lastPlayerChunkCoord = coord;
-        foreach(var dim in Dimensions.Values)
-            LoadChunksInDimension(dim, coord, ChunkLoadRange);
-    }
-
     // Forces a reload around a position even if the player hasn't crossed a chunk
     // boundary (dimension switch / initial setup).
     public void ForceLoadAround(Vector3 worldPos)
@@ -229,9 +218,24 @@ public class WorldManager
         ProcessChunkGeneration();
         WorldSaveManager.Instance.Tick(dt);
         EntityManager.Instance.Update(dt);
+        UpdateLoadCenter();                  // after the entity batch: the player moved this tick already (rules L1/L2)
         BlockEntityManager.Instance.Tick(dt);
         RandomTickSystem.Instance.Tick(dt);   // MC random ticks: 20Hz block-domain step (design doc 随机刻系统-代码设计 §3)
         ItemEntityManager.Instance.Update();
+    }
+
+    // Load-center driver on the game tick (rule L2, design doc §7.1): the old
+    // frame-driven OnPlayerMoved fed on the view's camera position; the
+    // authoritative player position now owns the center, detected at tick
+    // granularity - a chunk crossing lags at most one tick (50ms). Player is a
+    // static singleton, so no scene-activation guard is needed.
+    private void UpdateLoadCenter()
+    {
+        Vector2Int coord = Dimension.WorldPosToChunkCoord(Player.Instance.Position);
+        if(coord == lastPlayerChunkCoord)return;
+        lastPlayerChunkCoord = coord;
+        foreach(var dim in Dimensions.Values)
+            LoadChunksInDimension(dim, coord, ChunkLoadRange);
     }
 }
 

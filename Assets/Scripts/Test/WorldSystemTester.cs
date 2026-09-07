@@ -36,8 +36,9 @@ public class WorldSystemTester : MonoBehaviour
 
         var wr = Object.FindFirstObjectByType<WorldRenderer>(FindObjectsInactive.Exclude);
         if(wr == null) yield break;
-        // A restored player position must become the chunk-loading center.
-        wr.SetPlayerPosition(Player.Instance.Position);
+        // SetRenderDimension force-loads around the authoritative player
+        // position (rules L2/L3); the camera transform no longer feeds the
+        // load center.
         wr.SetRenderDimension(dimId);
 
         // Move the camera above the world for a clear overview

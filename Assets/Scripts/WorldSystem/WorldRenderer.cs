@@ -18,9 +18,6 @@ public class WorldRenderer : MonoBehaviour
     private static WorldRenderer instance = null;
     public static WorldRenderer Instance => instance;
 
-    [SerializeField]
-    private Transform playerTransform;
-
     public Dimension CurrentRenderDimension {get; private set;} = null;
 
     private void Awake()
@@ -40,18 +37,10 @@ public class WorldRenderer : MonoBehaviour
 
     private void Update()
     {
-        if(playerTransform == null)return;
-        // View forwards the player position; chunk load/unload is the Controller's
-        // job. World logic ticking lives in WorldManager.Tick (GameLoopDriver).
-        WorldManager.Instance.OnPlayerMoved(playerTransform.position);
+        // Chunk loading no longer runs here (the load center moved to
+        // WorldManager.UpdateLoadCenter on the logic tick - rules L1/L2); the
+        // view only drains its mesh rebuild queue.
         ProcessRebuildChunkQueue();
-    }
-
-    // Makes the chunk-loading center follow a restored player position (the
-    // scene transform keeps its authored position otherwise).
-    public void SetPlayerPosition(Vector3 worldPos)
-    {
-        if(playerTransform != null) playerTransform.position = worldPos;
     }
 
     public void SetRenderDimension(ushort dimId)
@@ -59,11 +48,12 @@ public class WorldRenderer : MonoBehaviour
         if(!WorldManager.Instance.TryGetDimension(dimId, out var dim))return;
         CurrentRenderDimension = dim;
         // Old-dimension renderers are no longer valid; the new dimension's chunks
-        // (re)load through events once ForceLoadAround generates them.
+        // (re)load through events once ForceLoadAround generates them. The initial
+        // load center is the authoritative player position (rule L3), not the
+        // scene camera.
         foreach(var renderer in chunkRenderers.Values)Destroy(renderer.gameObject);
         chunkRenderers.Clear();
-        if(playerTransform != null)
-            WorldManager.Instance.ForceLoadAround(playerTransform.position);
+        WorldManager.Instance.ForceLoadAround(Player.Instance.Position);
         // Chunks enabled before the dimension was set never fired ChunkLoaded
         // (the handler was still ignoring events), so sync them now.
         SyncExistingRenderers();
@@ -209,7 +199,10 @@ public class WorldRenderer : MonoBehaviour
 
     private void DispatchRebuildTasks()
     {
-        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(playerTransform.position);
+        // Near-first sorting center: the authoritative player position read
+        // directly (read-only access is allowed - rules R2); at 20Hz it lags a
+        // frame at most, fine for a dispatch heuristic.
+        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(Player.Instance.Position);
         // Candidates in dispatch priority order: Important, Initial, then Normal,
         // nearest chunks first within a type. Chunks with a task in flight or ready
         // are skipped here; the entry stays queued and DispatchPendingEntry

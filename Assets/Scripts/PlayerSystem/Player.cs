@@ -27,7 +27,23 @@ public class Player : LivingEntity, ICraftingGridHost
 
     public const float MaxHealthValue = 20f;   // MC player 20 HP; no def resource in v1
 
+    // Speed constants moved in from the input layer (rules M2, design doc 玩家
+    // 权威化与输入命令化-代码设计 §4.1): target horizontal speed and jump
+    // velocity now apply on the logic side, where the intent is consumed.
+    public const float HorizontalMoveSpeed = 5f;    // m/s target horizontal speed
+    public const float JumpSpeed = 6.4f;            // m/s jump velocity (jump height ~1.28m, MC ~1.25 blocks)
+
     private const float HurtKnockbackDamping = 3f;   // hurt-window horizontal friction (slide ~ speed/3, mob-scale)
+
+    // Input intent slot (input frames write, the player tick consumes - the
+    // same-process stand-in for a network report packet; rule B1: the slot is
+    // exactly where a Phase D network input would land).
+    public PlayerIntent Intent { get; } = new();
+
+    // Tick-start Motion snapshot (design doc §4.1/§4.4): the validation
+    // envelope's baseline, alongside the PrevPosition/PrevYaw/PrevPitch
+    // render snapshot taken in the same pass.
+    public Vector3 PrevMotion;
 
     private float harvestSpeedMultiply = 1.0f;
 
@@ -180,6 +196,99 @@ public class Player : LivingEntity, ICraftingGridHost
             Motion.z *= Mathf.Exp(-HurtKnockbackDamping * dt);
         }
         base.TickPhysics(dt);
+    }
+
+    // The rule §3 three-step tick chain (design doc §4.2): intents become
+    // authoritative physics input / action dispatches (1), the shared chain
+    // runs - invincible timer, TickPhysics with the hurt damping above,
+    // interaction session progress, buffs (2) - then the tick's move is
+    // validated against the reachable envelope, rolling back on violation (3).
+    public override void OnUpdate(float dt)
+    {
+        ConsumeInputIntent();
+        base.OnUpdate(dt);
+        ResolveMoveValidation();
+    }
+
+    public override void SnapshotTickStart()
+    {
+        base.SnapshotTickStart();   // PrevPosition/PrevYaw/PrevPitch for render interpolation
+        PrevMotion = Motion;        // validation baseline (design doc §4.4)
+    }
+
+    // (1) Intent consumption (design doc §4.3): input axes rotate by the
+    // authoritative yaw into the target horizontal speed - the former
+    // input-frame write, now on the tick boundary (rule B5). The jump edge
+    // fires only grounded; the grounded gate moved from the input frame to
+    // the logic side (rule M2). The hurt window applies neither: the
+    // knockback residual slides out through the TickPhysics damping above
+    // instead (the input layer stops producing intents too - double lock).
+    private void ConsumeInputIntent()
+    {
+        if(InvincibleTimer <= 0f)
+        {
+            float yawRad = yaw * Mathf.Deg2Rad;
+            Vector3 forward = new(Mathf.Sin(yawRad), 0f, Mathf.Cos(yawRad));
+            Vector3 right = new(Mathf.Cos(yawRad), 0f, -Mathf.Sin(yawRad));
+            Vector3 target = (forward * Intent.move.x + right * Intent.move.y) * HorizontalMoveSpeed;
+            Motion.x = target.x;
+            Motion.z = target.z;
+            if(Intent.jumpRequested && IsOnGround)Motion.y = JumpSpeed;
+            Intent.jumpRequested = false;
+        }
+        if(Intent.action != null)
+        {
+            PlayerActionRequest req = Intent.action;
+            Intent.action = null;   // single-slot edge: cleared before dispatch (no re-entry)
+            // Interactions stay live in the hurt window (clicks land while
+            // staggered, as before); only a fresh mining start waits - the
+            // stagger flings the player off the clicked block anyway.
+            if(InvincibleTimer <= 0f || req.kind != PlayerActionKind.AttackBlock)
+                InteractionManager.Instance.ProcessPlayerActionRequest(this, req);
+        }
+        Intent.move = Vector2.zero;   // frame-written state, cleared per consume: a tick without a fresh input frame (multi-tick catch-up) must not repeat the last frame's direction
+    }
+
+    // (3) Move validation against this tick's reachable envelope (rules M3/M4,
+    // design doc §4.4): the limits derive from this domain's own physics - the
+    // target speed and the tick-start Motion - so every legitimate physics step
+    // fits inside and only an out-of-domain position change (a future networked
+    // injector) trips it. Truncations (landing/walls) only shrink the moved
+    // distance; the entity-push pass runs after this method in
+    // EntityManager.Update, so pushed displacement is exempt by construction
+    // (rule M5).
+    private void ResolveMoveValidation()
+    {
+        Vector3 moved = Position - PrevPosition;
+        float dt = GameClock.TickInterval;
+
+        float prevHoriz = Mathf.Sqrt(PrevMotion.x * PrevMotion.x + PrevMotion.z * PrevMotion.z);
+        float hLimit = (Mathf.Max(HorizontalMoveSpeed, prevHoriz) * 1.5f + 0.5f) * dt + 0.1f;
+        float hMoved = Mathf.Sqrt(moved.x * moved.x + moved.z * moved.z);
+        if(hMoved > hLimit)RejectMovement(hMoved, hLimit, "horizontal");
+
+        // Vertical envelope: falls stay within one gravity step of the
+        // tick-start speed (landing only truncates); rises are bounded by the
+        // tick-start upward motion (jump/knockback keep y).
+        float vy = PrevMotion.y;
+        float fallMax = vy <= 0f ? -vy * dt + Gravity * dt * dt * 2f : 0.15f;
+        float riseMax = vy > 0f ? vy * dt + 0.25f : 0.35f;
+        if(moved.y < -fallMax || moved.y > riseMax)RejectMovement(moved.y, 0f, "vertical");
+    }
+
+    // Authority rollback (rule M4): rewind to the tick-start state - the only
+    // server-known position in the same-process model - and kill the drift
+    // source. Local play should never reach this branch (design doc §4.4
+    // implementation note: full rewind to PrevPosition); it exists to bound
+    // future networked input.
+    private void RejectMovement(float got, float limit, string axis)
+    {
+        Debug.LogWarning($"[Player] move rejected on {axis} axis: {got:F3} > {limit:F3}; rewound to tick start (moved too quickly)");
+        AABBs[0] = new AABB(
+            PrevPosition - new Vector3(0.3f, 0f, 0.3f),
+            PrevPosition + new Vector3(0.3f, 1.8f, 0.3f));   // 0.6-wide, 1.8-tall player box (feet-center pivot)
+        Motion.x = Motion.z = 0f;
+        if(Motion.y > 0f)Motion.y = 0f;   // an airborne reject must not re-apply itself next tick
     }
 
     // Player death channel keeps its own shape (design doc §4 separation):

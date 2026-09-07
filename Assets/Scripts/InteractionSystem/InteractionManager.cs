@@ -27,7 +27,61 @@ public class InteractionManager
     }
 
 
-    public void HandleLeftClick(Entity entity, Vector3Int dimCoord)
+    // Inbound action validation limit (rule A1, design doc §6): the click
+    // raycast reaches 4.5, plus 0.5 slack for target/player movement in the
+    // up-to-one-tick gap between the click frame and this tick's consumption.
+    public const float ActionReach = 5f;
+
+    // Action entry point (rules A1/A2): the player tick consumes intent
+    // through here, once per tick. The click frame resolved the target; this
+    // re-validates what it could not know - still present, in reach - then
+    // hands validated requests to the existing session flow. Failures drop
+    // the request silently (same semantics as a click on nothing).
+    public void ProcessPlayerActionRequest(Player player, PlayerActionRequest req)
+    {
+        if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
+        switch(req.kind)
+        {
+            case PlayerActionKind.AttackBlock:
+                if(dim.GetBlockAt(req.blockCoord) == 0)return;   // air at consume time: nothing to break
+                if(!WithinReach(player, BlockBox(req.blockCoord)))return;
+                HandleLeftClick(player, req.blockCoord);
+                break;
+            case PlayerActionKind.AttackEntity:
+                MobEntity target = req.entityTarget;
+                if(target == null || target.IsDead)return;
+                if(!EntityManager.Instance.entities.Contains(target))return;   // despawned mid-gap
+                if(!WithinReach(player, target.MainBox))return;
+                HandleAttackEntity(player, target);
+                break;
+            case PlayerActionKind.Use:
+                if(req.isBlockHit)
+                {
+                    if(dim.GetBlockAt(req.blockCoord) == 0)return;   // target shifted to air since the click
+                    if(!WithinReach(player, BlockBox(req.blockCoord)))return;
+                }
+                HandleUseItem(player, req);
+                break;
+        }
+    }
+
+    // Reach check against the target box's surface, not its center: a
+    // legitimate click is a raycast hit at <= 4.5 from the eye, so the
+    // eye-to-surface distance of any legitimately clicked target stays within
+    // the envelope - full-reach clicks on block corners or mob shells are not
+    // rejected, while future out-of-range clicks (the anti-cheat case) are.
+    private static bool WithinReach(Player player, AABB box)
+    {
+        Vector3 eye = player.Position + Vector3.up * Player.EyeHeight;
+        float dx = Mathf.Max(box.MinRange.x - eye.x, 0f, eye.x - box.MaxRange.x);
+        float dy = Mathf.Max(box.MinRange.y - eye.y, 0f, eye.y - box.MaxRange.y);
+        float dz = Mathf.Max(box.MinRange.z - eye.z, 0f, eye.z - box.MaxRange.z);
+        return dx * dx + dy * dy + dz * dz <= ActionReach * ActionReach;
+    }
+
+    private static AABB BlockBox(Vector3Int coord) => new(coord, coord + Vector3Int.one);
+
+    private void HandleLeftClick(Entity entity, Vector3Int dimCoord)
     {
         if(!WorldManager.Instance.TryGetDimension(entity.DimensionId, out var dim))return;
         ushort stateId = dim.GetBlockAt(dimCoord);
@@ -46,26 +100,26 @@ public class InteractionManager
     // damage immediately (no swing animation/cool-down in v1). The session
     // target goes into Session.entity; the interaction layer stays as the
     // trigger hook for future attack events (swing animation, cool-down).
-    public void HandleAttackEntity(Entity attacker, MobEntity target)
+    private void HandleAttackEntity(Entity attacker, MobEntity target)
     {
         attacker.SetSession(AttackBindingName, InteractionSessionTargetType.Entity,
             () => CompleteAttackSession(attacker), 0f, target, default, null);
     }
 
-    // Right-click entry: every use/interact intent funnels into the session
-    // pipeline (rule doc §3.1). Resolution splits on what the raycast hit and
-    // what the operator holds: block-entity targets run on block-owned timing
-    // (0 for now), static-block and air targets run on the held item's UseTime
-    // (0 = instant click). Settlement re-publishes the pre-session interaction
-    // events, so the ItemBehavior/block-entity consumers stay untouched. An
-    // in-flight session (mining, eating) silently rejects the request.
-    public void HandleUseItem(Entity entity)
+    // Right-click resolution reworked around the inbound request (design doc
+    // §6): the click frame resolved the target (isBlockHit / blockCoord - the
+    // coordinate locked at the click, so the session starts against the block
+    // the click saw) and the held stack (req.heldStack); the item definition
+    // lookup and target existence checks re-run live here at consume time.
+    // Everything after - the §3.1 timing split, session settlement events - is
+    // unchanged from the direct-call flow. An in-flight session (mining,
+    // eating) silently rejects the request (session slot gate).
+    private void HandleUseItem(Entity entity, PlayerActionRequest req)
     {
-        ItemStack held = entity.IsHoldingItem() ? entity.GetCurrentHoldingItemStack() : null;
+        ItemStack held = req.heldStack;
         ItemDefinition heldDef = null;
         if(held != null && !ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(held.itemId, out heldDef))return;
-        var hit = entity.CurrentRaycastHitResult;
-        if(!hit.IsHit)
+        if(!req.isBlockHit)
         {
             // Item used on air: only a held item acts - its UseTime gates the
             // hold (eating/drinking). Empty-handed on air is nothing.
@@ -75,21 +129,21 @@ public class InteractionManager
             return;
         }
         if(!WorldManager.Instance.TryGetDimension(entity.DimensionId, out var dim))return;
-        ushort stateId = dim.GetBlockAt(hit.BlockDimensionCoord);
+        ushort stateId = dim.GetBlockAt(req.blockCoord);
         if(stateId == 0)return;   // air under the crosshair: nothing to interact with
         if(!ResourceSystem.Instance.BlockStates.TryGetResourceWithNumberId(stateId, out var state))return;
         BlockDefinition blockDef = state.Block;
-        // A block-entity host chunk is always enabled (the ray just hit it),
-        // so a missing BE means the target shifted between the raycast and the
-        // session start - drop the click (same guard the input layer ran).
+        // A block-entity host chunk is always enabled (the click hit it), so a
+        // missing BE means the target shifted between the click and the
+        // session start - drop the click.
         if(blockDef.HasBlockEntity
-            && !WorldManager.Instance.TryGetBlockEntity(entity.DimensionId, hit.BlockDimensionCoord, out _))return;
+            && !WorldManager.Instance.TryGetBlockEntity(entity.DimensionId, req.blockCoord, out _))return;
         bool hasBE = blockDef.HasBlockEntity;
         // §3.1 timing split: BE targets use block-owned timing (0 until block
         // entities define one); static-block targets use the held item's.
         float completeTime = hasBE || heldDef == null ? 0f : heldDef.UseTime;
         entity.SetSession(UseBindingName, InteractionSessionTargetType.Block,
-            () => CompleteUseSession(entity), completeTime, null, hit.BlockDimensionCoord, held, hit.Normal);
+            () => CompleteUseSession(entity), completeTime, null, req.blockCoord, held, entity.CurrentRaycastHitResult.Normal);
     }
 
     // Settled use/interact session (rule doc §3.3): re-publishes the

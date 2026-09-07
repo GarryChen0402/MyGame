@@ -7,11 +7,7 @@ public class PlayerInputHandler : IInputHandler
 {
     private Player player = null;
 
-    private float horizontalMoveSpeed = 5;
-
     private float mouseSensitivity = 2f;
-
-    private const float JumpSpeed = 6.4f;   // m/s: jump height ~6.4^2/(2*16) ~= 1.28m (MC ~1.25 blocks)
 
     private const float RaycastReach = 4.5f;
     public PlayerInputHandler()
@@ -68,30 +64,24 @@ public class PlayerInputHandler : IInputHandler
         // else
         //     Debug.Log("Looking at air");
 
-        // Hurt window: knockback plays out instead of input writes - the residual is
-        // friction-decayed by Player.TickPhysics (design doc §4). Camera/raycast above
+        // Hurt window: knockback plays out instead of input writes - no intents
+        // are produced and the logic-side gate drops any residual (rule M1
+        // equivalence of the former Motion write freeze). Camera/raycast above
         // stay live.
         if(player.InvincibleTimer > 0f)return;
 
+        // Phase B: WASD/jump no longer write Motion directly - they fill the
+        // intent slot, consumed by the next game tick (rules M1/B5). The
+        // direction synthesis (yaw rotation, grounded gate) moved to
+        // Player.ConsumeInputIntent on the logic side.
         Vector2 moveDir = Vector2.zero;
         if(keys.IsDown("minecraft:forward"))moveDir.x += 1;
         if(keys.IsDown("minecraft:back"))moveDir.x -= 1;
         if(keys.IsDown("minecraft:left"))moveDir.y -= 1;
         if(keys.IsDown("minecraft:right"))moveDir.y += 1;
 
-        float yawRad = player.yaw * Mathf.Deg2Rad;
-        Vector3 moveDirection = new Vector3(Mathf.Sin(yawRad), 0, Mathf.Cos(yawRad)).normalized;
-        Vector3 right = new(Mathf.Cos(yawRad), 0, -Mathf.Sin(yawRad));   // 绕 Y 顺时针 90°
-
-        // Unified motion (Docs/受击击退与无敌帧实现方案.md): input drives only
-        // the horizontal target speed - immediate set, no inertia; vertical is
-        // gravity-integrated by Entity.TickPhysics. Jump fires on a grounded
-        // edge press only.
-        Vector3 target = (moveDirection * moveDir.x + right * moveDir.y) * horizontalMoveSpeed;
-        player.Motion.x = target.x;
-        player.Motion.z = target.z;
-        if(keys.WasPressed("minecraft:jump") && player.IsOnGround)
-            player.Motion.y = JumpSpeed;
+        player.Intent.move = moveDir;
+        if(keys.WasPressed("minecraft:jump"))player.Intent.jumpRequested = true;
     }
 
     private void InteractionHandler(KeyBindingManager keys)
@@ -116,30 +106,45 @@ public class PlayerInputHandler : IInputHandler
 
         // Left-click (P4 of the item drop dev plan): a mob under the crosshair
         // takes priority over breaking - swing session hits it; otherwise the
-        // block break runs (empty-hand or held item both break).
+        // block break runs (empty-hand or held item both break). The click's
+        // target resolves here from the click-frame raycast into an action
+        // request; the logic side re-validates distance/existence before any
+        // session starts (rules A1/A2) - no direct InteractionManager calls.
         if (keys.WasPressed("minecraft:attack"))
         {
             if (player.CurrentRaycastHitResult.HitEntity is MobEntity mob)
             {
-                InteractionManager.Instance.HandleAttackEntity(player, mob);
+                player.Intent.action = new PlayerActionRequest
+                {
+                    kind = PlayerActionKind.AttackEntity,
+                    entityTarget = mob
+                };
             }
             else if (player.CurrentRaycastHitResult.IsHit)
             {
-                if(!WorldManager.Instance.TryGetDimension(player.DimensionId, out var dim))return;
-                Vector3Int coord = player.CurrentRaycastHitResult.BlockDimensionCoord;
-                if(dim.GetBlockAt(coord) == 0)return;   // air: nothing to break
-                InteractionManager.Instance.HandleLeftClick(player, coord);
+                player.Intent.action = new PlayerActionRequest
+                {
+                    kind = PlayerActionKind.AttackBlock,
+                    blockCoord = player.CurrentRaycastHitResult.BlockDimensionCoord
+                };
             }
         }
 
         if (keys.WasPressed("minecraft:use_item"))
         {
-            // Right-click funnels into the session pipeline (rule doc §3.1):
-            // InteractionManager resolves the target (block entity / static
-            // block / air) and the held item; the settled session re-publishes
-            // the original interaction events. A session in flight (mining,
-            // eating) silently rejects the click (session slot gate).
-            InteractionManager.Instance.HandleUseItem(player);
+            // Right-click: the click-frame raycast decides block vs air and the
+            // held stack rides along - the target coordinate is locked at the
+            // click so the session starts against the block the click saw, even
+            // if the crosshair drifts before the next tick. Existence/definition
+            // checks re-run at consume time on the logic side.
+            RaycastHit hit = player.CurrentRaycastHitResult;
+            player.Intent.action = new PlayerActionRequest
+            {
+                kind = PlayerActionKind.Use,
+                isBlockHit = hit.IsHit,
+                blockCoord = hit.IsHit ? hit.BlockDimensionCoord : default,
+                heldStack = player.IsHoldingItem() ? player.GetCurrentHoldingItemStack() : null
+            };
         }
     }
 
