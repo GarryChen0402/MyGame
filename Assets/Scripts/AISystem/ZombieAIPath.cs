@@ -10,10 +10,10 @@ public class ZombieAIPath
 {
     private readonly List<Vector3> waypoints = new();   // cell run as world centers; y carries the stand-cell height for step-up
     private int cursor;                                  // index of the waypoint currently aimed at
-    private float lastRecomputeTime = float.MinValue;    // timestamp, not accumulator: stale after any wander gap
+    private int lastRecomputeTick = int.MinValue;   // tick count, not a per-call counter: TickCount advances globally, so a wander gap makes re-entry recompute immediately
     private bool failed;                                 // last search failed: straight-line fallback until the next retry
 
-    public const float RecomputeInterval = 0.1f;         // sense cadence sync (design doc §2.1)
+    public const int RecomputeTickInterval = 2;          // sense cadence sync: 0.1s at the 20Hz game clock (design doc §2.1)
     private const float WaypointReachDistance = 0.45f;   // horizontal reach: cell pitch is 1, so no corner is skipped
     private const int MaxExpandedNodes = 2048;           // per-search budget (the linear open scan stays cheap inside it)
 
@@ -25,7 +25,7 @@ public class ZombieAIPath
             intent.MoveDirection = Vector3.zero;
             return;
         }
-        if(Time.time - lastRecomputeTime >= RecomputeInterval)
+        if(GameClock.TickCount - lastRecomputeTick >= RecomputeTickInterval)
             Recompute(ctx.Self, target);
 
         MobEntity mob = ctx.Self;
@@ -67,7 +67,7 @@ public class ZombieAIPath
 
     private void Recompute(MobEntity mob, Entity target)
     {
-        lastRecomputeTime = Time.time;
+        lastRecomputeTick = GameClock.TickCount;
         failed = true;
         waypoints.Clear();
         cursor = 0;

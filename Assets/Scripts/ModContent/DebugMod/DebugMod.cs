@@ -8,7 +8,7 @@ public class DebugMod : IMod
     public void RegisterAllResources()
     {
         // throw new System.NotImplementedException();
-        // EventBus.Instance.Subscribe<BlockChangedEvent>(DebugFunc1_summonEntity);
+        EventBus.Instance.Subscribe<BlockChangedEvent>(DebugFunc1_summonEntity);
     }
 
     private void DebugFunc1_summonEntity(BlockChangedEvent evt)

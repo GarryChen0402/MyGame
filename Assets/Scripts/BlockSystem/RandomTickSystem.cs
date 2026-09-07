@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // MC-style random ticks (design docs 随机刻系统-规则设计.md / -代码设计.md):
-// every game tick - a 20Hz accumulator, one block-domain step like
-// BlockEntityManager - each non-empty subchunk is sampled
+// driven once per fixed game tick (GameClock, see design doc 固定Tick时钟与
+// 渲染插值改造-代码设计.md §5): each non-empty subchunk is sampled
 // RandomTickSpeedPerSection times at uniform random cells; a sampled block
 // whose BlockDefinition declares a RandomTick delegate runs it with a
 // RandomTickContext. Drives grass spread and future crop/sapling behaviors.
@@ -13,11 +13,8 @@ using UnityEngine;
 public class RandomTickSystem
 {
     public static RandomTickSystem Instance { get; } = new();
-    public const float TickInterval = 1f / 20f;
     public const int RandomTickSpeedPerSection = 100;   // initial demo speed; vanilla default is 3
     private static readonly int SectionVolume = SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize * SubChunk.SubChunkBlockSize;
-
-    private float accumulator;
 
     // One RNG per dimension (rules R6): world seed mixed with dimension number.
     private readonly Dictionary<Dimension, System.Random> rngByDimension = new();
@@ -30,16 +27,14 @@ public class RandomTickSystem
 
     private RandomTickSystem() { }
 
-    // Fixed-step accumulator like BlockEntityManager: frame-rate independent,
-    // and a backlog below 20fps is caught up instead of lost.
+    // Driven once per fixed game tick by WorldManager.Tick (GameClock fixed
+    // step, design doc 固定Tick时钟与渲染插值改造-代码设计.md §5): one call =
+    // one game tick. The former self-held accumulator/while catch-up is gone -
+    // the GameLoopDriver clock is the only clock (a backlog below 20fps is
+    // caught up there, capped at MaxCatchUpTicks per frame).
     public void Tick(float deltaTime)
     {
-        accumulator += deltaTime;
-        while (accumulator >= TickInterval)
-        {
-            accumulator -= TickInterval;
-            TickOnce();
-        }
+        TickOnce();
     }
 
     private void TickOnce()

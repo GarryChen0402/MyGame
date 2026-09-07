@@ -31,6 +31,11 @@ public class EntityManager
 
     public void Update(float dt)
     {
+        // Tick boundary: snapshot every entity's prev state before any of them
+        // moves, so render interpolation always lerps within one tick's span
+        // (design doc 固定Tick时钟与渲染插值改造-代码设计.md §3). The snapshot
+        // loop touches no events, so the set cannot mutate mid-pass.
+        foreach(var entity in entities)entity.SnapshotTickStart();
         InUpdating = true;
         foreach(var entity in entities)entity.OnUpdate(dt);
         InUpdating = false;

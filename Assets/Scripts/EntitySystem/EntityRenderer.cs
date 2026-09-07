@@ -8,6 +8,7 @@ public class EntityRenderer : MonoBehaviour
 {
     private ItemEntity entity;
     private float spinAngle;   // accumulated, frame-rate independent
+    private float birthTime;   // scene time at Bind; bob phase anchor (visual clock)
 
     // Spin speed in deg/s; vanilla item drops rotate slowly around Y.
     private const float SpinSpeed = 90f;
@@ -15,6 +16,7 @@ public class EntityRenderer : MonoBehaviour
     public void Bind(ItemEntity entity)
     {
         this.entity = entity;
+        birthTime = Time.time;
         if(entity == null)return;
         if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(entity.Stack.itemId, out var def))return;
         Mesh mesh = def.IsBlockItem
@@ -36,12 +38,16 @@ public class EntityRenderer : MonoBehaviour
     private void Update()
     {
         if(entity == null)return;
-        // Bob phase from LifeTime (design doc §7): sin(Lifetime * 2f) -> ~3.1s
-        // period, 0.06 amplitude. Position aligns the model with the physics
-        // box: mesh center maps to the box center, not the feet pivot.
-        Vector3 boxCenter = (entity.MainBox.MinRange + entity.MainBox.MaxRange) * 0.5f;
-        float bob = Mathf.Sin(entity.LifeTime * 2f) * 0.06f;
-        transform.localPosition = boxCenter + Vector3.up * bob;
+        // Partial-tick lerp of the tick states (design doc 固定Tick时钟与渲染
+        // 插值改造-代码设计.md §4): the box center = interpolated feet pivot +
+        // half of the current box height (the box only translates, so prev and
+        // current heights match). Bob phase runs on the frame clock (Time.time
+        // - birthTime keeps the old Lifetime-phase continuous): pure visuals
+        // never read 20Hz logic fields.
+        Vector3 pivot = Vector3.Lerp(entity.PrevPosition, entity.Position, GameClock.Alpha);
+        float halfHeight = (entity.MainBox.MaxRange.y - entity.MainBox.MinRange.y) * 0.5f;
+        float bob = Mathf.Sin((Time.time - birthTime) * 2f) * 0.06f;   // ~3.1s period, 0.06 amplitude
+        transform.localPosition = pivot + Vector3.up * (halfHeight + bob);
         spinAngle += Time.deltaTime * SpinSpeed;
         transform.localRotation = Quaternion.Euler(0f, spinAngle, 0f);
     }

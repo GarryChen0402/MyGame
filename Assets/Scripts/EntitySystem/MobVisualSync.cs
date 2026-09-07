@@ -77,9 +77,15 @@ public class MobVisualSync : MonoBehaviour
     private void Update()
     {
         if(entity == null || entity.AABBs.Count == 0)return;
-        transform.position = entity.MainBox.Pivot;
-        // Pure mapping of entity heading - never writes entity data back.
-        transform.rotation = Quaternion.Euler(entity.pitch, entity.yaw, 0f);
+        // Partial-tick interpolation between tick states (design doc 固定Tick
+        // 时钟与渲染插值改造-代码设计.md §4): logic steps at 20Hz, so the shell
+        // lerps prev->current with GameClock.Alpha. Pure mapping - never writes
+        // entity data back.
+        float alpha = GameClock.Alpha;
+        transform.position = Vector3.Lerp(entity.PrevPosition, entity.Position, alpha);
+        transform.rotation = Quaternion.Euler(
+            Mathf.LerpAngle(entity.PrevPitch, entity.pitch, alpha),
+            Mathf.LerpAngle(entity.PrevYaw, entity.yaw, alpha), 0f);
         if(animator != null)UpdateAnimation();
     }
 
@@ -91,8 +97,12 @@ public class MobVisualSync : MonoBehaviour
         if(entity == null || entity.AABBs.Count == 0 || headPart == null)return;
         if(entity.IsDead || !entity.HeadLocked)return;   // dead/unlocked: the animation owns the head
         // Pure mapping of the data-layer heading, clamped to the rig's neck
-        // range - a visual constraint, never a write-back to entity data.
-        float swivel = Mathf.Clamp(Mathf.DeltaAngle(entity.yaw, entity.HeadYaw),
+        // range - a visual constraint, never a write-back to entity data. Both
+        // angles are interpolated first so a 27deg/tick head turn stays smooth.
+        float alpha = GameClock.Alpha;
+        float bodyYaw = Mathf.LerpAngle(entity.PrevYaw, entity.yaw, alpha);
+        float headYaw = Mathf.LerpAngle(entity.PrevHeadYaw, entity.HeadYaw, alpha);
+        float swivel = Mathf.Clamp(Mathf.DeltaAngle(bodyYaw, headYaw),
                                    -HeadSwivelRange, HeadSwivelRange);
         headPart.localRotation = Quaternion.Euler(0f, swivel, 0f);
     }

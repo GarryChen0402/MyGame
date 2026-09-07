@@ -10,6 +10,14 @@ public class Entity // Data Class
     public AABB MainBox => AABBs[0];
     
     public Vector3 Position => MainBox.Pivot;
+
+    // State at the start of the current game tick (rendered via partial-tick
+    // interpolation - design doc 固定Tick时钟与渲染插值改造-代码设计.md §3):
+    // EntityManager snapshots every entity before any OnUpdate runs, so these
+    // always equal "last tick's end state" (MC lastTickPos alike).
+    public Vector3 PrevPosition;
+    public float PrevYaw;
+    public float PrevPitch;
     public Inventory inventory;
     public float pitch = 0;
     public float yaw = 0;
@@ -44,6 +52,17 @@ public class Entity // Data Class
     {
         //TODO Use the Move logic like mc, get the MoveResult from PhysicsManager
         PhysicsManager.Instance.MoveEntity(this, motion);
+    }
+
+    // Tick-boundary snapshot, called by EntityManager.Update for every entity
+    // before any of them runs OnUpdate. Position only changes in TickPhysics
+    // and EntityPushResolver, both of which run after this - so prev fields
+    // hold the tick-start state for render interpolation.
+    public virtual void SnapshotTickStart()
+    {
+        PrevPosition = Position;
+        PrevYaw = yaw;
+        PrevPitch = pitch;
     }
 
     public virtual void OnUpdate(float deltaTime)

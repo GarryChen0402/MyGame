@@ -12,11 +12,9 @@ public class BlockEntityManager
     public static BlockEntityManager Instance { get; } = new();
 
     // One Tick() call on a work container == one game tick (MC semantics).
-    private const float TickInterval = 1f / 20f;
 
     private readonly HashSet<BlockEntity> tracked = new();
     private readonly List<BlockEntity> tickBuffer = new();   // snapshot for iteration
-    private float accumulator;
 
     // Touched by GameBootstrap (Phase1) before any chunk event can fire.
     private BlockEntityManager()
@@ -41,17 +39,14 @@ public class BlockEntityManager
         foreach(var wc in be.WorkContainers)wc.OnRemoved();
     }
 
-    // Fixed-step accumulator, driven from WorldManager.Tick (GameLoopDriver)
-    // like WorldSaveManager.Instance.Tick. If the frame rate drops below 20fps
-    // the while-loop catches up the backlog so game ticks never lag wall time.
+    // Driven once per fixed game tick by WorldManager.Tick (GameClock fixed
+    // step, design doc 固定Tick时钟与渲染插值改造-代码设计.md §5): one call =
+    // one game tick. The former self-held accumulator/while catch-up is gone -
+    // the GameLoopDriver clock is the only clock (a backlog below 20fps is
+    // caught up there, capped at MaxCatchUpTicks per frame).
     public void Tick(float deltaTime)
     {
-        accumulator += deltaTime;
-        while(accumulator >= TickInterval)
-        {
-            accumulator -= TickInterval;
-            TickOnce();
-        }
+        TickOnce();
     }
 
     private void TickOnce()

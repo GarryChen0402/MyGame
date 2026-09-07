@@ -15,9 +15,13 @@ public class PlayerRenderer : MonoBehaviour
     }
 
     // LateUpdate so the camera follows after physics/input move the player.
+    // Position lerps between tick states (player logic steps at 20Hz); the
+    // look rotation reads the input-written yaw/pitch directly - those update
+    // every render frame and need no interpolation.
     private void LateUpdate()
     {
-        playerCamera.transform.position = player.Position + Vector3.up * Player.EyeHeight;
+        playerCamera.transform.position = Vector3.Lerp(player.PrevPosition, player.Position, GameClock.Alpha)
+            + Vector3.up * Player.EyeHeight;
         playerCamera.transform.rotation = Quaternion.Euler(player.pitch, player.yaw, 0);
     }
 

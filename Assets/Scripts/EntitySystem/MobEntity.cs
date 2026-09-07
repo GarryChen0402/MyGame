@@ -16,6 +16,10 @@ public class MobEntity : LivingEntity
     // Stopped on death: a corpse is never AI-driven again.
     public MobAI AI {get; private set;}
 
+    // Tick-start HeadYaw snapshot (MobAI.UpdateHead evolves it every tick, so
+    // it needs its own prev alongside the base yaw/pitch for render lerp).
+    public float PrevHeadYaw;
+
     // True on frames MobAI.Apply wrote a horizontal target speed; such frames
     // skip ExternalDamping (the motion already is the intended speed, damping
     // would drag it ~5% low at 60fps). Reset every frame inside TickPhysics.
@@ -42,6 +46,12 @@ public class MobEntity : LivingEntity
         EntityManager.Instance.Register(this);
         CurrentHealth = 0;
         MaxHealth = new ValueEntry(0);
+    }
+
+    public override void SnapshotTickStart()
+    {
+        base.SnapshotTickStart();
+        PrevHeadYaw = HeadYaw;
     }
 
     public void Init(MobDefinition def)
