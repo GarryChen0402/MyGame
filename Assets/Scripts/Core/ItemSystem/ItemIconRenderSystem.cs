@@ -69,6 +69,9 @@ public static class ItemIconRenderSystem
         modelRoot.GetComponent<MeshFilter>().sharedMesh = mesh;
         iconCamera.targetTexture = target;
         iconCamera.Render();
+        // Detach the frame target after the manual render so the owning UI can
+        // release the RT; the disabled camera never auto-renders into it.
+        iconCamera.targetTexture = null;
     }
 
     // Reports a skipped render once per item (a per-item failure repeats on
@@ -273,6 +276,11 @@ public static class ItemIconRenderSystem
 
         iconCamera.allowHDR = false;
         iconCamera.allowMSAA = false;   // paired with RenderTexture.antiAliasing on the icon RT
+        // Manual-render only: an enabled camera would auto-render after Main
+        // Camera (depth 0 > -1) into the screen every frame whenever no frame
+        // target is attached, clearing the Game view. Camera.Render() works on
+        // disabled cameras, so RenderItemIcon drives it explicitly.
+        iconCamera.enabled = false;
 
         var modelGo = new GameObject("ModelRoot");
         modelGo.transform.SetParent(root.transform);

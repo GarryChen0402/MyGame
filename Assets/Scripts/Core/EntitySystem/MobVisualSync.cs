@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Render shell sync + semantic animation driver for one mob (design doc:
@@ -18,6 +19,20 @@ public class MobVisualSync : MonoBehaviour
     private EntityMirror mirror;
     private Animator animator;
     private Transform headPart;   // semantic "head" node of the rig; null = nothing to swivel
+
+    // Hurt flash: a red square-wave tint over the hurt-stun window (the
+    // mirror's InvincibleTimer - Entity.HurtInvincibleSeconds). One shared
+    // MaterialPropertyBlock drives every shell renderer, so the shared flash
+    // materials are never mutated and batching only pauses while flashing.
+    // The window matches the hurt stun freeze in the animation ladder, so the
+    // red pulses exactly while the mob is pinned.
+    private static readonly int FlashAmountId = Shader.PropertyToID("_FlashAmount");
+    private const float HurtFlashSeconds = 0.5f;   // == Entity.HurtInvincibleSeconds
+    private const float HurtFlashFrequency = 4f;   // 2 on/off pulses inside the 0.5s window
+
+    private List<Renderer> shellRenderers;   // whole visual, hurt-flash targets
+    private MaterialPropertyBlock flashBlock;
+    private float currentFlash;
 
     private bool hasWalk, hasAttack, hasIdle, hasDie;
     private int walkHash, attackHash, idleHash, dieHash;
@@ -45,6 +60,7 @@ public class MobVisualSync : MonoBehaviour
                 visual.PartTransforms.TryGetValue(HeadPartName, out headPart);
         }
         animator ??= GetComponentInChildren<Animator>(true);
+        shellRenderers ??= new List<Renderer>(GetComponentsInChildren<Renderer>(true));
         if(animator != null)
         {
             walkHash = Animator.StringToHash("walk");
@@ -92,6 +108,27 @@ public class MobVisualSync : MonoBehaviour
             Mathf.LerpAngle(mirror.PrevPitch, mirror.Pitch, alpha),
             Mathf.LerpAngle(mirror.PrevYaw, mirror.Yaw, alpha), 0f);
         if(animator != null)UpdateAnimation();
+        UpdateHurtFlash();
+    }
+
+    // Writes _FlashAmount on every shell renderer while the hurt-stun window
+    // is open; dead mobs never flash (their death clip owns the visuals). The
+    // square wave is phased on window-elapsed time, so the first pulse lands
+    // red on the very frame of the hit.
+    private void UpdateHurtFlash()
+    {
+        float amount = 0f;
+        if(!mirror.IsDead && mirror.InvincibleTimer > 0f)
+        {
+            float elapsed = HurtFlashSeconds - mirror.InvincibleTimer;
+            amount = Mathf.Repeat(elapsed * HurtFlashFrequency, 2f) < 1f ? 1f : 0f;
+        }
+        if(amount == currentFlash || shellRenderers == null || shellRenderers.Count == 0)return;
+        currentFlash = amount;
+        flashBlock ??= new MaterialPropertyBlock();
+        flashBlock.SetFloat(FlashAmountId, amount);
+        foreach(var renderer in shellRenderers)
+            if(renderer != null)renderer.SetPropertyBlock(flashBlock);
     }
 
     // Head swivel override runs in LateUpdate - after the Animator evaluated

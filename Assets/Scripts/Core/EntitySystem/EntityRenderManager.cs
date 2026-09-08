@@ -46,10 +46,57 @@ public class EntityRenderManager
     {
         if(string.IsNullOrEmpty(evt.modelId))return;
         if(!ResourceSystem.Instance.EntityModels.TryGetResourceWithFullName(evt.modelId, out var model))return;
-        var visual = EntityVisualBuilder.Build(model, null, null, DynamicRoot);
+        // Json cube shells render on the mob hurt-flash material (atlas under
+        // Entity/HurtFlash); Prefab shells get their own materials swapped to
+        // flash twins below - either way the shell answers _FlashAmount.
+        var visual = EntityVisualBuilder.Build(model, null,
+            ResourceSystem.Instance.MobFlashMaterial, DynamicRoot);
         if(visual?.Root == null)return;   // missing/unbuildable source already logged by the builder
+        if(model.SourceType == EntityModelSourceType.Prefab)SwapToHurtFlash(visual.Root);
         visual.Root.gameObject.AddComponent<MobVisualSync>().Bind(evt.mirror, visual);
         shells[evt.entityId] = visual.Root.gameObject;
+    }
+
+    // Prefab assets carry their own materials, which have no flash input; each
+    // is swapped for a twin under Entity/HurtFlash so the shell can flash red
+    // on hurt. Twins are cached by source material instance (every spawn of
+    // the same prefab reads the same asset material), so clones stay shared
+    // across entities - batching survives, nothing is allocated per shell.
+    private static readonly Dictionary<Material, Material> hurtFlashTwins = new();
+
+    private static void SwapToHurtFlash(Transform visualRoot)
+    {
+        Shader flashShader = Resources.Load<Shader>("Shaders/EntityHurtFlash");
+        if(flashShader == null)return;   // shader asset not imported yet: keep source materials
+        foreach(var renderer in visualRoot.GetComponentsInChildren<Renderer>(true))
+        {
+            Material source = renderer.sharedMaterial;
+            if(source == null || source.shader == flashShader)continue;
+            if(!hurtFlashTwins.TryGetValue(source, out var twin))
+            {
+                twin = new Material(source) { shader = flashShader };
+                // glTFast PBR assets store the albedo under baseColorTexture
+                // (Shader Graphs/glTF-pbrMetallicRoughness), not URP Lit's
+                // _BaseMap; a shader swap drops names the new shader lacks, so
+                // re-point albedo-like source textures onto _BaseMap. Same-name
+                // slots (_BaseMap) survive the swap untouched.
+                foreach(string name in source.GetTexturePropertyNames())
+                {
+                    Texture tex = source.GetTexture(name);
+                    if(tex == null || twin.HasProperty(name))continue;
+                    if(name == "_MainTex" || name.ToLowerInvariant().Contains("basecolor"))
+                        twin.SetTexture("_BaseMap", tex);
+                }
+                // Cutout sources (glTF hair/hat layers with _ALPHATEST_ON and a
+                // TransparentCutout queue) keep their clip state and sorting or
+                // their transparent pixels would render as opaque black. _Cull
+                // is a same-name property, so double-sided sources keep it.
+                if(source.IsKeywordEnabled("_ALPHATEST_ON"))twin.EnableKeyword("_ALPHATEST_ON");
+                twin.renderQueue = source.renderQueue;
+                hurtFlashTwins[source] = twin;
+            }
+            renderer.sharedMaterial = twin;
+        }
     }
 
     private void OnShellDespawn(EntityShellDespawnEvent evt)

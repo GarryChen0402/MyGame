@@ -62,6 +62,15 @@ public partial class ResourceSystem
     // BlockMaterial
     public Material BlockMaterial {get;} = new Material(Shader.Find("Universal Render Pipeline/Lit"));
 
+    // Mob hurt-flash material: the block atlas under Entity/HurtFlash
+    // (Resources/Shaders/EntityHurtFlash.shader), so mob shells can be tinted
+    // red through _FlashAmount during the hurt stun. Falls back to Lit until
+    // the shader asset finishes importing - a non-flashing mob beats a broken
+    // material.
+    public Material MobFlashMaterial {get;} = new Material(LoadHurtFlashShader() ?? Shader.Find("Universal Render Pipeline/Lit"));
+
+    private static Shader LoadHurtFlashShader() => Resources.Load<Shader>("Shaders/EntityHurtFlash");
+
     // blockId -> first global state id / default state id; filled by BuildAllBlockStates.
     private ushort[] offsetByBlockId;
     private ushort[] defaultStateByBlockId;
@@ -130,6 +139,7 @@ public partial class ResourceSystem
 
         blockAtlas = packer;
         BlockMaterial.SetTexture("_BaseMap", blockAtlas);
+        MobFlashMaterial.SetTexture("_BaseMap", blockAtlas);
         // Object.DontDestroyOnLoad(blockAtlas);
     }
 
