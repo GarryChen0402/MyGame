@@ -64,19 +64,13 @@ public class UIManager : MonoBehaviour
     // close command needs it to tear down the BE session (logic side). 0 =
     // no session (player UI / widget test / editors).
     private int currentModelId;
-    private void Start()
+    // In-game HUD is no longer opened on Start: the session controller opens
+    // it when entering a world, so the menu state stays HUD-free.
+    public void OpenGameHUD()
     {
-        // if(ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))
-        // {
-        //     PlayerInventoryRoot = def.Factory();
-        //     PlayerInventoryRoot.transform.SetParent(transform, false);
-        //     PlayerInventoryRoot.SetActive(false);
-        // }
-
         OpenUI("minecraft:crosshair");
         OpenUI("minecraft:hotbar");
         OpenUI("minecraft:held_item");
-
     }
 
     public void OpenUI(string uiId, object data = null)
