@@ -41,32 +41,27 @@ public static class GameBootstrap
         catch(Exception e){return Fail(nameof(Phase5_FreezeResourceSystem), e);}
         try{Phase5_a_PostFreezeResourceSystemEvents();}
         catch(Exception e){return Fail(nameof(Phase5_a_PostFreezeResourceSystemEvents), e);}
-        try{Phase6_MainMenu();}
-        catch(Exception e){return Fail(nameof(Phase6_MainMenu), e);}
-        try{Phase7_LoadOrCreateNewSave();}
-        catch(Exception e){return Fail(nameof(Phase7_LoadOrCreateNewSave), e);}
-        try{Phase8_SummonPlayer();}
-        catch(Exception e){return Fail(nameof(Phase8_SummonPlayer), e);}
 
         return true;
     }
 
-    private static void Phase8_SummonPlayer()
+    // Phase 6 continuation: the "enter main menu" step. The static Bootstrap()
+    // chain now ends at Phase 5a because BeforeSceneLoad runs before any scene
+    // exists - this step executes later from the MainMenu scene's bootstrapper
+    // Start (or a future v2 "back to title" re-entry point), when Phases 1-5a
+    // are guaranteed complete by both ordering and the assert below.
+    public static bool Phase6_MainMenu()
     {
-        //TODO
-        Debug.Log($"TODO: {MethodBase.GetCurrentMethod().Name}");
-    }
-
-    private static void Phase7_LoadOrCreateNewSave()
-    {
-        //TODO
-        Debug.Log($"TODO: {MethodBase.GetCurrentMethod().Name}");
-    }
-
-    private static void Phase6_MainMenu()
-    {
-        //TODO
-        Debug.Log($"TODO: {MethodBase.GetCurrentMethod().Name}");
+        if(!IsBootstrapped)
+        {
+            Debug.LogError("[GameBootstrap] Phase6_MainMenu requires Phases 1-5a (bootstrap incomplete)");
+            return false;
+        }
+        GameLoopDriver.PauseLogic = true;   // freeze the 20Hz logic: no world exists in the menu, and the
+                                            // Phase3-born player would otherwise free-fall through nothing
+        // SaveSlots.EnsureMigrated();      // one-shot legacy save layout migration (safe to re-run);
+                                            // backfilled in unit C once SaveSlots.cs exists
+        return true;
     }
 
     private static void Phase5_a_PostFreezeResourceSystemEvents()
