@@ -300,9 +300,16 @@ public class WorldSaveManager
 [Serializable]
 public class WorldSaveData
 {
-    public int version = 1;
+    public int version = 2;
     public int seed;
+    public string name;             // display name; absent in v1 files (JsonUtility leaves null)
+    public string createdTime;      // ISO8601 UTC (DateTime.UtcNow.ToString("o")); v1 has none
+    public string lastPlayedTime;   // same as createdTime
+    public Vector3 spawn;           // world spawn, feet-center pivot (same convention as
+                                    // PlayerSaveData.position); zero = unset, readers then use
+                                    // the engine default spawn (decision B)
 }
+
 
 [Serializable]
 public class PlayerSaveData

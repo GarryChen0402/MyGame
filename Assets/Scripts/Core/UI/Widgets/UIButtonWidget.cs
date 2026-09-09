@@ -48,6 +48,10 @@ public class UIButtonWidget : MonoBehaviour
         bg.sprite = sprite;
     }
 
+    // Interactable passthrough: grey-out placeholder buttons (e.g. the main
+    // menu's disabled entries) ride on uGUI's ColorTint disabled state.
+    public void SetInteractable(bool value) => button.interactable = value;
+
     public static GameObject CreateNewButton(string text = "", Sprite sprite = null, GameObject parent = null)
     {
         GameObject buttonGo = new GameObject("Button", typeof(RectTransform));

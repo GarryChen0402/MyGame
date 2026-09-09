@@ -26,6 +26,8 @@ public class Minecraft : IMod
         // Biome surfaces reach up to ~106 (mountains 92 + scale 14); the chunk
         // range must cover them or the world renders as a flat cap at y=32.
         MaxSubChunkIndex = 7,
+        // Content-declared start dimension for fresh worlds (design §A.4.7).
+        IsStartDimension = true,
         DimensionGeneratorName = $"{ModId}:biome_dim_generator"
     };
 
