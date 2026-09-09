@@ -43,6 +43,15 @@ public class GameLoopDriver : MonoBehaviour
                 ticks++;
             }
         }
+        else if(WorldManager.Instance.Dimensions.Count > 0)
+        {
+            // Frozen-frame pump (Part B §4.4): async chunk readiness and the
+            // loading progress advance only through this exception while the
+            // logic is frozen (enter-world / loading). No double pump when
+            // unfrozen - Tick owns the pump in the game state. Dimensions
+            // empty (main menu) means zero work and no queue to pump.
+            WorldManager.Instance.PumpChunkGeneration();
+        }
         GameClock.Alpha = PauseLogic ? 0f : Mathf.Clamp01(accumulator / GameClock.TickInterval);
 
         // Mirror sync point (Phase C rule R-C1-0): after the fixed ticks ran

@@ -47,13 +47,12 @@ public class WorldRenderer : MonoBehaviour
     {
         if(!WorldManager.Instance.TryGetDimension(dimId, out var dim))return;
         CurrentRenderDimension = dim;
-        // Old-dimension renderers are no longer valid; the new dimension's chunks
-        // (re)load through events once ForceLoadAround generates them. The initial
-        // load center is the authoritative player position (rule L3), not the
-        // scene camera.
+        // Pure display takeover: the enter-world sequence already loaded the
+        // landing ring before this mount (async submission + readiness gate,
+        // Part B §4.3) - the render host never drives a load center (rule L3),
+        // it only shells chunks that arrive through events.
         foreach(var renderer in chunkRenderers.Values)Destroy(renderer.gameObject);
         chunkRenderers.Clear();
-        WorldManager.Instance.ForceLoadAround(PlayerMirrorPosition());
         // Chunks enabled before the dimension was set never fired ChunkLoaded
         // (the handler was still ignoring events), so sync them now.
         SyncExistingRenderers();

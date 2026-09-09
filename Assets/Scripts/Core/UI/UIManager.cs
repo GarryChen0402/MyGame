@@ -55,6 +55,21 @@ public class UIManager : MonoBehaviour
         rt.sizeDelta = Vector2.zero;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
+
+        // Topmost overlay layer (added last = renders above every other root of
+        // this canvas): hosts the loading backdrop of the async enter-world
+        // gate (Part B §5.1). Built here - not through the registry - so any
+        // session stage can call LoadingOverlay.Show/Hide.
+        var overlayGo = new GameObject("LoadingOverlay");
+        overlayGo.transform.SetParent(transform);
+        rt = overlayGo.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.sizeDelta = Vector2.zero;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        overlayGo.AddComponent<LoadingOverlay>();
+        overlayGo.SetActive(false);
     }
 
 

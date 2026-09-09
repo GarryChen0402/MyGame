@@ -57,7 +57,7 @@ public class Dimension
             GeneratingChunks[ChunkCoord] = chunk;
             // Async: the worker fills the chunk from the save file when one
             // exists, otherwise generates it; ChunkLoaded fires on the main
-            // thread once WorldManager registers it (see ProcessChunkGeneration).
+            // thread once WorldManager registers it (see PumpChunkGeneration).
             if(WorldSaveManager.Instance.HasChunkSave(DimensionDefinitionInfo.FullName, ChunkCoord))
                 WorldManager.Instance.SubmitChunkLoad(this, chunk);
             else
@@ -92,7 +92,7 @@ public class Dimension
         {
             // The worker fills the chunk, but registration happens on the main
             // thread, so the wait must keep pumping the completion queue or it
-            // deadlocks (the queue is drained in WorldManager.ProcessChunkGeneration).
+            // deadlocks (the queue is drained in WorldManager.PumpChunkGeneration).
             WorldManager.Instance.WaitForChunkGenerated(this, ChunkCoord);
             if(IsChunkEnabled(ChunkCoord))return EnableChunks[ChunkCoord];
             // Generation failed: fall through to a fresh synchronous fill.
@@ -112,7 +112,7 @@ public class Dimension
         return chunk;
     }
 
-    // Main thread only (from WorldManager.ProcessChunkGeneration): moves a
+    // Main thread only (from WorldManager.PumpChunkGeneration): moves a
     // finished worker chunk into the enabled set and announces it.
     public void RegisterGeneratedChunk(Chunk chunk)
     {

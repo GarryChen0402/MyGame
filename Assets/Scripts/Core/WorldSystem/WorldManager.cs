@@ -13,8 +13,11 @@ public class WorldManager
     // density layers) derives from it, so the same seed yields the same world.
     public int Seed = 20260830;
 
-    private Vector2Int lastPlayerChunkCoord = new(int.MaxValue, int.MaxValue);
-    private const int ChunkLoadRange = 8;
+    // Multi-focus load centers (Part B §4.1): v1 registers only the player
+    // focus, replacing the retired lastPlayerChunkCoord single-center state.
+    private readonly List<LoadFocus> loadFocuses = new();
+
+    public const int ChunkLoadRange = 8;
 
     // Async chunk generation: workers fill chunks off the main thread (the density
     // field is pure computation); the main thread polls for completion and
@@ -23,14 +26,11 @@ public class WorldManager
     private readonly List<ChunkGenTask> genInflight = new();
     private const int MaxConcurrentChunkGens = 6;
 
-    // Forces a reload around a position even if the player hasn't crossed a chunk
-    // boundary (dimension switch / initial setup).
-    public void ForceLoadAround(Vector3 worldPos)
-    {
-        lastPlayerChunkCoord = Dimension.WorldPosToChunkCoord(worldPos);
-        foreach(var dim in Dimensions.Values)
-            LoadChunksInDimension(dim, lastPlayerChunkCoord, ChunkLoadRange);
-    }
+    // Multi-focus registration (decision C). The enter-world sequence registers
+    // its PlayerLoadFocus before the initial ring submission so completed
+    // workers keep their chunks (the drop rule tests every focus).
+    public void RegisterLoadFocus(LoadFocus focus) => loadFocuses.Add(focus);
+    public void UnregisterLoadFocus(LoadFocus focus) => loadFocuses.Remove(focus);
 
     // Controller entry for player block operations. stateId is a global block
     // state id (see ResourceSystem.BlockStates); returns false when the target position
@@ -89,17 +89,13 @@ public class WorldManager
     public bool TryGetDimension(ushort dimId, out Dimension dim) => Dimensions.TryGetValue(dimId, out dim);
 
 
-    public void LoadChunksInDimension(ushort dimId, Vector2Int centerChunkCoord, int range)
-    {
-        if(!TryGetOrGenerateDimension(dimId, out var dim))return ;
-        LoadChunksInDimension(dim, centerChunkCoord, range);
-    }
-
     public void LoadChunksInDimension(Dimension dim, Vector2Int centerChunkCoord, int range)
     {
         if(dim==null)return;
         // The chunk the player stands in must exist immediately or the player
         // falls through; everything else generates asynchronously on workers.
+        // Run-time only (rule L2): the logic tick owns this path, never the
+        // frozen enter-world submission (that one is SubmitLoadRing).
         dim.GetOrCreateChunk(centerChunkCoord);
         for(int x = -range; x <= range; x++)
             for(int z = -range; z <= range; z++)
@@ -108,17 +104,31 @@ public class WorldManager
                 if(coord == centerChunkCoord)continue;
                 dim.LoadChunk(coord);
             }
+    }
 
-        Chunk centerChunk = dim.GetOrCreateChunk(centerChunkCoord);
-        List<Vector2Int> unloadPendingChunkCoords = new();
-        foreach(var chunk in dim.GetEnableChunks())
-        {
-            Vector2Int delta = chunk.ChunkCoord - centerChunk.ChunkCoord;
-            if(Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.y)) > range)
-                unloadPendingChunkCoords.Add(chunk.ChunkCoord);
-        }
+    // Enter-world initial ring (Part B §4.3 step m3): queues the whole ring
+    // around the landing chunk asynchronously - no synchronous center chunk,
+    // safe because the logic is still frozen (no player tick can fall through
+    // an unready chunk; readiness is ChunkLoadTracker's job). Returns every
+    // ring coordinate, Chebyshev-ascending so the landing chunks reach the
+    // 6-concurrent worker pool first (enabled ones included: the tracker
+    // snapshots them as ready).
+    public Vector2Int[] SubmitLoadRing(Dimension dim, Vector2Int centerChunk, int range)
+    {
+        Vector2Int[] ring = RingCoords(centerChunk, range);
+        foreach(Vector2Int coord in ring)dim.LoadChunk(coord);
+        return ring;
+    }
 
-        foreach(var coord in unloadPendingChunkCoords)dim.UnloadChunk(coord);
+    private static Vector2Int[] RingCoords(Vector2Int center, int range)
+    {
+        var ring = new List<Vector2Int>();
+        for(int x = -range; x <= range; x++)
+            for(int z = -range; z <= range; z++)
+                ring.Add(center + new Vector2Int(x, z));
+        ring.Sort((a, b) => Mathf.Max(Mathf.Abs(a.x - center.x), Mathf.Abs(a.y - center.y))
+                          .CompareTo(Mathf.Max(Mathf.Abs(b.x - center.x), Mathf.Abs(b.y - center.y))));
+        return ring.ToArray();
     }
 
     // Main thread: enqueue a chunk for async generation. The biome center map is
@@ -139,19 +149,22 @@ public class WorldManager
 
     // Main thread: blocks until the chunk's worker finished and registered it.
     // The wait pumps the completion queue, since draining it is what clears the
-    // generating state (see ProcessChunkGeneration) — a plain sleep would deadlock.
+    // generating state (see PumpChunkGeneration) — a plain sleep would deadlock.
     public void WaitForChunkGenerated(Dimension dim, Vector2Int coord)
     {
         while(dim.IsChunkGenerating(coord))
         {
-            ProcessChunkGeneration();
+            PumpChunkGeneration();
             Thread.Sleep(1);
         }
     }
 
-    // Called every frame by the view: dispatch queued tasks to the thread pool,
+    // Pumps the async chunk pipeline: dispatch queued tasks to the thread pool,
     // then register finished chunks (ChunkLoaded must fire on the main thread).
-    public void ProcessChunkGeneration()
+    // Called once per logic tick in the game state and once per render frame
+    // while the logic is frozen (enter-world readiness, Part B §4.4) - never
+    // both, so the game state's pump cadence is unchanged.
+    public void PumpChunkGeneration()
     {
         while(genQueue.Count > 0 && genInflight.Count < MaxConcurrentChunkGens)
         {
@@ -202,9 +215,10 @@ public class WorldManager
     {
         task.Dimension.MarkGenerationDone(task.Chunk.ChunkCoord);
         if(task.Failed)return;   // left unregistered; a later load regenerates it
-        // The player moved out of range while the worker ran: drop the result.
-        Vector2Int delta = task.Chunk.ChunkCoord - lastPlayerChunkCoord;
-        if(Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.y)) > ChunkLoadRange)return;
+        // Every focus moved away while the worker ran: drop the result. With no
+        // focus at all nothing is loading, so nothing is dropped (matches the
+        // retired single-center semantics, Part B §4.2).
+        if(IsBeyondAllFocuses(task.Chunk.ChunkCoord, forSweep: false))return;
         task.Dimension.RegisterGeneratedChunk(task.Chunk);
     }
 
@@ -215,7 +229,7 @@ public class WorldManager
     // entities, block entities, random ticks, item entities).
     public void Tick(float dt)
     {
-        ProcessChunkGeneration();
+        PumpChunkGeneration();
         WorldSaveManager.Instance.Tick(dt);
         EntityManager.Instance.Update(dt);
         UpdateLoadCenter();                  // after the entity batch: the player moved this tick already (rules L1/L2)
@@ -224,27 +238,61 @@ public class WorldManager
         ItemEntityManager.Instance.Update();
     }
 
-    // Load-center driver on the game tick (rule L2, design doc §7.1): the old
-    // frame-driven OnPlayerMoved fed on the view's camera position; the
-    // authoritative player position now owns the center, detected at tick
-    // granularity - a chunk crossing lags at most one tick (50ms). Player is a
-    // static singleton, so no scene-activation guard is needed.
+    // Load-center driver on the game tick (rule L2): every dynamic focus
+    // refreshes against the authoritative player position, dirty focuses submit
+    // their load ring (run-time only - the enter-world ring was already
+    // submitted), then enabled chunks beyond every focus's unload radius are
+    // swept on the same dirty tick (the legacy unload cadence).
     private void UpdateLoadCenter()
     {
         // Menu / pre-enter-world defense (trap T1): with no dimension there is
         // nothing to load and no player position to center on - never read the
-        // singleton player while the world is absent.
-        if(Dimensions.Count == 0)return;
-        Vector2Int coord = Dimension.WorldPosToChunkCoord(Player.Instance.Position);
-        if(coord == lastPlayerChunkCoord)return;
-        lastPlayerChunkCoord = coord;
+        // singleton player while the world is absent. No focus = nothing to
+        // center on either.
+        if(Dimensions.Count == 0 || loadFocuses.Count == 0)return;
+        bool anyDirty = false;
+        foreach(var focus in loadFocuses)anyDirty |= focus.RefreshFocus();
+        if(!anyDirty)return;
         foreach(var dim in Dimensions.Values)
-            LoadChunksInDimension(dim, coord, ChunkLoadRange);
+        {
+            foreach(var focus in loadFocuses)
+                if(focus.Dirty)
+                    LoadChunksInDimension(dim, focus.FocusChunk, focus.LoadRadius);
+            UnloadChunksOutsideFocuses(dim);
+        }
+        foreach(var focus in loadFocuses)focus.Dirty = false;
+    }
+
+    // Multi-focus unload sweep (Part B §4.2): enabled chunks beyond EVERY
+    // focus's unload radius leave the enabled set (collect-then-remove, since
+    // UnloadChunk mutates the dictionary). Runs on dirty ticks only.
+    private void UnloadChunksOutsideFocuses(Dimension dim)
+    {
+        List<Vector2Int> unloadPending = new();
+        foreach(var chunk in dim.GetEnableChunks())
+            if(IsBeyondAllFocuses(chunk.ChunkCoord, forSweep: true))
+                unloadPending.Add(chunk.ChunkCoord);
+        foreach(Vector2Int coord in unloadPending)dim.UnloadChunk(coord);
+    }
+
+    // Is the chunk beyond every focus's radius of the given kind? LoadRadius
+    // gates finished-generation drops, UnloadRadius gates the sweep. An empty
+    // focus list drops nothing and sweeps nothing.
+    private bool IsBeyondAllFocuses(Vector2Int coord, bool forSweep)
+    {
+        if(loadFocuses.Count == 0)return false;
+        foreach(var focus in loadFocuses)
+        {
+            int radius = forSweep ? focus.UnloadRadius : focus.LoadRadius;
+            if(Mathf.Max(Mathf.Abs(coord.x - focus.FocusChunk.x),
+                         Mathf.Abs(coord.y - focus.FocusChunk.y)) <= radius)return false;
+        }
+        return true;
     }
 }
 
 // One async chunk generation unit: a worker fills Chunk, the main thread then
-// registers it (see WorldManager.ProcessChunkGeneration). LoadFromDisk tasks
+// registers it (see WorldManager.PumpChunkGeneration). LoadFromDisk tasks
 // restore the chunk from the save file instead of generating it.
 public class ChunkGenTask
 {
