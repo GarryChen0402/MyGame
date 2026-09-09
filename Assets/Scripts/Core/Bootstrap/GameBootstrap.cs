@@ -59,8 +59,7 @@ public static class GameBootstrap
         }
         GameLoopDriver.PauseLogic = true;   // freeze the 20Hz logic: no world exists in the menu, and the
                                             // Phase3-born player would otherwise free-fall through nothing
-        // SaveSlots.EnsureMigrated();      // one-shot legacy save layout migration (safe to re-run);
-                                            // backfilled in unit C once SaveSlots.cs exists
+        SaveSlots.EnsureMigrated();         // one-shot legacy save layout migration (safe to re-run)
         return true;
     }
 

@@ -70,12 +70,16 @@ public class Player : LivingEntity, ICraftingGridHost
 
     private Player()
     {
-        // Spawn above the tallest biome surface (mountains reach ~106) so the
-        // player falls onto the world from above; the box pivot lands on (0, 115, 0).
+        // Pre-world neutral stance (decision B: the real spawn is a world
+        // property carried by the active slot's world.json and is applied on
+        // enter-world, §A.6 step 9). Stays above the tallest biome surface
+        // (~106) so a fresh world's first ticks drop the player onto the
+        // already-ready terrain below.
+        Vector3 stance = WorldDefaults.DefaultSpawnPosition;   // feet-center pivot
         AABBs.Add(new AABB()
         {
-            MinRange = new Vector3(-0.3f, 114.1f, -0.3f),
-            MaxRange = new Vector3( 0.3f, 115.9f, 0.3f)
+            MinRange = stance - new Vector3(0.3f, 0.9f, 0.3f),
+            MaxRange = stance + new Vector3(0.3f, 0.9f, 0.3f)
         });
 
         MaxHealth = new ValueEntry(MaxHealthValue);

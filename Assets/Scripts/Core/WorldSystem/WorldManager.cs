@@ -231,6 +231,10 @@ public class WorldManager
     // static singleton, so no scene-activation guard is needed.
     private void UpdateLoadCenter()
     {
+        // Menu / pre-enter-world defense (trap T1): with no dimension there is
+        // nothing to load and no player position to center on - never read the
+        // singleton player while the world is absent.
+        if(Dimensions.Count == 0)return;
         Vector2Int coord = Dimension.WorldPosToChunkCoord(Player.Instance.Position);
         if(coord == lastPlayerChunkCoord)return;
         lastPlayerChunkCoord = coord;
