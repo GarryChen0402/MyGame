@@ -2,9 +2,10 @@ using UnityEngine;
 
 // Mounted on SampleScene's TestBlock (kept from the WorldSystemTester era;
 // file and class names stay to avoid a missing-script on the scene object).
-// Single-scene session controller (design §3.1): Start lands in the menu state
-// - freeze the logic (Phase6) and open the registered main_menu panel, which
-// pushes the menu input handler and unlocks the cursor. EnterWorld is the only
+// Single-scene session controller (design §3.1): the session lands in the menu
+// state - on bootstrap completion during stepper-driven startup, directly on
+// re-play - freezing the logic (Phase6) and opening the registered main_menu
+// panel, which pushes the menu input handler and unlocks the cursor. EnterWorld is the only
 // path from menu to game: close the panel (pops the menu handler, the player
 // handler below re-locks), open the gated game HUD, then run the formal
 // enter-world sequence (13 steps, design §A.6).
@@ -15,6 +16,22 @@ public class GameEntryController : MonoBehaviour
     private void Start()
     {
         Instance = this;
+        // L1 gate (Part B §5.4): with the stepper-driven startup the mod
+        // registries are empty while this scene loads, so the menu must open
+        // on the completion event instead of here. The direct path covers
+        // IsBootstrapped=true (domain-reload-off re-play); both share OpenMenu.
+        if(GameBootstrap.IsBootstrapped)OpenMenu();
+        else EventBus.Instance.Subscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
+    }
+
+    private void OnBootstrapCompleted(BootstrapCompletedEvent evt)
+    {
+        EventBus.Instance.Unsubscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
+        OpenMenu();
+    }
+
+    private void OpenMenu()
+    {
         if(!GameBootstrap.Phase6_MainMenu())return;   // bootstrap incomplete: stay inert
         UIManager.Instance.OpenUI("minecraft:main_menu");
     }

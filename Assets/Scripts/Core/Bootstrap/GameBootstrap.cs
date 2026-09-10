@@ -1,60 +1,47 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using UnityEngine;
+
+// Static bootstrap entry (Part B §5.3): BeforeSceneLoad now runs only Phase 1
+// (core singleton warm-up + GameLoopDriver creation) plus the S1 freeze, then
+// hands the former Phase 2-5a chain to BootstrapperDriver - a per-frame
+// stepper that shows the loading overlay from the first rendered frame. The
+// old synchronous chain is gone on purpose (no dual implementation): it had
+// no loading feedback and would drift from the state machine.
 public static class GameBootstrap
 {
     public static bool IsBootstrapped { get; private set;}
     public static string FailurePhase { get; private set;}
 
+    // Mods found by the stepper's ModSearch step (reflection instantiation in
+    // LoadPriority order); kept public as the cross-system mod listing.
+    public static List<IMod> Mods = new();
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void OnBeforeSceneLoad()
     {
-        if(IsBootstrapped)return;
-        Bootstrap();
-    }
-    public static List<IMod> Mods = new();
-    public static bool Bootstrap()
-    {
-        // try {Phase1_InitCoreSystems();}
-        // catch(Exception e){ return Fail("Phase1_InitCoreSystems", e);}
-        // try {Phase2_LoadMods();}
-        // catch(Exception e){ return Fail("Phase2_LoadMods", e);}
-        // try {Phase3_FinalizeResources();}
-        // catch(Exception e){ return Fail("Phase3_FinalizeResources", e);}
-        // try {Phase4_PublishCompleted();}
-        // catch(Exception e){ return Fail("Phase4_PublishCompleted", e);}
-        // try {Phase5_FreezeRegistries();}
-        // catch(Exception e){ return Fail("Phase5_FreezeRegistries", e);}
-
-        // V2
+        if(IsBootstrapped)return;   // domain-reload-off re-play: everything is already built
         try{Phase1_PreCoreSystemInit();}
-        catch(Exception e){return Fail(nameof(Phase1_PreCoreSystemInit), e);}
-        try{Phase2_ModSearch();}
-        catch(Exception e){return Fail(nameof(Phase2_ModSearch), e);}
-        try{Phase3_ResourceRegister();}
-        catch(Exception e){return Fail(nameof(Phase3_ResourceRegister), e);}
-        try{Phase4_ResourcePostModifyEvent();}
-        catch(Exception e){return Fail(nameof(Phase4_ResourcePostModifyEvent), e);}
-        try{Phase5_FreezeResourceSystem();}
-        catch(Exception e){return Fail(nameof(Phase5_FreezeResourceSystem), e);}
-        try{Phase5_a_PostFreezeResourceSystemEvents();}
-        catch(Exception e){return Fail(nameof(Phase5_a_PostFreezeResourceSystemEvents), e);}
+        catch(Exception e){Fail(nameof(Phase1_PreCoreSystemInit), e); return;}
 
-        return true;
+        // ★ S1 (Part B §2.1): mod registration now spans rendered frames and
+        // the player entity is born mid-Registering - without this freeze it
+        // would free-fall through the not-yet-loaded world. The only unfreeze
+        // is the enter-world gate (WorldSession step 13).
+        GameLoopDriver.PauseLogic = true;
+        EnsureBootstrapperDriver();
     }
 
-    // Phase 6 continuation: the "enter main menu" step. The static Bootstrap()
-    // chain now ends at Phase 5a because BeforeSceneLoad runs before any scene
-    // exists - this step executes later from the MainMenu scene's bootstrapper
-    // Start (or a future v2 "back to title" re-entry point), when Phases 1-5a
-    // are guaranteed complete by both ordering and the assert below.
+    // Phase 6 continuation: the "enter main menu" step. The bootstrap chain now
+    // ends at the driver's PostFreeze unit because scene shells (and the menu)
+    // only exist once a scene is loaded - this step executes from the game
+    // scene's GameEntryController, when bootstrap completion is guaranteed by
+    // the IsBootstrapped hook / the assert below.
     public static bool Phase6_MainMenu()
     {
         if(!IsBootstrapped)
         {
-            Debug.LogError("[GameBootstrap] Phase6_MainMenu requires Phases 1-5a (bootstrap incomplete)");
+            Debug.LogError("[GameBootstrap] Phase6_MainMenu requires the bootstrap chain (bootstrap incomplete)");
             return false;
         }
         GameLoopDriver.PauseLogic = true;   // freeze the 20Hz logic: no world exists in the menu, and the
@@ -63,38 +50,13 @@ public static class GameBootstrap
         return true;
     }
 
-    private static void Phase5_a_PostFreezeResourceSystemEvents()
+    // Called by BootstrapperDriver's PostFreeze unit BEFORE the completion
+    // event is published: subscribers (KeyBindingManager validation, the
+    // InputHandlerManager gate, GameEntryController -> Phase6) treat
+    // IsBootstrapped as the ready marker.
+    public static void MarkBootstrapped()
     {
-        // throw new NotImplementedException();
-        ResourceSystem.Instance.PostFreeze();
-        EventBus.Instance.Publish(new BootstrapCompletedEvent(){Success = true});
         IsBootstrapped = true;
-    }
-
-    private static void Phase5_FreezeResourceSystem()
-    {
-        ResourceSystem.Instance.Freeze();
-    }
-
-    private static void Phase4_ResourcePostModifyEvent()
-    {
-        EventBus.Instance.Publish(new ResourceRegisterBeforeFreezeEvent());
-    }
-
-    private static void Phase3_ResourceRegister()
-    {
-        foreach(var mod in Mods)mod.RegisterAllResources();
-    }
-
-    private static void Phase2_ModSearch()
-    {
-        var mods = Assembly.GetExecutingAssembly().GetTypes()
-            .Where(t => typeof(IMod).IsAssignableFrom(t) && !t.IsAbstract)
-            .Select(t => (IMod)Activator.CreateInstance(t))
-            .OrderBy(m => m.LoadPriority)
-            .ToList();
-        foreach(var mod in mods)Mods.Add(mod);
-        //sort by order and reference logic
     }
 
     private static void Phase1_PreCoreSystemInit()
@@ -121,11 +83,20 @@ public static class GameBootstrap
         UnityEngine.Object.DontDestroyOnLoad(go);   // fully qualified: 'Object' collides with System.Object
     }
 
-    private static bool Fail(string phase, Exception e)
+    private static void EnsureBootstrapperDriver()
+    {
+        if(GameObject.Find("BootstrapperDriver") != null)return;   // re-entrancy guard (domain reload off)
+        var go = new GameObject("BootstrapperDriver");
+        go.AddComponent<BootstrapperDriver>();
+        UnityEngine.Object.DontDestroyOnLoad(go);
+    }
+
+    // Shared failure sink (Phase 1 here, every stepper unit in
+    // BootstrapperDriver): record the stage and log; the caller stops the chain.
+    public static bool Fail(string phase, Exception e)
     {
         FailurePhase = phase;
         Debug.LogError($"[GameBootstrap] {phase} failed: {e}");
         return false;
     }
 }
-

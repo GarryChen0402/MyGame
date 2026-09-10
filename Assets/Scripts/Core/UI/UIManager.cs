@@ -39,12 +39,9 @@ public class UIManager : MonoBehaviour
         // rt.
         // PlayerInventoryRoot = new GameObject("Player Inventory");
         // PlayerInventoryRoot.transform.SetParent(transform);
-        if(ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))
-        {
-            PlayerInventoryRoot = def.Factory();
-            PlayerInventoryRoot.transform.SetParent(transform, false);
-            PlayerInventoryRoot.SetActive(false);
-        }
+        // Not registered yet during stepper-driven startup (L1) - the root is
+        // built lazily at first use instead (Part B §5.4).
+        EnsurePlayerInventoryRoot();
 
 
         TooltipRoot = new GameObject("Tool tip");
@@ -73,6 +70,20 @@ public class UIManager : MonoBehaviour
     }
 
 
+    // Lazy player-inventory root (Part B §5.4): during stepper-driven startup
+    // the UI definitions are not registered yet when this scene's Awake runs,
+    // so a missing root is expected then. Every consumer builds it on first
+    // use - UI opens only ever happen after bootstrap completion, so the
+    // first-use build is equivalent to the old eager one.
+    private void EnsurePlayerInventoryRoot()
+    {
+        if(PlayerInventoryRoot != null)return;
+        if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))return;
+        PlayerInventoryRoot = def.Factory();
+        PlayerInventoryRoot.transform.SetParent(transform, false);
+        PlayerInventoryRoot.SetActive(false);
+    }
+
     private UIBehavior currentUI = null;
     private bool CurrentUIhasInputHandler = false;
     // Panel model id of the UI this manager opened (data as PanelModel); the
@@ -98,7 +109,11 @@ public class UIManager : MonoBehaviour
 
             ui.SetData(data);
             ui.Open();
-            if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
+            if(uiDef.OpenWithPlayerInventory)
+            {
+                EnsurePlayerInventoryRoot();
+                PlayerInventoryRoot?.SetActive(true);
+            }
             CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
             // if(inputHandler != null)InputHandlerManager.Instance.Push(inputHandler);
             if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
@@ -113,7 +128,11 @@ public class UIManager : MonoBehaviour
         currentUI = uiGo.GetComponent<UIBehavior>();
         currentUI.SetData(data);
         currentUI.Open();
-        if(uiDef.OpenWithPlayerInventory)PlayerInventoryRoot.SetActive(true);
+        if(uiDef.OpenWithPlayerInventory)
+        {
+            EnsurePlayerInventoryRoot();
+            PlayerInventoryRoot?.SetActive(true);
+        }
         CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
         if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
         UICache[uiId] = currentUI;

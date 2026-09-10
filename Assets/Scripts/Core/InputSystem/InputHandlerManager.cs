@@ -19,11 +19,30 @@ public class InputHandlerManager : MonoBehaviour
     {
         if(instance == null)instance = this;
         else Destroy(gameObject);
+        // L1 gate (Part B §5.4): during stepper-driven startup the handler
+        // registries are still empty when this scene's Awake runs, so the
+        // push waits for the completion event. The direct path (domain-
+        // reload-off re-play, registries live) pushes immediately.
+        if(GameBootstrap.IsBootstrapped)TryPushDefault();
+        else EventBus.Instance.Subscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
+    }
+
+    private void OnBootstrapCompleted(BootstrapCompletedEvent evt)
+    {
+        EventBus.Instance.Unsubscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
+        TryPushDefault();
+    }
+
+    private void TryPushDefault()
+    {
         TryPush("minecraft:player_input_handler");
     }
 
     private Stack<IInputHandler> inputHandlers = new();
-    public IInputHandler CurrentInputHandler => inputHandlers.Peek();
+    // Empty stack returns null instead of throwing: between this Awake and
+    // bootstrap completion no handler exists yet, and Update polls this every
+    // frame (also covers the failure stance, where the push never comes).
+    public IInputHandler CurrentInputHandler => inputHandlers.Count > 0 ? inputHandlers.Peek() : null;
 
 
     // Context switch: clicks routed to the outgoing context are stale for the

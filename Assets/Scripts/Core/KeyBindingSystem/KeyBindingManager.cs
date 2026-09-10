@@ -174,6 +174,10 @@ public class KeyBindingManager
     {
         if(initialized || !evt.Success)return;
         initialized = true;
+        // Registries freeze only now: RefreshInput already ran during the
+        // frame-stepped startup window and latched an index over the still-
+        // empty table. Force one rebuild so edge routing sees the bindings.
+        keyIndexDirty = true;
         LoadOverrides();
         ValidateAll();
     }

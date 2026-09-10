@@ -1,13 +1,29 @@
-
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Minecraft : IMod
+public class Minecraft : IMod, ISteppedModRegistration
 {
     public static readonly string ModId = "Minecraft".ToLower();
 
     string IMod.ModId => ModId;
     public int LoadPriority => 0;
+
+    // Registration state hoisted to fields (Part B §5.3 split discipline:
+    // segment boundaries may not slice statements, so state crossing a
+    // boundary moves to the instance). The 19 segments A-S (doc §2.3) are the
+    // natural boundaries of the former monolithic RegisterAllResources -
+    // statements are neither reordered nor split, only wrapped in methods.
+    private CustomModel cube;
+    private CustomModel stairModel;
+    private List<string> allIds;
+    private BlockDefinition air;
+    private BlockDefinition stoneDefinition;
+    private BlockDefinition dirtDefinition;
+    private BlockDefinition grassDefinition;
+    private BlockDefinition stairDefinition;
+    private BlockDefinition cobblestoneDefinition;
+    private BlockDefinition furnaceDefinition;
+    private BlockDefinition craftingTableDefinition;
 
     // Cached block ids used by biome fill columns.
     private static ushort grassId, dirtId, stoneId;
@@ -31,18 +47,59 @@ public class Minecraft : IMod
         DimensionGeneratorName = $"{ModId}:biome_dim_generator"
     };
 
+    public int StepCount => 19;
+
+    public void RegisterStep(int stepIndex)
+    {
+        switch(stepIndex)
+        {
+            case 0: BuildCustomModels(); break;                     // A: custom models
+            case 1: RegisterTextures(); break;                      // B: textures
+            case 2: RegisterEntityAssets(); break;                  // C: entity model + animations
+            case 3: BuildBlockDefinitions(); break;                 // D: block definitions
+            case 4: RegisterBlocks(); break;                        // E: block registration + id readback
+            case 5: RegisterDimensions(); break;                    // F: dimension generators + definition
+            case 6: RegisterBiomes(); break;                        // G: biomes
+            case 7: RegisterItemBehaviors(); break;                 // H: item behaviors
+            case 8: RegisterItems(); break;                         // I: items
+            case 9: RegisterRecipeParsers(); break;                 // J: recipe parsers
+            case 10: RegisterRecipeTexts(); break;                  // K: recipe texts
+            case 11: RegisterContainersAndBlockEntities(); break;   // L: containers + BE definitions
+            case 12: RegisterUisAndInputHandlers(); break;          // M: UI definitions + input handlers
+            case 13: RegisterKeyBindings(); break;                  // N: key bindings
+            case 14: RegisterMobs(); break;                         // O: mob model + definition
+            case 15: RegisterBuffs(); break;                        // P: buff types
+            case 16: RegisterAi(); break;                           // Q: AI spec
+            case 17: RegisterCrackTextures(); break;                // R: crack overlay textures
+            case 18: RegisterLootTables(); break;                   // S: loot tables
+        }
+    }
+
+    // Full registration = the same 19 segments back to back (IMod contract;
+    // the bootstrapper drives RegisterStep across frames instead).
     public void RegisterAllResources()
     {
+        for(int i = 0; i < StepCount; i++)RegisterStep(i);
+    }
+
+    // ---- A: custom models ----
+    private void BuildCustomModels()
+    {
         // CustomModel Content
-        CustomModel cube = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/full_cube").text);
+        cube = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/full_cube").text);
         cube.modId = ModId;
         cube.name = "full_block";
         ResourceSystem.Instance.CustomModels.Register(cube);
-        CustomModel stairModel = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/stair").text);
+        stairModel = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/stair").text);
         stairModel.modId = ModId;
         stairModel.name = "stair";
         ResourceSystem.Instance.CustomModels.Register(stairModel);
-        var allIds = stairModel.GetAllFaceId();
+        allIds = stairModel.GetAllFaceId();
+    }
+
+    // ---- B: block / item / entity textures ----
+    private void RegisterTextures()
+    {
         // Texture Content
         ResourceSystem.Instance.RegisterTexture(ModId, "stone", Resources.Load<Texture2D>("Textures/Blocks/stone"));
         ResourceSystem.Instance.RegisterTexture(ModId, "dirt", Resources.Load<Texture2D>("Textures/Blocks/dirt"));
@@ -60,6 +117,11 @@ public class Minecraft : IMod
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_front", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_front"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_side", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_top", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_top"));
+    }
+
+    // ---- C: entity model + animations ----
+    private void RegisterEntityAssets()
+    {
         // EntityModel & EntityAnimation Content. Models register as source
         // descriptors {type, path}; cube data parses lazily on first render.
         ResourceSystem.Instance.EntityModels.Register(new EntityModel
@@ -71,15 +133,20 @@ public class Minecraft : IMod
         });
         ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_walk").text));
         ResourceSystem.Instance.EntityAnimations.Register(EntityAnimationParser.Parse(Resources.Load<TextAsset>("Animations/player_attack").text));
+    }
+
+    // ---- D: block definitions ----
+    private void BuildBlockDefinitions()
+    {
         // BlockDefinition Content
-        BlockDefinition air = new ()
+        air = new ()
         {
             modId = ModId,
             name = "air",
             TextureIds = new(){},
             Variants = new() { new BlockStateVariant { ModelId = cube.FullName } }
         };
-        BlockDefinition stoneDefinition = new()
+        stoneDefinition = new()
         {
             modId = ModId,
             name = "stone",
@@ -101,7 +168,7 @@ public class Minecraft : IMod
             // }
         };
 
-        BlockDefinition dirtDefinition = new()
+        dirtDefinition = new()
         {
             modId = ModId,
             name = "dirt",
@@ -122,7 +189,7 @@ public class Minecraft : IMod
             // }
         };
 
-        BlockDefinition grassDefinition = new()
+        grassDefinition = new()
         {
             modId = ModId,
             name = "grass",
@@ -149,7 +216,7 @@ public class Minecraft : IMod
         // with more property entries must come first.
         var stoneStair = new Dictionary<string, string>();
         foreach(var id in allIds)stoneStair[id] = $"{ModId}:stone";
-        BlockDefinition stairDefinition = new()
+        stairDefinition = new()
         {
             modId = ModId,
             name = "stone_stair",
@@ -192,7 +259,7 @@ public class Minecraft : IMod
             }
         };
 
-        BlockDefinition cobblestoneDefinition = new()
+        cobblestoneDefinition = new()
         {
             modId = ModId,
             name = "cobblestone",
@@ -210,7 +277,7 @@ public class Minecraft : IMod
 
         // Furnace: static block rendering + a BlockEntity (input/fuel/output
         // inventories + processing module) declared in the BE definition below.
-        BlockDefinition furnaceDefinition = new()
+        furnaceDefinition = new()
         {
             modId = ModId,
             name = "furnace",
@@ -230,7 +297,7 @@ public class Minecraft : IMod
 
         // Crafting table: static cube + a BlockEntity carrying the 3x3 grid,
         // the result slot and the instant crafting logic (BE definition below).
-        BlockDefinition craftingTableDefinition = new()
+        craftingTableDefinition = new()
         {
             modId = ModId,
             name = "crafting_table",
@@ -247,7 +314,11 @@ public class Minecraft : IMod
             HasBlockEntity = true,
             BlockEntityDefinitionFullName = $"{ModId}:crafting_table"
         };
+    }
 
+    // ---- E: block registration + id readback ----
+    private void RegisterBlocks()
+    {
         ResourceSystem.Instance.BlockDefinitions.Register(air);
         ResourceSystem.Instance.RegisterBlock(stoneDefinition);
         ResourceSystem.Instance.RegisterBlock(dirtDefinition);
@@ -264,7 +335,11 @@ public class Minecraft : IMod
         // ResourceSystem.Instance.BlockDefinitions.Register(stoneDefinition);
         // ResourceSystem.Instance.BlockDefinitions.Register(dirtDefinition);
         // ResourceSystem.Instance.BlockDefinitions.Register(grassDefinition);
+    }
 
+    // ---- F: dimension generators + definition ----
+    private void RegisterDimensions()
+    {
         DimensionGeneratorResource testGenerator = new()
         {
             modId = ModId,
@@ -280,7 +355,11 @@ public class Minecraft : IMod
         };
         ResourceSystem.Instance.DimensionGenerator.Register(biomeGenerator);
         ResourceSystem.Instance.DimensionDefinitions.Register(testDi);
+    }
 
+    // ---- G: biomes ----
+    private void RegisterBiomes()
+    {
         // Biome Definitions
         ResourceSystem.Instance.BiomeDefinitions.Register(new BiomeDefinition()
         {
@@ -310,14 +389,21 @@ public class Minecraft : IMod
             TerrainLayerStrength = 0.35f,
             FillColumn = FillMountainsColumn
         });
+    }
 
-
+    // ---- H: item behaviors ----
+    private void RegisterItemBehaviors()
+    {
         ResourceSystem.Instance.ItemBehaviors.Register(new UniversalBlockItemBehavior()
         {
             modId = "Universal",
             name = "block_item_behavior"
         });
+    }
 
+    // ---- I: items ----
+    private void RegisterItems()
+    {
         ResourceSystem.Instance.ItemDefinitions.Register(new ItemDefinition()
         {
             modId = ModId,
@@ -343,14 +429,20 @@ public class Minecraft : IMod
                 ["minecraft:heat_value"] = CustomDataValueFactory.Of(1600)
             }
         });
+    }
 
-        
-
+    // ---- J: recipe parsers ----
+    private void RegisterRecipeParsers()
+    {
         // ---- recipe parsers: their full name is the recipe type id ----
         ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Shaped());
         ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Shapeless());
         ResourceSystem.Instance.RecipeParsers.Register(BuiltinRecipeParsers.Processing());
+    }
 
+    // ---- K: recipe texts ----
+    private void RegisterRecipeTexts()
+    {
         // ---- demo recipes via the text entry (three-layer envelopes; the
         // content text below is the inner layer, Build escapes it into the
         // envelope document) ----
@@ -378,7 +470,11 @@ public class Minecraft : IMod
             "universal:shapeless",
             @"{ ""modId"": ""minecraft"", ""name"": ""crafting_grass"", ""inputs"": [ { ""itemId"": ""minecraft:dirt"", ""amount"": 4 } ], ""outputs"": [ { ""itemId"": ""minecraft:grass"", ""amount"": 1 } ] }",
             "[]"));
+    }
 
+    // ---- L: containers + block entity definitions ----
+    private void RegisterContainersAndBlockEntities()
+    {
         // Container types (global once) + the furnace BE definition.
         ResourceSystem.Instance.DataContainerDefinitions.Register(new DataContainerDefinition
         { modId = "universal", name = "inventory", Factory = cfg => new InventoryDataContainer(cfg) });
@@ -476,8 +572,11 @@ public class Minecraft : IMod
                 }
             }
         });
+    }
 
-
+    // ---- M: UI definitions + input handlers ----
+    private void RegisterUisAndInputHandlers()
+    {
         ResourceSystem.Instance.UIDefinitions.Register(CrosshairUI.CrosshairUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HotBarUI.hotbarDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(HeldItemUI.heldItemUIDefinition);
@@ -497,7 +596,11 @@ public class Minecraft : IMod
         // calls became spawn events (Phase C R-C2-3) nothing else instantiates
         // it, and a spawn before its ctor subscribed would lose the shell.
         _ = EntityRenderManager.Instance;
+    }
 
+    // ---- N: key bindings ----
+    private void RegisterKeyBindings()
+    {
         // ---- input actions (default bindings; players rebind via overrides,
         // game code only ever polls action ids, never physical keys) ----
         void RegisterKeyBinding(string name, KeyCode key, string category, params string[] allowedHandlers)
@@ -532,8 +635,11 @@ public class Minecraft : IMod
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
         RegisterKeyBinding("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
+    }
 
-
+    // ---- O: mob model + definition ----
+    private void RegisterMobs()
+    {
         // Mob Entity
         ResourceSystem.Instance.EntityModels.Register(new EntityModel
         {
@@ -566,12 +672,20 @@ public class Minecraft : IMod
             LootTables = new() { $"{ModId}:zombie" }
         };
         ResourceSystem.Instance.MobDefinitions.Register(zombie);
+    }
 
+    // ---- P: buff types ----
+    private void RegisterBuffs()
+    {
         // Buff types: demo regeneration buff (lifecycle verification only,
         // heal-through-tick, design doc Docs/Buff系统-代码设计.md §7).
         ResourceSystem.Instance.BuffDefinitions.Register(new RegenBuffDefinition
         { modId = "minecraft", name = "regeneration" });
+    }
 
+    // ---- Q: AI spec ----
+    private void RegisterAi()
+    {
         // AI spec: wiring logic registered once, behavior numbers ride as JSON
         // in ConfigJson (WorkContainer split: logic in C#, numbers as data).
         ResourceSystem.Instance.AIDefinitions.Register(new AIDefinition
@@ -591,7 +705,11 @@ public class Minecraft : IMod
                 WanderMax = 6f
             })
         });
+    }
 
+    // ---- R: crack overlay textures ----
+    private void RegisterCrackTextures()
+    {
         //Break block sprite
         for(int i = 0; i < 10; i++)
         {
@@ -599,7 +717,11 @@ public class Minecraft : IMod
                 Resources.Load<Texture2D>($"Textures/Overlay/breakStageSprite-{i}")
             );
         }
+    }
 
+    // ---- S: loot tables ----
+    private void RegisterLootTables()
+    {
         // ---- loot tables: stone keeps dropping itself, zombie drops coal ----
         ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
         {
@@ -636,7 +758,6 @@ public class Minecraft : IMod
                 }
             }
         });
-
     }
 
     // Grass random tick (design doc 随机刻系统-代码设计 §6): vanilla
