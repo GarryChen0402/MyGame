@@ -35,6 +35,10 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
     {
         var bg_image = gameObject.AddComponent<Image>();
         bg_image.sprite = Resources.Load<Sprite>("Textures/UI/slot");
+        // Explicit rect size: the slot used to inherit the RectTransform
+        // default (100x100), silently coupling all layout math to an unnamed
+        // number (P0 of Docs/UI布局系统-…).
+        ((RectTransform)transform).sizeDelta = new Vector2(UIStyle.SlotSize, UIStyle.SlotSize);
         // var edgeGo = new GameObject("edge");
         // edgeGo.transform.SetParent(gameObject.transform);
         // edgeGo.AddComponent<Image>().sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_edge");
@@ -56,13 +60,13 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
 
         Text = textGo.AddComponent<TextMeshProUGUI>();
         Text.alignment = TextAlignmentOptions.BottomRight;
-        Text.fontSize = 20;
+        Text.fontSize = UIStyle.CountFontSize;
         Text.color = Color.black;
         Text.fontStyle = FontStyles.Bold;
 
         // TMP's OnEnable overwrites sizeDelta, so set it after AddComponent.
         var textRect = (RectTransform)Text.transform;
-        textRect.sizeDelta = new Vector2(100, textRect.sizeDelta.y);   // width = 100
+        textRect.sizeDelta = new Vector2(UIStyle.SlotSize, textRect.sizeDelta.y);   // width = one slot
 
         // Hover highlight: created last so it renders above the icon/text,
         // like vanilla's white overlay on the hovered slot. No raycast

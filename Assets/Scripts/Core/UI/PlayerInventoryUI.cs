@@ -22,7 +22,7 @@ public class PlayerInventoryUI : UIBehavior
 
         // x [-400, 400]
         int[] xPos = {-400, -300, -200, -100, 0, 100, 200, 300, 400};
-        // y [-160, 160, 60, 40]
+        // y [-160, 160, 60, -40]
         int[] yPos = {-160, 160, 60, -40};
         for(int y = 0; y < 4; y++)
         {

@@ -19,54 +19,21 @@ public class UIManager : MonoBehaviour
         if(instance != null)Destroy(gameObject);
         else instance = this;
 
-        HUDRoot = new GameObject("HUD");
-        HUDRoot.transform.SetParent(transform);
-        var rt = HUDRoot.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.sizeDelta = Vector2.zero;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        SinglePanelRoot = new GameObject("SinglePanel");
-        SinglePanelRoot.transform.SetParent(transform);
-        rt = SinglePanelRoot.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.sizeDelta = Vector2.zero;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        // rt.
-        // PlayerInventoryRoot = new GameObject("Player Inventory");
-        // PlayerInventoryRoot.transform.SetParent(transform);
+        HUDRoot = UIPanelBuilder.BuildStretchRoot(transform, "HUD").gameObject;
+        SinglePanelRoot = UIPanelBuilder.BuildStretchRoot(transform, "SinglePanel").gameObject;
         // Not registered yet during stepper-driven startup (L1) - the root is
         // built lazily at first use instead (Part B §5.4).
         EnsurePlayerInventoryRoot();
 
-
-        TooltipRoot = new GameObject("Tool tip");
-        TooltipRoot.transform.SetParent(transform);
-        rt = TooltipRoot.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.sizeDelta = Vector2.zero;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        TooltipRoot = UIPanelBuilder.BuildStretchRoot(transform, "Tool tip").gameObject;
 
         // Topmost overlay layer (added last = renders above every other root of
         // this canvas): hosts the loading backdrop of the async enter-world
         // gate (Part B §5.1). Built here - not through the registry - so any
         // session stage can call LoadingOverlay.Show/Hide.
-        var overlayGo = new GameObject("LoadingOverlay");
-        overlayGo.transform.SetParent(transform);
-        rt = overlayGo.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.sizeDelta = Vector2.zero;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        overlayGo.AddComponent<LoadingOverlay>();
-        overlayGo.SetActive(false);
+        var overlayRt = UIPanelBuilder.BuildStretchRoot(transform, "LoadingOverlay");
+        overlayRt.gameObject.AddComponent<LoadingOverlay>();
+        overlayRt.gameObject.SetActive(false);
     }
 
 
@@ -126,6 +93,7 @@ public class UIManager : MonoBehaviour
         else uiGo.transform.SetParent(SinglePanelRoot.transform, false);
 
         currentUI = uiGo.GetComponent<UIBehavior>();
+        currentUI.uIDefinition = uiDef;   // the panel's registration data (Panel descriptor rides here)
         currentUI.SetData(data);
         currentUI.Open();
         if(uiDef.OpenWithPlayerInventory)

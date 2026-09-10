@@ -21,7 +21,7 @@ public class HotBarUI : UIBehavior
         for(int i = 0; i < 9; i++)
         {
             var slotGo = new GameObject($"hotbar_slot_{i}");
-            slotGo.transform.SetParent(gameObject.transform);
+            slotGo.transform.SetParent(gameObject.transform, false);
             var slotUI = slotGo.AddComponent<SlotUI>();
             slotGo.transform.localPosition = new Vector3(-400 + i * 100, 0, 0);
             itemIcons.Add(slotUI);
