@@ -10,6 +10,19 @@ public interface IHoverItemSource
     bool TryGetHoverItemId(out ushort itemId);
 }
 
+// Single arbiter of "is this hover source still real": a panel closed / hidden
+// under the pointer deactivates its slots without an exit event, and teardown
+// destroys them outright - both count as no hover. Shared by the tooltip and
+// the JEI R/U path.
+public static class HoverSource
+{
+    public static IHoverItemSource Validate(IHoverItemSource source)
+    {
+        if(source is Component component && (component == null || !component.gameObject.activeInHierarchy))return null;
+        return source;
+    }
+}
+
 // General hover tooltip (D6 of Docs/JEI式物品浏览器-功能调研与设计草案.md):
 // two lines - derived item name + modId - over a small backdrop, shown after a
 // short dwell and following the mouse. Lives on TooltipRoot; every graphic is
@@ -83,11 +96,7 @@ public class TooltipUI : UIBehavior
     private void Update()
     {
         var ui = UIManager.Instance;
-        IHoverItemSource source = ui == null ? null : ui.CurrentHoverInfo;
-        // A panel closed / hidden under the pointer deactivates its slots
-        // without an exit event, which would leave a stale hover entry; treat
-        // an inactive source component as no hover at all.
-        if(source is Component component && !component.gameObject.activeInHierarchy)source = null;
+        IHoverItemSource source = HoverSource.Validate(ui == null ? null : ui.CurrentHoverInfo);
         // Declared outside the short-circuit: valid==true implies the out
         // parameter ran, but the compiler cannot correlate the two.
         ushort itemId = 0;

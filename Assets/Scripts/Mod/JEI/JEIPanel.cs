@@ -21,6 +21,7 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
     private JEIIconCache iconCache;
     private GameObject content;
     private GameObject grid;
+    private JEIRecipePage recipePage;
     private UITextWidget noResultText;
     private int visibleRows;
     private int scrollRow;
@@ -64,6 +65,13 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
 
         BuildCells();
         BuildSearchBox();
+
+        // Recipe view (P2): docked left of the strip, visible with the strip
+        // and driven by the R/U keys (see Update).
+        var recipePageGo = new GameObject("Recipe Page", typeof(RectTransform));
+        recipePageGo.transform.SetParent(content.transform, false);
+        recipePage = recipePageGo.AddComponent<JEIRecipePage>();
+        recipePage.Init(data, iconCache);
 
         noResultText = UITextWidget.CreateNewText("No items", content).GetComponent<UITextWidget>();
         noResultText.gameObject.name = "No Items";
@@ -124,19 +132,42 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
         if(KeyBindingManager.Instance.WasPressed("jei:toggle"))followEnabled = !followEnabled;
 
         bool visible = followEnabled && IsWorldPanelOpen();
-        if(content.activeSelf == visible)return;
-        content.SetActive(visible);
-        iconCache.enabled = visible;   // stop burning renders while hidden
-        if(!visible)
+        if(content.activeSelf != visible)
         {
-            // Panel closed under the pointer: no exit event will arrive, so
-            // drop our own stale hover feed (the tooltip also guards this).
-            var ui = UIManager.Instance;
-            if(ui != null && ui.CurrentHoverInfo is JEICell)ui.CurrentHoverInfo = null;
-            return;
+            content.SetActive(visible);
+            iconCache.enabled = visible;   // stop burning renders while hidden
+            recipePage.Hide();             // reset the recipe view on any flip
+            if(!visible)
+            {
+                // Panel closed under the pointer: no exit event will arrive, so
+                // drop our own stale hover feed (the tooltip also guards this).
+                // Covers strip and recipe cells alike - both are JEICell.
+                var ui = UIManager.Instance;
+                if(ui != null && ui.CurrentHoverInfo is JEICell)ui.CurrentHoverInfo = null;
+                return;
+            }
+            scrollRow = 0;
+            Rebind();
         }
-        scrollRow = 0;
-        Rebind();
+        if(!visible)return;
+
+        // R/U (design §6.4): polled every visible frame, context-gated inside
+        // WasPressed; the text-focus guard silences them while the search box
+        // has focus.
+        bool wantRecipes = KeyBindingManager.Instance.WasPressed("jei:show_recipes");
+        bool wantUses = KeyBindingManager.Instance.WasPressed("jei:show_uses");
+        if(wantRecipes || wantUses)OnRecipeKey(wantRecipes);
+    }
+
+    // R/U semantics: a hovered item opens its recipe page (or navigates the
+    // open one); with no hover target the same keys retreat to the item list.
+    private void OnRecipeKey(bool recipesNotUses)
+    {
+        var ui = UIManager.Instance;
+        if(ui != null && ui.DragActive)return;   // hover feed is stale mid-drag
+        IHoverItemSource source = HoverSource.Validate(ui == null ? null : ui.CurrentHoverInfo);
+        if(source != null && source.TryGetHoverItemId(out ushort itemId))recipePage.Show(itemId, recipesNotUses);
+        else recipePage.Hide();
     }
 
     // Follow condition (decision D1): a world panel is open. The menu pushes

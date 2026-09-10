@@ -16,22 +16,31 @@ public class JEIMod : IMod
 
     public void RegisterAllResources()
     {
-        // jei:toggle - "follow panels" master switch (default on). Whitelisted
-        // for both in-game and panel context; the handler stack top is unique,
-        // so one physical press can never fire in both contexts.
-        ResourceSystem.Instance.KeyBindings.Register(new KeyBinding
+        // Whitelisted for both in-game and panel context; the handler stack top
+        // is unique, so one physical press can never fire in both contexts.
+        void Register(string name, KeyCode key, KeyModifier modifier)
         {
-            modId = ModId,
-            name = "toggle",
-            DefaultKey = KeyCode.O,
-            DefaultModifier = KeyModifier.Ctrl,
-            Category = "jei",
-            AllowedInputHandlers = new HashSet<string>
+            ResourceSystem.Instance.KeyBindings.Register(new KeyBinding
             {
-                "minecraft:player_input_handler",
-                "minecraft:ui_input_handler"
-            }
-        });
+                modId = ModId,
+                name = name,
+                DefaultKey = key,
+                DefaultModifier = modifier,
+                Category = "jei",
+                AllowedInputHandlers = new HashSet<string>
+                {
+                    "minecraft:player_input_handler",
+                    "minecraft:ui_input_handler"
+                }
+            });
+        }
+
+        // jei:toggle - "follow panels" master switch (default on).
+        Register("toggle", KeyCode.O, KeyModifier.Ctrl);
+        // P2 recipe view (design §6.4): R = how it is made, U = what it is
+        // used in; both act on whatever item currently has hover.
+        Register("show_recipes", KeyCode.R, KeyModifier.None);
+        Register("show_uses", KeyCode.U, KeyModifier.None);
         EventBus.Instance.Subscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
     }
 
