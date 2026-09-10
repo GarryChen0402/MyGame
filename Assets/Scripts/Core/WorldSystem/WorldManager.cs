@@ -11,7 +11,10 @@ public class WorldManager
 
     // World seed: all deterministic generation (center points, corner noise,
     // density layers) derives from it, so the same seed yields the same world.
-    public int Seed = 20260830;
+    // The default also backs a slot whose world.json is missing (the
+    // enter-world worker falls back to it).
+    public const int DefaultSeed = 20260830;
+    public int Seed = DefaultSeed;
 
     // Multi-focus load centers (Part B §4.1): v1 registers only the player
     // focus, replacing the retired lastPlayerChunkCoord single-center state.
@@ -58,6 +61,11 @@ public class WorldManager
 
     public bool IsDimensionExist(ushort dimensionId) => Dimensions.ContainsKey(dimensionId);
 
+    // Registers a dimension instance built off the main thread (enter-world
+    // w4). The session never overwrites an existing entry with it: re-entry
+    // keeps the live instance and its enabled chunks.
+    public void RegisterDimension(ushort dimId, Dimension dimension) => Dimensions[dimId] = dimension;
+
     public bool TryGetOrGenerateDimension(string dimensionFullName, out Dimension dimension)
     {
         dimension = null;
@@ -95,7 +103,7 @@ public class WorldManager
         // The chunk the player stands in must exist immediately or the player
         // falls through; everything else generates asynchronously on workers.
         // Run-time only (rule L2): the logic tick owns this path, never the
-        // frozen enter-world submission (that one is SubmitLoadRing).
+        // frozen enter-world submission (that one is SubmitInventoriedRing).
         dim.GetOrCreateChunk(centerChunkCoord);
         for(int x = -range; x <= range; x++)
             for(int z = -range; z <= range; z++)
@@ -106,21 +114,21 @@ public class WorldManager
             }
     }
 
-    // Enter-world initial ring (Part B §4.3 step m3): queues the whole ring
+    // Enter-world ring submission (Part B §4.3 step m3): queues the whole ring
     // around the landing chunk asynchronously - no synchronous center chunk,
     // safe because the logic is still frozen (no player tick can fall through
-    // an unready chunk; readiness is ChunkLoadTracker's job). Returns every
-    // ring coordinate, Chebyshev-ascending so the landing chunks reach the
-    // 6-concurrent worker pool first (enabled ones included: the tracker
-    // snapshots them as ready).
-    public Vector2Int[] SubmitLoadRing(Dimension dim, Vector2Int centerChunk, int range)
+    // an unready chunk; readiness is ChunkLoadTracker's job). coords/isLoad
+    // come from the server worker's w3 inventory, so this path never probes
+    // the disk; already-enabled coords are a no-op inside LoadChunk (the
+    // tracker snapshots them as ready).
+    public void SubmitInventoriedRing(Dimension dim, Vector2Int[] coords, bool[] isLoad)
     {
-        Vector2Int[] ring = RingCoords(centerChunk, range);
-        foreach(Vector2Int coord in ring)dim.LoadChunk(coord);
-        return ring;
+        for(int i = 0; i < coords.Length; i++)dim.LoadChunk(coords[i], isLoad[i]);
     }
 
-    private static Vector2Int[] RingCoords(Vector2Int center, int range)
+    // Chebyshev-ascending ring around center: pure math, worker-safe (the
+    // enter-world w3 inventory runs it off the main thread).
+    public static Vector2Int[] RingCoords(Vector2Int center, int range)
     {
         var ring = new List<Vector2Int>();
         for(int x = -range; x <= range; x++)

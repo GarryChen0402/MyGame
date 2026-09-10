@@ -34,6 +34,20 @@ Shader "Entity/HurtFlash"
         TEXTURE2D(_BaseMap);
         SAMPLER(sampler_BaseMap);
 
+        // The stock ShadowCaster/DepthOnly pass templates call Alpha() and
+        // SampleAlbedoAlpha() under _ALPHATEST_ON; both are defined in URP's
+        // SurfaceInput.hlsl (Lit input stack - not included here). Same
+        // semantics as URP 14, on this shader's own _BaseMap / cbuffer.
+        half Alpha(half albedoAlpha, half4 color, half cutoff)
+        {
+            return AlphaDiscard(albedoAlpha * color.a, cutoff);
+        }
+
+        half4 SampleAlbedoAlpha(float2 uv, TEXTURE2D_PARAM(albedoAlphaMap, sampler_albedoAlphaMap))
+        {
+            return half4(SAMPLE_TEXTURE2D(albedoAlphaMap, sampler_albedoAlphaMap, uv));
+        }
+
         // All passes must share one cbuffer layout or SRP Batcher batching breaks.
         CBUFFER_START(UnityPerMaterial)
         float4 _BaseMap_ST;

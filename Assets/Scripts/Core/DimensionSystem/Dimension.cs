@@ -39,7 +39,7 @@ public class Dimension
     public bool TryGetChunk(Vector2Int chunkCoord, out Chunk chunk)
         => EnableChunks.TryGetValue(chunkCoord, out chunk);
 
-    public void LoadChunk(Vector2Int ChunkCoord)
+    public void LoadChunk(Vector2Int ChunkCoord, bool? hasSave = null)
     {
         if(IsChunkEnabled(ChunkCoord))return;
         Chunk chunk;
@@ -58,7 +58,9 @@ public class Dimension
             // Async: the worker fills the chunk from the save file when one
             // exists, otherwise generates it; ChunkLoaded fires on the main
             // thread once WorldManager registers it (see PumpChunkGeneration).
-            if(WorldSaveManager.Instance.HasChunkSave(DimensionDefinitionInfo.FullName, ChunkCoord))
+            // hasSave pre-classifies the enter-world ring (server w3
+            // inventory); null probes the disk here (run-time loads).
+            if(hasSave ?? WorldSaveManager.Instance.HasChunkSave(DimensionDefinitionInfo.FullName, ChunkCoord))
                 WorldManager.Instance.SubmitChunkLoad(this, chunk);
             else
                 WorldManager.Instance.SubmitChunkGeneration(this, chunk);

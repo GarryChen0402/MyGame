@@ -23,7 +23,6 @@ public class WorldSaveManager
     // and during gameplay an active slot always exists before any chunk work.
     public string WorldRootPath => worldRootPath ?? savesRoot;
     public bool HasActiveWorld => worldRootPath != null;
-    public Vector3 WorldSpawn => spawnCached;   // decision B: the active world's spawn
 
     private WorldSaveManager()
     {
@@ -33,31 +32,25 @@ public class WorldSaveManager
     // Switches the persistence root to Saves/<folder> and caches the slot's v2
     // fields (name / createdTime / spawn) for later metadata writes. A missing
     // or v1 meta falls back to the folder name / the engine default spawn.
-    // Re-activating the same folder is a no-op guard-wise (caches re-read).
     public void SetActiveWorld(string folder)
+        => SetActiveWorld(folder, ReadWorldMetaFromDisk(SlotRootPath(folder)));
+
+    // Same, with the metadata already in hand (the enter-world worker read it
+    // off the main thread) - no disk read on this path.
+    public void SetActiveWorld(string folder, WorldSaveData meta)
     {
-        worldRootPath = Path.Combine(savesRoot, folder);
+        worldRootPath = SlotRootPath(folder);
         Directory.CreateDirectory(worldRootPath);
         activeWorldName = folder;
         createdTimeCached = null;
         spawnCached = WorldDefaults.DefaultSpawnPosition;
-        string metaPath = Path.Combine(worldRootPath, "world.json");
-        if(!File.Exists(metaPath))return;
-        try
-        {
-            var data = JsonUtility.FromJson<WorldSaveData>(File.ReadAllText(metaPath));
-            if(data == null)return;
-            if(!string.IsNullOrEmpty(data.name))activeWorldName = data.name;
-            createdTimeCached = data.createdTime;
-            // version>=2 with a non-zero spawn -> the world's own spawn
-            // (decision B); anything else (v1 leftover / missing field) keeps
-            // the engine default.
-            if(data.version >= 2 && data.spawn != Vector3.zero)spawnCached = data.spawn;
-        }
-        catch(Exception e)
-        {
-            Debug.LogWarning($"[WorldSaveManager] read slot meta failed: {e}");
-        }
+        if(meta == null)return;
+        if(!string.IsNullOrEmpty(meta.name))activeWorldName = meta.name;
+        createdTimeCached = meta.createdTime;
+        // version>=2 with a non-zero spawn -> the world's own spawn (decision
+        // B); anything else (v1 leftover / missing field) keeps the engine
+        // default.
+        if(meta.version >= 2 && meta.spawn != Vector3.zero)spawnCached = meta.spawn;
     }
 
     private const float AutosaveIntervalSeconds = 60f;
@@ -227,27 +220,6 @@ public class WorldSaveManager
 
     // ---- world metadata ----
 
-    // Restores WorldManager.Seed from world.json; on first run writes the
-    // default seed and returns false.
-    public bool LoadWorldMeta()
-    {
-        if(!HasActiveWorld)return false;   // menu phase guard (T6): no slot to read
-        string path = Path.Combine(WorldRootPath, "world.json");
-        if(!File.Exists(path)) { SaveWorldMeta(); return false; }
-        try
-        {
-            var data = JsonUtility.FromJson<WorldSaveData>(File.ReadAllText(path));
-            if(data == null) throw new InvalidDataException("world.json parse error");
-            WorldManager.Instance.Seed = data.seed;
-            return true;
-        }
-        catch(Exception e)
-        {
-            Debug.LogWarning($"[WorldSaveManager] load world meta failed: {e}");
-            return false;
-        }
-    }
-
     public void SaveWorldMeta()
     {
         if(!HasActiveWorld)return;   // menu phase guard (T6): never write back to the saves root
@@ -276,29 +248,7 @@ public class WorldSaveManager
 
     // ---- player ----
 
-    // Reads player.json purely as data; returns null when there is no save
-    // (fresh world). Never touches the Player type - the enter-world sequence
-    // resolves the load position / dimension through this BEFORE the restore
-    // step, so reading a save must not summon the player early (touch rule T5).
-    public PlayerSaveData ReadPlayerSaveData()
-    {
-        if(!HasActiveWorld)return null;   // menu phase guard (T6)
-        string path = Path.Combine(WorldRootPath, "player.json");
-        if(!File.Exists(path)) return null;
-        try
-        {
-            var data = JsonUtility.FromJson<PlayerSaveData>(File.ReadAllText(path));
-            if(data == null) throw new InvalidDataException("player.json parse error");
-            return data;
-        }
-        catch(Exception e)
-        {
-            Debug.LogWarning($"[WorldSaveManager] load player failed: {e}");
-            return null;
-        }
-    }
-
-    // Applies a save obtained from ReadPlayerSaveData onto Player.Instance -
+    // Applies a save obtained from ReadPlayerSaveDataFromDisk onto Player.Instance -
     // the enter-world sequence's ONLY Player-touching call. Fresh worlds pass
     // a synthetic save built from the world spawn, so both branches share one
     // landing path. Runs only after the world (center chunk) is ready.
@@ -346,14 +296,61 @@ public class WorldSaveManager
     // ---- paths ----
 
     public string ChunkPath(string dimensionFullName, Vector2Int chunkCoord)
-        => Path.Combine(DimensionDir(dimensionFullName), $"chunk_{chunkCoord.x}_{chunkCoord.y}.json");
+        => ChunkPathUnder(WorldRootPath, dimensionFullName, chunkCoord);
 
-    private string DimensionDir(string dimensionFullName)
+    // ---- slot-rooted helpers (worker-safe) ----
+    // Pure path math + file IO; no instance state, no main-thread-only Unity
+    // APIs beyond JsonUtility - the same off-thread use precedent as
+    // ChunkSerializer (chunk load tasks already deserialize on workers). Used
+    // by the enter-world worker and by the DTO-injected activation path.
+
+    public string SlotRootPath(string folder) => Path.Combine(savesRoot, folder);
+
+    public static WorldSaveData ReadWorldMetaFromDisk(string worldRootPath)
+    {
+        try
+        {
+            string path = Path.Combine(worldRootPath, "world.json");
+            if(!File.Exists(path))return null;
+            return JsonUtility.FromJson<WorldSaveData>(File.ReadAllText(path));
+        }
+        catch(Exception e)
+        {
+            Debug.LogWarning($"[WorldSaveManager] read world meta failed: {e}");
+            return null;
+        }
+    }
+
+    // Reads player.json purely as data; returns null when there is no save
+    // (fresh world). Never touches the Player type - the enter-world worker
+    // resolves the load position / dimension through this BEFORE the restore
+    // step, so reading a save must not summon the player early (touch rule T5).
+    public static PlayerSaveData ReadPlayerSaveDataFromDisk(string worldRootPath)
+    {
+        try
+        {
+            string path = Path.Combine(worldRootPath, "player.json");
+            if(!File.Exists(path))return null;
+            var data = JsonUtility.FromJson<PlayerSaveData>(File.ReadAllText(path));
+            if(data == null) throw new InvalidDataException("player.json parse error");
+            return data;
+        }
+        catch(Exception e)
+        {
+            Debug.LogWarning($"[WorldSaveManager] read player failed: {e}");
+            return null;
+        }
+    }
+
+    public static bool HasChunkSaveUnder(string worldRootPath, string dimensionFullName, Vector2Int chunkCoord)
+        => File.Exists(ChunkPathUnder(worldRootPath, dimensionFullName, chunkCoord));
+
+    public static string ChunkPathUnder(string worldRootPath, string dimensionFullName, Vector2Int chunkCoord)
     {
         // ':' and other path-hostile characters are escaped; the directory name
         // is not meant to be human-readable.
         string safe = dimensionFullName.Replace(':', '_').Replace('/', '_').Replace('\\', '_');
-        return Path.Combine(WorldRootPath, safe);
+        return Path.Combine(worldRootPath, safe, $"chunk_{chunkCoord.x}_{chunkCoord.y}.json");
     }
 }
 

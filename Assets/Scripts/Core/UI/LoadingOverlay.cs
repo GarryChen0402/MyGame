@@ -39,6 +39,9 @@ public class LoadingOverlay : MonoBehaviour
         rt.offsetMax = Vector2.zero;
         var tint = gameObject.AddComponent<Image>();
         tint.color = new Color(0.05f, 0.06f, 0.08f, 0.8f);
+        // Click-through: the failure page shows over the restored main menu,
+        // so pointer events must reach the panel below the backdrop.
+        tint.raycastTarget = false;
 
         titleText = MakeText("Txt_Title", 42f, new Color(0.95f, 0.95f, 0.95f, 1f), new Vector2(0f, 24f));
         stageText = MakeText("Txt_Stage", 18f, new Color(0.7f, 0.7f, 0.72f, 1f), new Vector2(0f, -14f));

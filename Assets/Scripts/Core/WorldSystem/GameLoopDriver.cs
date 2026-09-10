@@ -54,6 +54,11 @@ public class GameLoopDriver : MonoBehaviour
         }
         GameClock.Alpha = PauseLogic ? 0f : Mathf.Clamp01(accumulator / GameClock.TickInterval);
 
+        // Async enter-world bridge (Part B §3.3): deliver a finished
+        // WorldServer worker result on the main thread - before the render
+        // side syncs, so the session's submission chain lands in this frame.
+        WorldServer.Instance.Poll();
+
         // Mirror sync point (Phase C rule R-C1-0): after the fixed ticks ran
         // (or after a frozen frame, copying identical values), refresh every
         // bound mirror for the render side of this frame.
