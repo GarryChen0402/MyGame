@@ -45,7 +45,7 @@ public class WidgetTestUI : UIBehavior
         var giveGo = UIButtonWidget.CreateNewButton("Give Dirt", null, page);
         Place(giveGo, new Vector2(60, -40), new Vector2(130, 40));
         giveGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
-            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:dirt", input.GetValue()));
+            () => ContainerCommandProcessor.Instance.GiveItem("minecraft:dirt", input.GetValue()));
 
         return page;
     }
@@ -63,12 +63,12 @@ public class WidgetTestUI : UIBehavior
         var stoneGo = UIButtonWidget.CreateNewButton("Give Stone", null, page);
         Place(stoneGo, new Vector2(-90, -40), new Vector2(150, 40));
         stoneGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
-            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:stone", input.GetValue()));
+            () => ContainerCommandProcessor.Instance.GiveItem("minecraft:stone", input.GetValue()));
 
         var cobbleGo = UIButtonWidget.CreateNewButton("Give Cobblestone", null, page);
         Place(cobbleGo, new Vector2(90, -40), new Vector2(150, 40));
         cobbleGo.GetComponent<UIButtonWidget>().OnClick.AddListener(
-            () => ContainerCommandProcessor.Instance.DebugGiveItem("minecraft:cobblestone", input.GetValue()));
+            () => ContainerCommandProcessor.Instance.GiveItem("minecraft:cobblestone", input.GetValue()));
 
         return page;
     }

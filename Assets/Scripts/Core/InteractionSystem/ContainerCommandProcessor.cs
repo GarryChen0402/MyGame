@@ -201,11 +201,11 @@ public class ContainerCommandProcessor
         UIManager.Instance?.OpenUI(PlayerUI.playerUIDefinition.FullName, null);
     }
 
-    // ---- debug give (WidgetTestUI button route) ----
+    // ---- give (cheat-mode grant; WidgetTestUI + JEI routes) ----
 
     // Grants `amount` of the named item in MaxStack chunks; stops when the
     // backpack cannot hold more (same settlement the panel used to run).
-    public void DebugGiveItem(string fullName, int amount)
+    public void GiveItem(string fullName, int amount)
     {
         if(amount <= 0)return;
         var rs = ResourceSystem.Instance;
@@ -223,6 +223,6 @@ public class ContainerCommandProcessor
             remaining -= piece;
         }
         int granted = amount - remaining;
-        Debug.Log($"WidgetTest: granted {granted}/{amount} {def.FullName}");
+        Debug.Log($"[GiveItem] granted {granted}/{amount} {def.FullName}");
     }
 }

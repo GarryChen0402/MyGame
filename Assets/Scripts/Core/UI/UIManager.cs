@@ -48,6 +48,10 @@ public class UIManager : MonoBehaviour
         if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))return;
         PlayerInventoryRoot = def.Factory();
         PlayerInventoryRoot.transform.SetParent(transform, false);
+        // Lazy creation would append above every existing root (including the
+        // tooltip / loading layers); insert below TooltipRoot so the mouse-
+        // following layers and the topmost overlay keep rendering on top.
+        if(TooltipRoot != null)PlayerInventoryRoot.transform.SetSiblingIndex(TooltipRoot.transform.GetSiblingIndex());
         PlayerInventoryRoot.SetActive(false);
     }
 
@@ -63,7 +67,21 @@ public class UIManager : MonoBehaviour
     {
         OpenUI("minecraft:crosshair");
         OpenUI("minecraft:hotbar");
+        // Tooltip below the cursor-held item (opened last): the item being
+        // carried must never be covered by hover text.
+        OpenUI("minecraft:tooltip");
         OpenUI("minecraft:held_item");
+    }
+
+    // Mod-facing seam: builds a new stretch root between the panel layer and
+    // the tooltip / loading layers (mod overlay content such as JEI renders
+    // above panels but below the cursor and topmost layers). Mods call this
+    // once from their own initialization; the returned root is theirs to host.
+    public GameObject CreateOverlayRoot(string name)
+    {
+        var root = UIPanelBuilder.BuildStretchRoot(transform, name).gameObject;
+        if(TooltipRoot != null)root.transform.SetSiblingIndex(TooltipRoot.transform.GetSiblingIndex());
+        return root;
     }
 
     public void OpenUI(string uiId, object data = null)
@@ -267,4 +285,12 @@ public class UIManager : MonoBehaviour
     }
 
     public SlotUI CurrentHoverSlotUI {get; set;} = null;
+
+    // Hover feed of the general tooltip layer, written by SlotUI / JEI cells
+    // (independent of CurrentHoverSlotUI above, which settles drags only).
+    public IHoverItemSource CurrentHoverInfo {get; set;} = null;
+
+    // Drag in progress: Unity stops routing enter/exit mid-drag, so the hover
+    // feed is stale by design - the tooltip hides itself while this is true.
+    public bool DragActive => activeDrag != null;
 }

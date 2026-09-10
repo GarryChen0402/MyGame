@@ -50,6 +50,10 @@ public class UITextInputWidget : MonoBehaviour
     // Fires with the field's text when the edit commits (Enter or focus loss).
     public TMP_InputField.SubmitEvent OnSubmit => inputField.onEndEdit;
 
+    // Fires on every keystroke - live filtering (JEI search) without a
+    // per-frame GetText diff.
+    public TMP_InputField.OnChangeEvent OnValueChanged => inputField.onValueChanged;
+
     public string GetText() => inputField.text;
 
     public void SetText(string value) => inputField.SetTextWithoutNotify(value ?? "");

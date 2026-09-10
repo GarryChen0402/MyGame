@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 // Runtime service over the frozen ResourceSystem.KeyBindings table: keeps the
 // per-action user overrides (defaults live in the registry) plus per-frame
@@ -313,10 +315,26 @@ public class KeyBindingManager
 
     private static bool ContextAllows(KeyBinding binding, string topHandler)
     {
+        // Text-focus guard: while a text field is focused every action is
+        // silenced, so typing 'e' in a search box cannot close the panel and
+        // letter keys never trigger game actions. Covers routing and querying
+        // alike (both paths pass here); Esc never enters the binding table,
+        // so closing a panel stays possible while typing.
+        if(TextInputFocused())return false;
         var whitelist = binding.AllowedInputHandlers;
         if(whitelist == null || whitelist.Count == 0)return true;
         if(topHandler == null)return false;
         return whitelist.Contains(topHandler);
+    }
+
+    private static bool TextInputFocused()
+    {
+        var eventSystem = EventSystem.current;
+        if(eventSystem == null)return false;
+        var selected = eventSystem.currentSelectedGameObject;
+        if(selected == null)return false;
+        var field = selected.GetComponent<TMP_InputField>();
+        return field != null && field.isFocused;
     }
 
     private static bool WhitelistsOverlap(HashSet<string> a, HashSet<string> b)

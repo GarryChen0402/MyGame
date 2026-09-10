@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler,
-    IPointerEnterHandler, IPointerExitHandler
+    IPointerEnterHandler, IPointerExitHandler, IHoverItemSource
 {
     // Drag visual feedback (Docs/物品拖拽分配交互实现方案.md §7 阶段3):
     // Accept = slot will receive the distribution (green outline), Reject =
@@ -164,19 +164,41 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         highlight.effectColor = state == DragHighlight.Accept ? AcceptColor : RejectColor;
     }
 
-    // Hover tracking (feeds UIManager.CurrentHoverSlotUI; tooltip later).
-    // Unity stops routing enter/exit during a drag, so the drag session
-    // updates the hover slot from its own per-frame raycast instead.
+    // Hover tracking (feeds UIManager.CurrentHoverSlotUI for the drag session
+    // and CurrentHoverInfo for the tooltip). Unity stops routing enter/exit
+    // during a drag, so the drag session updates the hover slot from its own
+    // per-frame raycast instead.
     public void OnPointerEnter(PointerEventData eventData)
     {
-        UIManager.Instance.CurrentHoverSlotUI = this;
+        var ui = UIManager.Instance;
+        if(ui != null)
+        {
+            ui.CurrentHoverSlotUI = this;
+            ui.CurrentHoverInfo = this;
+        }
         hoverOverlay?.SetActive(true);
     }
     public void OnPointerExit(PointerEventData eventData)
     {
         var ui = UIManager.Instance;
-        if(ui != null && ui.CurrentHoverSlotUI == this)ui.CurrentHoverSlotUI = null;
+        if(ui != null)
+        {
+            if(ui.CurrentHoverSlotUI == this)ui.CurrentHoverSlotUI = null;
+            if(ui.CurrentHoverInfo == this)ui.CurrentHoverInfo = null;
+        }
         hoverOverlay?.SetActive(false);
+    }
+
+    // Tooltip feed: the live value behind this slot's address; empty slots
+    // (and unbound display-only slots) report none.
+    public bool TryGetHoverItemId(out ushort itemId)
+    {
+        itemId = 0;
+        if(source == null || slotIndex < 0 || slotIndex >= source.Capacity)return false;
+        var slot = source.GetSlot(slotIndex);
+        if(slot.amount == 0)return false;
+        itemId = slot.itemId;
+        return true;
     }
 
     public void OnPointerClick(PointerEventData eventData)

@@ -16,6 +16,9 @@ public partial class Minecraft
         ResourceSystem.Instance.UIDefinitions.Register(WidgetTestUI.widgetTestUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(EntityModelEditorUI.editorUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(MenuUI.mainMenuUIDefinition);
+        // General hover tooltip (Core layer, D6 of the JEI design doc): lives
+        // with the game HUD so item names show even without the JEI mod.
+        ResourceSystem.Instance.UIDefinitions.Register(TooltipUI.tooltipUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
