@@ -219,6 +219,25 @@ public partial class Minecraft
             LootTables = new() { $"{ModId}:oak_log" }
         };
 
+        // Oak planks: the log breakdown product of the tree chain.
+        oakPlanksDefinition = new()
+        {
+            modId = ModId,
+            name = "oak_planks",
+            TextureIds = new()
+            {
+                ["top"]    = $"{ModId}:oak_plank",
+                ["bottom"] = $"{ModId}:oak_plank",
+                ["front"]  = $"{ModId}:oak_plank",
+                ["back"]   = $"{ModId}:oak_plank",
+                ["left"]   = $"{ModId}:oak_plank",
+                ["right"]  = $"{ModId}:oak_plank"
+            },
+            Variants = new() { new BlockStateVariant { ModelId = cube.FullName } },
+            Hardness = 2,
+            LootTables = new() { $"{ModId}:oak_planks" }
+        };
+
         // Oak leaves: full cube with a holed texture. IsOpaque=false - the holes
         // show the neighbours, so this block must never cull their faces (same
         // semantics as glass/water in the IsOpaque comment).
@@ -284,6 +303,9 @@ public partial class Minecraft
         ResourceSystem.Instance.RegisterBlock(oakLeavesDefinition);
         ResourceSystem.Instance.RegisterBlock(oakSaplingDefinition);
         oakSaplingDefinition.RandomTick = SaplingGrowRandomTick;   // random tick: sapling growth (design doc 树木系统 §5)
+        // New blocks append at the segment tail: earlier registrations keep
+        // their state ids (save compat).
+        ResourceSystem.Instance.RegisterBlock(oakPlanksDefinition);
 
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:grass", out grassId);
         ResourceSystem.Instance.BlockDefinitions.TryGetNumberId($"{ModId}:dirt", out dirtId);

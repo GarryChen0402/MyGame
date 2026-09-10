@@ -65,11 +65,11 @@ public class MirrorSync
         bindings.RemoveAll(b => b is EntityBinding eb && eb.Mirror != null && eb.Mirror.EntityId == entityId);
     }
 
-    // ---- panel session bindings (ContainerCommandProcessor.OpenPanel calls) ----
+    // ---- standalone container bindings (resident player sources) ----
 
-    // Registers one Inventory as a mirrored source (player panels register
-    // resident bindings above; block-entity panel containers register here and
-    // live exactly as long as the open session).
+    // Registers one Inventory as a mirrored source (player sources register
+    // resident bindings above); block-entity panel containers go through the
+    // PanelData bindings below instead.
     public ContainerMirror AddContainerBinding(Inventory source)
     {
         var mirror = new ContainerMirror(source != null ? source.MaxSlotCount : 0);
@@ -77,29 +77,28 @@ public class MirrorSync
         return mirror;
     }
 
-    public void RemoveContainerBindings(IEnumerable<ContainerMirror> mirrors)
+    // Registers one Inventory as a mirrored segment inside an open session's
+    // PanelData (writes data slot range [start, start + MaxSlotCount)); the
+    // session owns the binding lifetime (RemovePanelBindings).
+    public void AddPanelSlotBinding(PanelData data, int start, Inventory source)
     {
-        if(mirrors == null)return;
-        foreach(var mirror in mirrors)
-        {
-            if(mirror == null)continue;
-            bindings.RemoveAll(b => b is ContainerBinding cb && cb.Mirror == mirror);
-        }
+        bindings.Add(new PanelSlotBinding { Data = data, Start = start, Source = source });
     }
 
-    // Registers the furnace progress mirror source (same session lifetime as
-    // the panel container bindings above).
-    public FurnaceProgressView AddProgressBinding(ProcessingWorkContainer source)
+    // Registers one channel source (work-container tick state read as ints,
+    // the former progress mirror - same session lifetime).
+    public void AddPanelChannelBinding(PanelData data, int start, IChannelSource source)
     {
-        var view = new FurnaceProgressView();
-        bindings.Add(new ProgressBinding { View = view, Source = source });
-        return view;
+        bindings.Add(new PanelChannelBinding { Data = data, Start = start, Source = source });
     }
 
-    public void RemoveProgressBinding(FurnaceProgressView view)
+    // Drops every binding that writes into this session's data packet.
+    public void RemovePanelBindings(PanelData data)
     {
-        if(view == null)return;
-        bindings.RemoveAll(b => b is ProgressBinding pb && pb.View == view);
+        if(data == null)return;
+        bindings.RemoveAll(b =>
+            (b is PanelSlotBinding sb && sb.Data == data) ||
+            (b is PanelChannelBinding cb && cb.Data == data));
     }
 
     // ---- bindings (the only place a logic reference may live; never exposed to UI) ----
@@ -144,12 +143,46 @@ public class MirrorSync
         public override void Sync() => Mirror?.Apply(Source);
     }
 
-    private class ProgressBinding : Binding
+    // Panel path: many sources write into one shared value packet. The slot
+    // binding mirrors ContainerBinding but writes into a data segment; the
+    // declared segment length wins over a larger source container.
+    private class PanelSlotBinding : Binding
     {
-        public FurnaceProgressView View;
-        public ProcessingWorkContainer Source;
+        public PanelData Data;
+        public int Start;
+        public Inventory Source;
 
-        public override void Sync() => View?.Apply(Source);
+        public override void Sync()
+        {
+            if(Data == null)return;
+            if(Source == null)
+            {
+                for(int i = Start; i < Data.Capacity; i++)Data.ApplySlot(i, 0, 0);
+                Data.CommitChanged();
+                return;
+            }
+            int end = System.Math.Min(Source.MaxSlotCount, Data.Capacity - Start);
+            for(int i = 0; i < end; i++)
+            {
+                var stack = Source.GetItemStackAt(i);
+                Data.ApplySlot(Start + i, stack?.itemId ?? 0, stack?.amount ?? 0);
+            }
+            Data.CommitChanged();
+        }
+    }
+
+    private class PanelChannelBinding : Binding
+    {
+        public PanelData Data;
+        public int Start;
+        public IChannelSource Source;
+
+        public override void Sync()
+        {
+            if(Data == null || Source == null)return;
+            Source.ReadChannels(Data, Start);
+            Data.CommitChanged();
+        }
     }
 
     // PlayerMirror source: the player singleton (never replaced in v1).

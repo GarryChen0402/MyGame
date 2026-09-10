@@ -4,8 +4,8 @@ using UnityEngine;
 // Slot addressing (Phase C rule R-C1-0b): the identity of every interactive
 // UI slot, resolved by ContainerCommandProcessor into an ISlotAccess at
 // command time. scopes: resident PlayerInventory / PlayerCrafting, or a
-// block-entity panel session (panelModelId = PanelModel.ModelId, slot =
-// PanelModel.Slots list index - the canonical order shared with the UI).
+// block-entity panel session (panelModelId = PanelData.SessionId, slot =
+// PanelData.Slots index - the canonical order shared with the UI).
 public enum SlotScope { None, PlayerInventory, PlayerCrafting, Panel }
 
 public struct SlotAddr
@@ -16,12 +16,12 @@ public struct SlotAddr
 }
 
 // One open block-entity panel session (internal to the command processor):
-// pre-resolved slot accessors + registered mirrors + the panel close action.
+// pre-resolved slot accessors, the session's data packet and the panel close
+// action.
 public class ContainerPanelSession
 {
     public readonly List<ISlotAccess> Accessors = new();
-    public readonly List<ContainerMirror> Mirrors = new();
-    public FurnaceProgressView ProgressMirror;
+    public PanelData Data;
     public System.Action OnClose;
 }
 
@@ -36,14 +36,14 @@ public class ContainerCommandProcessor
     public static ContainerCommandProcessor Instance { get; } = new();
 
     private readonly Dictionary<int, ContainerPanelSession> sessions = new();
-    private int nextModelId = 1;
+    private int nextSessionId = 1;
 
     // Open panel that shift-moves from the backpack target (the former
     // currentUI.ContainerSlots equivalent): PlayerCrafting while the player
     // 2x2 panel is open, Panel while a BE panel session is open, None
     // otherwise (widget test / editor panels have no container slots).
     private SlotScope activeScope;
-    private int activeModelId;
+    private int activeSessionId;
 
     // ---- slot settlements (instant; SCP semantics untouched) ----
 
@@ -139,7 +139,7 @@ public class ContainerCommandProcessor
             }
             case SlotScope.Panel:
             {
-                if(!sessions.TryGetValue(activeModelId, out var s))return null;
+                if(!sessions.TryGetValue(activeSessionId, out var s))return null;
                 return s.Accessors;
             }
             default: return null;
@@ -150,18 +150,13 @@ public class ContainerCommandProcessor
 
     // ---- panel session lifecycle (BE open/close chain, design §6) ----
 
-    // Session factory for a block-entity panel: registers the container
-    // mirror bindings, assembles the pure-view PanelModel and pre-resolves
-    // the slot accessors by work-container type. The BE itself never reaches
-    // the UI - the model is the whole data contract (rule R-C1-4).
-    public PanelModel OpenPanel(BlockEntity be)
+    // Session factory for a block-entity panel: registers the PanelData
+    // bindings, assembles the value-only data packet and pre-resolves the
+    // slot accessors by work-container type. The BE itself never reaches the
+    // UI - the packet is the whole data contract (rule R-C1-4).
+    public PanelData OpenPanel(BlockEntity be)
     {
-        var model = new PanelModel { ModelId = nextModelId++ };
         var session = new ContainerPanelSession();
-        sessions[model.ModelId] = session;
-        activeScope = SlotScope.Panel;
-        activeModelId = model.ModelId;
-
         if(be != null)
         {
             bool built = false;
@@ -169,80 +164,71 @@ public class ContainerCommandProcessor
             {
                 if(wc is ProcessingWorkContainer pwc && !built)
                 {
-                    built = BuildFurnaceModel(model, session, pwc);
+                    built = BuildFurnaceModel(session, pwc);
                 }
                 else if(wc is CraftingWorkContainer cwc && !built)
                 {
-                    built = BuildCraftingModel(model, session, cwc);
+                    built = BuildCraftingModel(session, cwc);
                 }
             }
-            if(!built)Debug.LogWarning($"[ContainerCommandProcessor] no matching work container for panel of {be.Definition?.FullName}; opened an empty model");
+            if(!built)Debug.LogWarning($"[ContainerCommandProcessor] no matching work container for panel of {be.Definition?.FullName}; opened an empty data packet");
         }
-        return model;
+        if(session.Data == null)session.Data = new PanelData(nextSessionId++, 0, 0);
+        sessions[session.Data.SessionId] = session;
+        activeScope = SlotScope.Panel;
+        activeSessionId = session.Data.SessionId;
+        return session.Data;
     }
 
     // Furnace: canonical slot order 0 = input, 1 = fuel, 2 = output (each a
-    // capacity-1 Plain container) + the tick progress mirror. No open action.
-    private bool BuildFurnaceModel(PanelModel model, ContainerPanelSession session, ProcessingWorkContainer pwc)
+    // capacity-1 container) + the four tick counters as channels. No open
+    // action.
+    private bool BuildFurnaceModel(ContainerPanelSession session, ProcessingWorkContainer pwc)
     {
         if(pwc.Input == null || pwc.Fuel == null || pwc.Output == null)return false;
-        AddPanelSlot(model, session, PanelSlotRole.Plain, pwc.Input);
-        AddPanelSlot(model, session, PanelSlotRole.Plain, pwc.Fuel);
-        AddPanelSlot(model, session, PanelSlotRole.Plain, pwc.Output);
-        session.ProgressMirror = MirrorSync.Instance.AddProgressBinding(pwc);
-        model.Progress = session.ProgressMirror;
+        var data = new PanelData(nextSessionId++, 3, 4);
+        MirrorSync.Instance.AddPanelSlotBinding(data, 0, pwc.Input.Inv);
+        MirrorSync.Instance.AddPanelSlotBinding(data, 1, pwc.Fuel.Inv);
+        MirrorSync.Instance.AddPanelSlotBinding(data, 2, pwc.Output.Inv);
+        MirrorSync.Instance.AddPanelChannelBinding(data, 0, pwc);
+        session.Accessors.Add(new ContainerSlotAccess(pwc.Input, 0));
+        session.Accessors.Add(new ContainerSlotAccess(pwc.Fuel, 0));
+        session.Accessors.Add(new ContainerSlotAccess(pwc.Output, 0));
+        session.Data = data;
         return true;
     }
 
-    // Workbench: canonical slot order = grid cells 0..8 (CraftGrid roles),
-    // result = 9 (CraftResult role). The preview refresh on open and clear on
-    // close moved here from the UI panel (design §6.1/§6.2).
-    private bool BuildCraftingModel(PanelModel model, ContainerPanelSession session, CraftingWorkContainer cwc)
+    // Workbench: canonical slot order = grid cells 0..8, result = 9. The
+    // preview refresh on open and clear on close moved here from the UI panel
+    // (design §6.1/§6.2).
+    private bool BuildCraftingModel(ContainerPanelSession session, CraftingWorkContainer cwc)
     {
         if(cwc.Grid == null || cwc.Result == null)return false;
-        session.OnClose = () => cwc.ClearPreview();
-
         int grid = cwc.Grid.Inv.MaxSlotCount;
-        var gridMirror = MirrorSync.Instance.AddContainerBinding(cwc.Grid.Inv);
-        session.Mirrors.Add(gridMirror);
-        for(int i = 0; i < grid; i++)
-        {
-            model.Slots.Add(new PanelSlotView { Mirror = gridMirror, SlotIndex = i, Role = PanelSlotRole.CraftGrid });
-            session.Accessors.Add(new CraftingGridSlotAccess(cwc.Grid, i, cwc));
-        }
-        var resultMirror = MirrorSync.Instance.AddContainerBinding(cwc.Result.Inv);
-        session.Mirrors.Add(resultMirror);
-        model.Slots.Add(new PanelSlotView { Mirror = resultMirror, SlotIndex = 0, Role = PanelSlotRole.CraftResult });
+        var data = new PanelData(nextSessionId++, grid + 1, 0);
+        MirrorSync.Instance.AddPanelSlotBinding(data, 0, cwc.Grid.Inv);
+        MirrorSync.Instance.AddPanelSlotBinding(data, grid, cwc.Result.Inv);
+        for(int i = 0; i < grid; i++)session.Accessors.Add(new CraftingGridSlotAccess(cwc.Grid, i, cwc));
         session.Accessors.Add(new CraftingResultSlotAccess(cwc.Result, 0, cwc));
+        session.OnClose = () => cwc.ClearPreview();
+        session.Data = data;
 
         cwc.RefreshPreview();   // open action: rebuild the live preview over persisted grid materials
         return true;
     }
 
-    // One capacity-1 panel slot: its own container mirror binding + a Plain
-    // accessor over the same container (index 0).
-    private static void AddPanelSlot(PanelModel model, ContainerPanelSession session,
-        PanelSlotRole role, InventoryDataContainer container)
-    {
-        var mirror = MirrorSync.Instance.AddContainerBinding(container?.Inv);
-        session.Mirrors.Add(mirror);
-        model.Slots.Add(new PanelSlotView { Mirror = mirror, SlotIndex = 0, Role = role });
-        session.Accessors.Add(new ContainerSlotAccess(container, 0));
-    }
-
     // Panel close command (fired by UIManager.CloseUI before hiding): runs
-    // the session close action (workbench preview clear), deregisters the
-    // mirror bindings and clears the active shift-move target.
-    public void ClosePanel(int modelId)
+    // the session close action (workbench preview clear), drops the data
+    // bindings and clears the active shift-move target.
+    public void ClosePanel(int sessionId)
     {
-        if(modelId == 0 || !sessions.TryGetValue(modelId, out var s))return;
+        if(sessionId == 0 || !sessions.TryGetValue(sessionId, out var s))return;
         s.OnClose?.Invoke();
-        sessions.Remove(modelId);
-        MirrorSync.Instance.RemoveContainerBindings(s.Mirrors);
-        MirrorSync.Instance.RemoveProgressBinding(s.ProgressMirror);
-        if(activeModelId == modelId)
+        sessions.Remove(sessionId);
+        MirrorSync.Instance.RemovePanelBindings(s.Data);
+        if(activeSessionId == sessionId)
         {
-            activeModelId = 0;
+            activeSessionId = 0;
             activeScope = SlotScope.None;
         }
     }
@@ -253,7 +239,7 @@ public class ContainerCommandProcessor
     {
         Player.Instance.Crafting?.RefreshPreview();
         activeScope = SlotScope.PlayerCrafting;
-        activeModelId = 0;
+        activeSessionId = 0;
         UIManager.Instance?.OpenUI(PlayerUI.playerUIDefinition.FullName, null);
     }
 

@@ -3,7 +3,7 @@ public partial class Minecraft
     // ---- S: loot tables ----
     private void RegisterLootTables()
     {
-        // ---- loot tables: stone keeps dropping itself, zombie drops coal ----
+        // ---- loot tables: stone drops cobblestone (vanilla), zombie drops coal ----
         ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
         {
             modId = ModId, name = "stone",
@@ -11,7 +11,7 @@ public partial class Minecraft
             {
                 new LootGroup { Condition = null, Entries = new()
                 {
-                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:stone", Amount = 1 }, Weight = 1f }
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:cobblestone", Amount = 1 }, Weight = 1f }
                 } }
             }
         });
@@ -55,6 +55,19 @@ public partial class Minecraft
 
         ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
         {
+            modId = ModId, name = "oak_planks",
+            Groups = new()
+            {
+                // Placed planks must come back on break.
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_planks", Amount = 1 }, Weight = 1f }
+                } }
+            }
+        });
+
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
             modId = ModId, name = "oak_sapling",
             Groups = new()
             {
@@ -86,12 +99,14 @@ public partial class Minecraft
             modId = ModId, name = "grass",
             Groups = new()
             {
-                // Interim bootstrap: the first sapling has to come from somewhere
-                // while natural tree generation is postponed (design doc §6).
-                // 50%: the entry point has to be reachable by hand-testing a
-                // handful of grass blocks.
                 new LootGroup { Condition = null, Entries = new()
                 {
+                    // Vanilla drop: grass blocks are dirt with a cover.
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:dirt", Amount = 1 }, Weight = 1f },
+                    // Interim bootstrap: the first sapling has to come from somewhere
+                    // while natural tree generation is postponed (design doc §6).
+                    // 50%: the entry point has to be reachable by hand-testing a
+                    // handful of grass blocks.
                     new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_sapling", Amount = 1 }, Weight = 0.5f }
                 } }
             }

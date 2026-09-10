@@ -11,7 +11,7 @@ using UnityEditor;
 // bindings - the factory GO is the root). SinglePanel def means it shares the
 // container-panel lifecycle: OpenUI parents it under SinglePanelRoot, caches
 // the instance, pushes its input handler and unlocks the cursor. Unlike
-// container UIs it carries no BE session (no PanelModel) and has no Esc-close:
+// container UIs it carries no BE session (no PanelData packet) and has no Esc-close:
 // the only close path is EnterWorld's CloseUI.
 //
 // Pages: MainPage (v1: Single Player / Quit only), WorldSelectPage (rows

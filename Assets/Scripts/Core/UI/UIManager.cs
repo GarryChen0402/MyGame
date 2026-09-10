@@ -86,10 +86,10 @@ public class UIManager : MonoBehaviour
 
     private UIBehavior currentUI = null;
     private bool CurrentUIhasInputHandler = false;
-    // Panel model id of the UI this manager opened (data as PanelModel); the
-    // close command needs it to tear down the BE session (logic side). 0 =
-    // no session (player UI / widget test / editors).
-    private int currentModelId;
+    // Data packet of the panel UI this manager opened (data as PanelData);
+    // the close command needs its session id to tear down the BE session
+    // (logic side). null = no session (player UI / widget test / editors).
+    private PanelData currentPanel;
     // In-game HUD is no longer opened on Start: the session controller opens
     // it when entering a world, so the menu state stays HUD-free.
     public void OpenGameHUD()
@@ -116,7 +116,7 @@ public class UIManager : MonoBehaviour
             }
             CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
             // if(inputHandler != null)InputHandlerManager.Instance.Push(inputHandler);
-            if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
+            if(uiDef.Kind == UIKind.SinglePanel)currentPanel = data as PanelData;
             return;
         }
 
@@ -134,7 +134,7 @@ public class UIManager : MonoBehaviour
             PlayerInventoryRoot?.SetActive(true);
         }
         CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
-        if(uiDef.Kind == UIKind.SinglePanel)currentModelId = (data as PanelModel)?.ModelId ?? 0;
+        if(uiDef.Kind == UIKind.SinglePanel)currentPanel = data as PanelData;
         UICache[uiId] = currentUI;
     }
 
@@ -143,8 +143,8 @@ public class UIManager : MonoBehaviour
         CancelDrag();   // panel closed mid-drag: drop the session untouched
         // Panel close command first (logic side): BE sessions run their close
         // action and deregister their mirror bindings (rule R-C1-0b).
-        if(currentModelId != 0)ContainerCommandProcessor.Instance.ClosePanel(currentModelId);
-        currentModelId = 0;
+        if(currentPanel != null)ContainerCommandProcessor.Instance.ClosePanel(currentPanel.SessionId);
+        currentPanel = null;
         currentUI?.Close();
         if(currentUI != null && CurrentUIhasInputHandler)
         {

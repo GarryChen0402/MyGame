@@ -25,6 +25,7 @@ public partial class Minecraft
         ResourceSystem.Instance.RegisterTexture(ModId, "oak_log_side", Resources.Load<Texture2D>("Textures/Blocks/oak_log_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "oak_log_top_bottom", Resources.Load<Texture2D>("Textures/Blocks/oak_log_top_bottom"));
         ResourceSystem.Instance.RegisterTexture(ModId, "oak_sapling", Resources.Load<Texture2D>("Textures/Blocks/oak_sapling"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "oak_plank", Resources.Load<Texture2D>("Textures/Blocks/oak_plank"));
         // Leaves: one neutral greyscale base map (white_leaf) is shared by every
         // leaf species; the species colour is baked in at registration. The base
         // map itself is a working asset and is not registered.

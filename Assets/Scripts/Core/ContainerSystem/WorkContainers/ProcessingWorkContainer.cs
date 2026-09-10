@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ProcessingWorkContainer : WorkContainer
+public class ProcessingWorkContainer : WorkContainer, IChannelSource
 {
     [Serializable]
     public class Config
@@ -102,6 +102,21 @@ public class ProcessingWorkContainer : WorkContainer
 
     private int ToTicks(RecipeContent recipe)
         => Mathf.Max(1, Mathf.RoundToInt(recipe.ProcessingTickTime / config.SpeedMultiplier));
+
+    // ---- panel channels ----
+
+    // The four tick counters as generic integer channels (the former
+    // FurnaceProgressView, now one segment of the panel's PanelData packet).
+    // Order mirrors vanilla's AbstractFurnaceMenu data slots.
+    public int ChannelCount => 4;
+
+    public void ReadChannels(PanelData data, int start)
+    {
+        data.ApplyChannel(start, FuelLeftTickTime);          // litTime
+        data.ApplyChannel(start + 1, CurrentFuelTotalTicks); // burnTime
+        data.ApplyChannel(start + 2, CurrentTickProgress);   // cookingProgress
+        data.ApplyChannel(start + 3, TotalTickTime);         // cookingTotalTime
+    }
 
     private RecipeContent FindRecipe()
     {

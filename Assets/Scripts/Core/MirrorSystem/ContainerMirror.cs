@@ -9,13 +9,22 @@ public struct SlotMirror
     public bool IsEmpty => amount == 0;
 }
 
+// Read face shared by ContainerMirror (resident HUD/backpack) and PanelData
+// (block-entity panel sessions): SlotUI binds against this and never knows
+// which kind of source it renders.
+public interface ISlotReadSource
+{
+    int Capacity { get; }
+    SlotMirror GetSlot(int index);
+}
+
 // Container mirror: capacity fixed (identical to the source container),
 // content a per-slot value copy. Version bumps whenever any slot content
 // changed (rule R-C1-1). Pure data - no logic reference, no public writer
 // (the only writer is MirrorSync).
-public class ContainerMirror
+public class ContainerMirror : ISlotReadSource
 {
-    public readonly int Capacity;
+    public int Capacity { get; }
     public int Version { get; private set; }
 
     private readonly SlotMirror[] slots;

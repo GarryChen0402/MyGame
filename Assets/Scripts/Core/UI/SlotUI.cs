@@ -81,15 +81,16 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         hoverOverlay.SetActive(false);
     }
 
-    // ---- mirror binding (Phase C: display reads a ContainerMirror slot) ----
+    // ---- read-source binding (Phase C: display reads a slot snapshot;
+    // S1: ContainerMirror for resident panels, PanelData for BE sessions) ----
 
-    // Display-only slot (hotbar): shows the mirror value, never interactive.
-    // A null mirror renders empty - bindings may precede the resident player
+    // Display-only slot (hotbar): shows the source value, never interactive.
+    // A null source renders empty - bindings may precede the resident player
     // registration during startup, and panels with no data (widget test) show
     // blank slots that stay unclickable.
-    public void BindDisplay(ContainerMirror mirror, int slotIndex)
+    public void BindDisplay(ISlotReadSource source, int slotIndex)
     {
-        this.mirror = mirror;
+        this.source = source;
         this.slotIndex = slotIndex;
         addr = null;
         shown = false;   // first Refresh after a bind always renders
@@ -99,9 +100,9 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
     // Interactive slot: display plus the address the click/drag commands
     // settle through (see ContainerCommandProcessor; a null address slot is
     // display-only and never clickable).
-    public void BindInteractive(ContainerMirror mirror, int slotIndex, SlotAddr addr)
+    public void BindInteractive(ISlotReadSource source, int slotIndex, SlotAddr addr)
     {
-        this.mirror = mirror;
+        this.source = source;
         this.slotIndex = slotIndex;
         this.addr = addr;
         shown = false;
@@ -112,12 +113,12 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
 
     public void Refresh()
     {
-        // Value read from the mirror; out-of-range / unbound renders empty.
+        // Value read from the source; out-of-range / unbound renders empty.
         ushort id = 0;
         int amount = 0;
-        if(mirror != null && slotIndex >= 0 && slotIndex < mirror.Capacity)
+        if(source != null && slotIndex >= 0 && slotIndex < source.Capacity)
         {
-            var slot = mirror.GetSlot(slotIndex);
+            var slot = source.GetSlot(slotIndex);
             id = slot.itemId;
             amount = slot.amount;
         }
@@ -141,7 +142,7 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         Text.text = amount > 1 ? amount.ToString() : "";
     }
 
-    private ContainerMirror mirror;
+    private ISlotReadSource source;
     private int slotIndex;
     private SlotAddr? addr;
 

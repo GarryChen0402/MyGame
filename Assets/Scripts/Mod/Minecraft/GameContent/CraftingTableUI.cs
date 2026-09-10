@@ -36,31 +36,33 @@ public class CraftingTableUI : UIBehavior
         resultGo.transform.localPosition = new Vector3(200, 0, 0);
     }
 
-    // Phase C: the open data is the pure-view PanelModel (no BE reference).
-    // Canonical slot order of the workbench model: 0..8 grid cells, 9 result.
-    // Every SetData re-binds all ten slots: slots beyond the model (or a slot
-    // left over from a previous session) go display-only, so stale addresses
-    // can never linger. Preview refresh/clear on open/close moved to the
-    // logic side (OpenPanel/ClosePanel commands).
+    // Phase C: the open data is the value-only PanelData packet (no BE
+    // reference). Canonical slot order of the workbench data: 0..8 grid
+    // cells, 9 result. Every SetData re-binds all ten slots: slots beyond
+    // the packet (or a slot left over from a previous session) go
+    // display-only, so stale addresses can never linger. Preview refresh/
+    // clear on open/close moved to the logic side (OpenPanel/ClosePanel
+    // commands).
     public override void SetData(object data)
     {
-        if(data is not PanelModel model)return;
+        if(data is not PanelData panel)return;
         for(int i = 0; i < gridSlots.Length; i++)
         {
-            var view = i < model.Slots.Count ? model.Slots[i] : null;
-            gridSlots[i].BindInteractive(view?.Mirror, view?.SlotIndex ?? 0, new SlotAddr
+            bool bound = i < panel.Capacity;
+            gridSlots[i].BindInteractive(bound ? panel : null, bound ? i : 0, new SlotAddr
             {
                 scope = SlotScope.Panel,
-                panelModelId = model.ModelId,
+                panelModelId = panel.SessionId,
                 slot = i
             });
         }
-        var resultView = gridSlots.Length < model.Slots.Count ? model.Slots[gridSlots.Length] : null;
-        resultSlot.BindInteractive(resultView?.Mirror, resultView?.SlotIndex ?? 0, new SlotAddr
+        int resultIndex = gridSlots.Length;
+        bool resultBound = resultIndex < panel.Capacity;
+        resultSlot.BindInteractive(resultBound ? panel : null, resultBound ? resultIndex : 0, new SlotAddr
         {
             scope = SlotScope.Panel,
-            panelModelId = model.ModelId,
-            slot = gridSlots.Length
+            panelModelId = panel.SessionId,
+            slot = resultIndex
         });
     }
 

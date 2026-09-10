@@ -11,7 +11,7 @@ public class FurnaceUI : UIBehavior
     private SlotUI outputSlot = null;
     private ProgressBarUI fireProgress = null;   // fuel burn gauge above the fuel slot
     private ProgressBarUI cookProgress = null;   // recipe progress arrow
-    private FurnaceProgressView progress = null; // progress mirror of the open session
+    private PanelData data = null;               // data packet of the open session
 
     private void Awake()
     {
@@ -70,26 +70,26 @@ public class FurnaceUI : UIBehavior
         cookProgress = craftProgressGo.GetComponent<ProgressBarUI>();
     }
 
-    // Phase C: the open data is the pure-view PanelModel (no BE reference).
-    // Canonical slot order of the furnace model: 0 = input, 1 = fuel,
-    // 2 = output; a shorter model (future container configs) leaves the
-    // remaining layout slots display-only and unclickable.
+    // Phase C: the open data is the value-only PanelData packet (no BE
+    // reference). Canonical slot order of the furnace data: 0 = input,
+    // 1 = fuel, 2 = output; a shorter packet (future container configs)
+    // leaves the remaining layout slots display-only and unclickable.
     public override void SetData(object data)
     {
-        if (data is not PanelModel model) return;
-        progress = model.Progress;
-        BindSlot(inputSlot, model, 0);
-        BindSlot(fuelSlot, model, 1);
-        BindSlot(outputSlot, model, 2);
+        if (data is not PanelData panel) return;
+        this.data = panel;
+        BindSlot(inputSlot, panel, 0);
+        BindSlot(fuelSlot, panel, 1);
+        BindSlot(outputSlot, panel, 2);
     }
 
-    private static void BindSlot(SlotUI slotUI, PanelModel model, int slot)
+    private static void BindSlot(SlotUI slotUI, PanelData data, int slot)
     {
-        var view = slot < model.Slots.Count ? model.Slots[slot] : null;
-        slotUI.BindInteractive(view?.Mirror, view?.SlotIndex ?? 0, new SlotAddr
+        bool bound = slot < data.Capacity;
+        slotUI.BindInteractive(bound ? data : null, bound ? slot : 0, new SlotAddr
         {
             scope = SlotScope.Panel,
-            panelModelId = model.ModelId,
+            panelModelId = data.SessionId,
             slot = slot
         });
     }
@@ -107,33 +107,19 @@ public class FurnaceUI : UIBehavior
         }
     };
 
-    // SlotUI-style: no explicit size - the GO's RectTransform defaults to the
-    // 100x100 slot cell and the child images fill it (preserveAspect keeps the
-    // small pixel textures from stretching).
-    private ProgressBarUI AddProgressBar(string name, Vector3 pos, ProgressBarUI.Direction dir,
-        Sprite front, Sprite back)
-    {
-        var go = new GameObject(name);
-        go.transform.SetParent(transform, false);
-        go.transform.localPosition = pos;
-        go.AddComponent<RectTransform>();
-        var bar = go.AddComponent<ProgressBarUI>();
-        bar.Setup(front, dir, back);
-        return bar;
-    }
-
-    // Pushes the mirrored tick state into the two gauges while the panel is
-    // open (Update stops when the UI is hidden): the sync layer copies the
-    // work container's four ints every render frame, so the gauges and slots
-    // always read the last settled tick.
+    // Pushes the channel state into the two gauges while the panel is open
+    // (Update stops when the UI is hidden): the sync layer copies the work
+    // container's four tick ints into channels 0..3 every render frame, so
+    // the gauges and slots always read the last settled tick. Channel order:
+    // 0 = lit remainder, 1 = lit total, 2 = cook progress, 3 = cook total.
     private void Update()
     {
-        if(progress != null)
+        if(data != null && data.ChannelCount >= 4)
         {
-            fireProgress.Progress = progress.FuelLeftTickTime <= 0 ? 0f
-                : (float)progress.FuelLeftTickTime / Mathf.Max(1, progress.CurrentFuelTotalTicks);
-            cookProgress.Progress = progress.TotalTickTime <= 0 ? 0f
-                : (float)progress.CurrentTickProgress / progress.TotalTickTime;
+            fireProgress.Progress = data.GetChannel(0) <= 0 ? 0f
+                : (float)data.GetChannel(0) / Mathf.Max(1, data.GetChannel(1));
+            cookProgress.Progress = data.GetChannel(3) <= 0 ? 0f
+                : (float)data.GetChannel(2) / data.GetChannel(3);
         }
         Refresh();
     }

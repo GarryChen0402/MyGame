@@ -30,6 +30,7 @@ public partial class Minecraft : IMod, ISteppedModRegistration
     private BlockDefinition oakLogDefinition;
     private BlockDefinition oakLeavesDefinition;
     private BlockDefinition oakSaplingDefinition;
+    private BlockDefinition oakPlanksDefinition;
 
     // Cached block ids used by biome fill columns.
     private static ushort grassId, dirtId, stoneId;

@@ -39,5 +39,17 @@ public partial class Minecraft
             "universal:shapeless",
             @"{ ""modId"": ""minecraft"", ""name"": ""crafting_grass"", ""inputs"": [ { ""itemId"": ""minecraft:dirt"", ""amount"": 4 } ], ""outputs"": [ { ""itemId"": ""minecraft:grass"", ""amount"": 1 } ] }",
             "[]"));
+
+        // Workbench shapeless: 1 oak log -> 4 oak planks.
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:shapeless",
+            @"{ ""modId"": ""minecraft"", ""name"": ""crafting_oak_planks"", ""inputs"": [ { ""itemId"": ""minecraft:oak_log"", ""amount"": 1 } ], ""outputs"": [ { ""itemId"": ""minecraft:oak_planks"", ""amount"": 4 } ] }",
+            "[]"));
+
+        // Workbench shaped 2x2: 4 oak planks -> 1 crafting table.
+        ResourceSystem.Instance.RegisterRecipeText(RecipeEnvelope.Build(
+            "universal:shaped",
+            @"{ ""modId"": ""minecraft"", ""name"": ""crafting_crafting_table"", ""pattern"": [""PP"", ""PP""], ""keys"": [ { ""symbol"": ""P"", ""item"": ""minecraft:oak_planks"" } ], ""outputs"": [ { ""itemId"": ""minecraft:crafting_table"", ""amount"": 1 } ] }",
+            "[]"));
     }
 }
