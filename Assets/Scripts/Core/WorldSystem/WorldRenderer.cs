@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.Profiling;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -79,16 +80,19 @@ public class WorldRenderer : MonoBehaviour
 
     private void CreateRenderer(Chunk chunk)
     {
-        var go = new GameObject($"Chunk Coord : {chunk.ChunkCoord.x} : {chunk.ChunkCoord.y}");
-        go.transform.SetParent(gameObject.transform);
-        go.transform.localPosition = new Vector3(
-            chunk.ChunkCoord.x * SubChunk.SubChunkBlockSize,
-            0,
-            chunk.ChunkCoord.y * SubChunk.SubChunkBlockSize
-        );
-        var chunkRenderer = go.AddComponent<ChunkRenderer>();
-        chunkRenderer.SetChunk(chunk);
-        chunkRenderers[chunk.ChunkCoord] = chunkRenderer;
+        using (createShellMarker.Auto())
+        {
+            var go = new GameObject($"Chunk Coord : {chunk.ChunkCoord.x} : {chunk.ChunkCoord.y}");
+            go.transform.SetParent(gameObject.transform);
+            go.transform.localPosition = new Vector3(
+                chunk.ChunkCoord.x * SubChunk.SubChunkBlockSize,
+                0,
+                chunk.ChunkCoord.y * SubChunk.SubChunkBlockSize
+            );
+            var chunkRenderer = go.AddComponent<ChunkRenderer>();
+            chunkRenderer.SetChunk(chunk);
+            chunkRenderers[chunk.ChunkCoord] = chunkRenderer;
+        }
     }
 
     private void OnChunkUnloaded(ChunkUnloadedEvent evt)
@@ -108,6 +112,15 @@ public class WorldRenderer : MonoBehaviour
     private readonly List<RebuildEntry> dispatchCandidates = new();   // reused sort buffer
     private readonly List<ChunkMeshBuildTask> inflight = new();
     private readonly List<ChunkMeshBuildTask> ready = new();
+
+    // Profiler markers (normal Profiler, no Deep Profile needed): the
+    // main-thread rebuild pipeline and the thread-pool build tasks.
+    private static readonly ProfilerMarker rebuildQueueMarker = new ProfilerMarker("Render.RebuildQueue");
+    private static readonly ProfilerMarker dispatchMarker = new ProfilerMarker("Render.Dispatch");
+    private static readonly ProfilerMarker meshApplyMarker = new ProfilerMarker("Render.MeshApply");
+    private static readonly ProfilerMarker createShellMarker = new ProfilerMarker("Render.CreateShell");
+    private static readonly ProfilerMarker meshBuildWorkerMarker = new ProfilerMarker("Render.MeshBuildWorker");
+    private static readonly ProfilerMarker meshBuildSyncMarker = new ProfilerMarker("Render.MeshBuildSync");
 
     private class RebuildEntry
     {
@@ -150,12 +163,15 @@ public class WorldRenderer : MonoBehaviour
     private void ProcessRebuildChunkQueue()
     {
         if(CurrentRenderDimension == null)return;
-        // Move completed worker tasks to the upload list.
-        for(int i = inflight.Count - 1; i >= 0; i--)
-            if(inflight[i].IsDown) { ready.Add(inflight[i]); inflight.RemoveAt(i); }
+        using (rebuildQueueMarker.Auto())
+        {
+            // Move completed worker tasks to the upload list.
+            for(int i = inflight.Count - 1; i >= 0; i--)
+                if(inflight[i].IsDown) { ready.Add(inflight[i]); inflight.RemoveAt(i); }
 
-        ApplyReadyTasks();
-        DispatchRebuildTasks();
+            ApplyReadyTasks();
+            DispatchRebuildTasks();
+        }
     }
 
     // Uploads completed worker tasks on a small per-frame budget (uploads touch
@@ -179,7 +195,8 @@ public class WorldRenderer : MonoBehaviour
     private void ApplyTask(ChunkMeshBuildTask task)
     {
         if(!chunkRenderers.TryGetValue(task.chunk.ChunkCoord, out var renderer))return;
-        renderer.ApplyMeshData(task);
+        using (meshApplyMarker.Auto())
+            renderer.ApplyMeshData(task);
         // A rebuild marked while this task was in flight can now snapshot the
         // current block data; dispatch it right away instead of waiting for the
         // next frame's queue pass, so edits during a rebuild render same-frame.
@@ -207,35 +224,38 @@ public class WorldRenderer : MonoBehaviour
 
     private void DispatchRebuildTasks()
     {
-        // Near-first sorting center from the PlayerMirror (rule R-C2-5):
-        // MirrorSync refreshes it before this Update runs, so the center is
-        // current-frame; at 20Hz it lags a tick at most, fine for a heuristic.
-        Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(PlayerMirrorPosition());
-        // Candidates in dispatch priority order: Important, Initial, then Normal,
-        // nearest chunks first within a type. Chunks with a task in flight or ready
-        // are skipped here; the entry stays queued and DispatchPendingEntry
-        // re-dispatches it (fresh snapshot) the moment the task applies, so changes
-        // arriving mid-flight render without waiting for the next frame.
-        dispatchCandidates.Clear();
-        foreach(var entry in rebuildEntries.Values)
+        using (dispatchMarker.Auto())
         {
-            if(inflight.Exists(t => t.chunk == entry.Chunk) || ready.Exists(t => t.chunk == entry.Chunk))continue;
-            if(!chunkRenderers.ContainsKey(entry.Chunk.ChunkCoord))continue;
-            dispatchCandidates.Add(entry);
-        }
-        dispatchCandidates.Sort((a, b) =>
-        {
-            if(a.Type != b.Type)return b.Type.CompareTo(a.Type);
-            int da = (a.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
-            int db = (b.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
-            return da.CompareTo(db);
-        });
+            // Near-first sorting center from the PlayerMirror (rule R-C2-5):
+            // MirrorSync refreshes it before this Update runs, so the center is
+            // current-frame; at 20Hz it lags a tick at most, fine for a heuristic.
+            Vector2Int playerChunkCoord = Dimension.WorldPosToChunkCoord(PlayerMirrorPosition());
+            // Candidates in dispatch priority order: Important, Initial, then Normal,
+            // nearest chunks first within a type. Chunks with a task in flight or ready
+            // are skipped here; the entry stays queued and DispatchPendingEntry
+            // re-dispatches it (fresh snapshot) the moment the task applies, so changes
+            // arriving mid-flight render without waiting for the next frame.
+            dispatchCandidates.Clear();
+            foreach(var entry in rebuildEntries.Values)
+            {
+                if(inflight.Exists(t => t.chunk == entry.Chunk) || ready.Exists(t => t.chunk == entry.Chunk))continue;
+                if(!chunkRenderers.ContainsKey(entry.Chunk.ChunkCoord))continue;
+                dispatchCandidates.Add(entry);
+            }
+            dispatchCandidates.Sort((a, b) =>
+            {
+                if(a.Type != b.Type)return b.Type.CompareTo(a.Type);
+                int da = (a.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
+                int db = (b.Chunk.ChunkCoord - playerChunkCoord).sqrMagnitude;
+                return da.CompareTo(db);
+            });
 
-        foreach(var entry in dispatchCandidates)
-        {
-            if(inflight.Count >= MaxConcurrentBuilds)break;
-            rebuildEntries.Remove(entry.Chunk);
-            DispatchEntry(entry.Chunk, entry);
+            foreach(var entry in dispatchCandidates)
+            {
+                if(inflight.Count >= MaxConcurrentBuilds)break;
+                rebuildEntries.Remove(entry.Chunk);
+                DispatchEntry(entry.Chunk, entry);
+            }
         }
     }
 
@@ -263,7 +283,8 @@ public class WorldRenderer : MonoBehaviour
             // and still correct; it only costs one longer frame.
             try
             {
-                BuildMeshData(task);
+                using (meshBuildSyncMarker.Auto())
+                    BuildMeshData(task);
             }
             catch(System.Exception e)
             {
@@ -284,7 +305,8 @@ public class WorldRenderer : MonoBehaviour
         var task = (ChunkMeshBuildTask)state;
         try
         {
-            BuildMeshData(task);
+            using (meshBuildWorkerMarker.Auto())
+                BuildMeshData(task);
         }
         catch (System.Exception e)
         {

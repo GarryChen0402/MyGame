@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 // Instance-level data packet of one open block-entity panel session (S1 of
 // Docs/改造提案-UI数据流拆分方案.md). The UI reads nothing else. Value types
 // only (no object references, no Unity types), so a future network packet can
@@ -7,21 +9,41 @@
 public class PanelData : ISlotReadSource
 {
     public int SessionId { get; internal set; }   // session identity (= the former PanelModel.ModelId)
+    public readonly string[] SlotNames;           // alignment names (container self-report); index order = contribution order
     public readonly SlotMirror[] Slots;           // value array; slot order = container contribution order
+    public readonly string[] ChannelNames;        // channel alignment names, contribution order
     public readonly int[] Channels;               // generic integer channels; channel semantics live in the UI class
 
     public int Version { get; private set; }
     private bool changed;
 
-    public PanelData(int sessionId, int slotCount, int channelCount)
+    public PanelData(int sessionId, IReadOnlyList<string> slotNames, IReadOnlyList<string> channelNames)
     {
         SessionId = sessionId;
-        Slots = new SlotMirror[slotCount];
-        Channels = new int[channelCount];
+        SlotNames = CopyNames(slotNames);
+        ChannelNames = CopyNames(channelNames);
+        Slots = new SlotMirror[SlotNames.Length];
+        Channels = new int[ChannelNames.Length];
+    }
+
+    private static string[] CopyNames(IReadOnlyList<string> names)
+    {
+        var copy = new string[names.Count];
+        for(int i = 0; i < copy.Length; i++)copy[i] = names[i];
+        return copy;
     }
 
     public int Capacity => Slots.Length;
     public int ChannelCount => Channels.Length;
+
+    // Name -> index lookup, frozen at open time (the layout description and
+    // the UI bind by name in S3); -1 when the name is absent.
+    public int SlotIndex(string name)
+    {
+        for(int i = 0; i < SlotNames.Length; i++)
+            if(SlotNames[i] == name)return i;
+        return -1;
+    }
 
     public SlotMirror GetSlot(int index) => Slots[index];
     public int GetChannel(int index) => Channels[index];

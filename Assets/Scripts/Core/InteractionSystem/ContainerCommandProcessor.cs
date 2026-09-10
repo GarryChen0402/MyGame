@@ -88,8 +88,8 @@ public class ContainerCommandProcessor
 
     // Resolution table: PlayerInventory -> PlayerSlotAccess (no policy);
     // PlayerCrafting grid/result -> the owner-carrying crafting accessors;
-    // Panel slots -> the session accessors pre-resolved by role at open time
-    // (Plain = ContainerSlotAccess, CraftGrid/CraftResult = owner accessors).
+    // Panel slots -> the session accessors self-reported by the work
+    // containers at open time.
     private ISlotAccess Resolve(SlotAddr addr)
     {
         switch(addr.scope)
@@ -150,71 +150,29 @@ public class ContainerCommandProcessor
 
     // ---- panel session lifecycle (BE open/close chain, design §6) ----
 
-    // Session factory for a block-entity panel: registers the PanelData
-    // bindings, assembles the value-only data packet and pre-resolves the
-    // slot accessors by work-container type. The BE itself never reaches the
-    // UI - the packet is the whole data contract (rule R-C1-4).
+    // Session factory for a block-entity panel: the work containers self-report
+    // their panel (names + accessors + close actions) into a build context, and
+    // the contributions are flattened into the value-only data packet and
+    // registered as mirror fill bindings (S2 of Docs/改造提案-UI数据流拆分方案.md;
+    // no per-device dispatch left). The BE itself never reaches the UI - the
+    // packet is the whole data contract (rule R-C1-4).
     public PanelData OpenPanel(BlockEntity be)
     {
-        var session = new ContainerPanelSession();
+        var ctx = new PanelBuildContext();
         if(be != null)
         {
-            bool built = false;
-            foreach(var wc in be.WorkContainers)
-            {
-                if(wc is ProcessingWorkContainer pwc && !built)
-                {
-                    built = BuildFurnaceModel(session, pwc);
-                }
-                else if(wc is CraftingWorkContainer cwc && !built)
-                {
-                    built = BuildCraftingModel(session, cwc);
-                }
-            }
-            if(!built)Debug.LogWarning($"[ContainerCommandProcessor] no matching work container for panel of {be.Definition?.FullName}; opened an empty data packet");
+            foreach(var wc in be.WorkContainers)wc.DescribePanel(ctx);
+            if(ctx.SlotSources.Count == 0)
+                Debug.LogWarning($"[ContainerCommandProcessor] no work container described a panel for {be.Definition?.FullName}; opened an empty data packet");
         }
-        if(session.Data == null)session.Data = new PanelData(nextSessionId++, 0, 0);
-        sessions[session.Data.SessionId] = session;
+        var data = new PanelData(nextSessionId++, ctx.SlotNames, ctx.ChannelNames);
+        var session = new ContainerPanelSession { Data = data, OnClose = ctx.OnClose };
+        foreach(var slot in ctx.SlotSources)session.Accessors.Add(slot.Accessor);
+        MirrorSync.Instance.AddPanelBindings(data, ctx.SlotSources, ctx.ChannelSources);
+        sessions[data.SessionId] = session;
         activeScope = SlotScope.Panel;
-        activeSessionId = session.Data.SessionId;
-        return session.Data;
-    }
-
-    // Furnace: canonical slot order 0 = input, 1 = fuel, 2 = output (each a
-    // capacity-1 container) + the four tick counters as channels. No open
-    // action.
-    private bool BuildFurnaceModel(ContainerPanelSession session, ProcessingWorkContainer pwc)
-    {
-        if(pwc.Input == null || pwc.Fuel == null || pwc.Output == null)return false;
-        var data = new PanelData(nextSessionId++, 3, 4);
-        MirrorSync.Instance.AddPanelSlotBinding(data, 0, pwc.Input.Inv);
-        MirrorSync.Instance.AddPanelSlotBinding(data, 1, pwc.Fuel.Inv);
-        MirrorSync.Instance.AddPanelSlotBinding(data, 2, pwc.Output.Inv);
-        MirrorSync.Instance.AddPanelChannelBinding(data, 0, pwc);
-        session.Accessors.Add(new ContainerSlotAccess(pwc.Input, 0));
-        session.Accessors.Add(new ContainerSlotAccess(pwc.Fuel, 0));
-        session.Accessors.Add(new ContainerSlotAccess(pwc.Output, 0));
-        session.Data = data;
-        return true;
-    }
-
-    // Workbench: canonical slot order = grid cells 0..8, result = 9. The
-    // preview refresh on open and clear on close moved here from the UI panel
-    // (design §6.1/§6.2).
-    private bool BuildCraftingModel(ContainerPanelSession session, CraftingWorkContainer cwc)
-    {
-        if(cwc.Grid == null || cwc.Result == null)return false;
-        int grid = cwc.Grid.Inv.MaxSlotCount;
-        var data = new PanelData(nextSessionId++, grid + 1, 0);
-        MirrorSync.Instance.AddPanelSlotBinding(data, 0, cwc.Grid.Inv);
-        MirrorSync.Instance.AddPanelSlotBinding(data, grid, cwc.Result.Inv);
-        for(int i = 0; i < grid; i++)session.Accessors.Add(new CraftingGridSlotAccess(cwc.Grid, i, cwc));
-        session.Accessors.Add(new CraftingResultSlotAccess(cwc.Result, 0, cwc));
-        session.OnClose = () => cwc.ClearPreview();
-        session.Data = data;
-
-        cwc.RefreshPreview();   // open action: rebuild the live preview over persisted grid materials
-        return true;
+        activeSessionId = data.SessionId;
+        return data;
     }
 
     // Panel close command (fired by UIManager.CloseUI before hiding): runs

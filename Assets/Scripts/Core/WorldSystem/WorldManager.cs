@@ -1,6 +1,7 @@
 
 using System.Collections.Generic;
 using System.Threading;
+using Unity.Profiling;
 using UnityEngine;
 
 public class WorldManager
@@ -28,6 +29,17 @@ public class WorldManager
     private readonly Queue<ChunkGenTask> genQueue = new();
     private readonly List<ChunkGenTask> genInflight = new();
     private const int MaxConcurrentChunkGens = 6;
+
+    // Profiler markers (normal Profiler, no Deep Profile needed); the worker
+    // marker records per-chunk-task cost on the thread-pool lane.
+    private static readonly ProfilerMarker chunkGenPumpMarker = new ProfilerMarker("World.ChunkGenPump");
+    private static readonly ProfilerMarker chunkGenWorkerMarker = new ProfilerMarker("World.ChunkGenWorker");
+    private static readonly ProfilerMarker saveTickMarker = new ProfilerMarker("World.SaveTick");
+    private static readonly ProfilerMarker entitiesMarker = new ProfilerMarker("World.Entities");
+    private static readonly ProfilerMarker loadCenterMarker = new ProfilerMarker("World.LoadCenter");
+    private static readonly ProfilerMarker blockEntitiesMarker = new ProfilerMarker("World.BlockEntities");
+    private static readonly ProfilerMarker randomTickMarker = new ProfilerMarker("World.RandomTick");
+    private static readonly ProfilerMarker itemEntitiesMarker = new ProfilerMarker("World.ItemEntities");
 
     // Multi-focus registration (decision C). The enter-world sequence registers
     // its PlayerLoadFocus before the initial ring submission so completed
@@ -174,19 +186,22 @@ public class WorldManager
     // both, so the game state's pump cadence is unchanged.
     public void PumpChunkGeneration()
     {
-        while(genQueue.Count > 0 && genInflight.Count < MaxConcurrentChunkGens)
+        using (chunkGenPumpMarker.Auto())
         {
-            ChunkGenTask task = genQueue.Dequeue();
-            genInflight.Add(task);
-            ThreadPool.QueueUserWorkItem(ComputeChunkGeneration, task);
-        }
-
-        for(int i = genInflight.Count - 1; i >= 0; i--)
-        {
-            if(genInflight[i].IsDown)
+            while(genQueue.Count > 0 && genInflight.Count < MaxConcurrentChunkGens)
             {
-                CompleteChunkGeneration(genInflight[i]);
-                genInflight.RemoveAt(i);
+                ChunkGenTask task = genQueue.Dequeue();
+                genInflight.Add(task);
+                ThreadPool.QueueUserWorkItem(ComputeChunkGeneration, task);
+            }
+
+            for(int i = genInflight.Count - 1; i >= 0; i--)
+            {
+                if(genInflight[i].IsDown)
+                {
+                    CompleteChunkGeneration(genInflight[i]);
+                    genInflight.RemoveAt(i);
+                }
             }
         }
     }
@@ -196,16 +211,19 @@ public class WorldManager
         var task = (ChunkGenTask)state;
         try
         {
-            // Save-backed chunks load from disk; a missing or corrupt file falls
-            // back to deterministic generation.
-            if(task.LoadFromDisk)
+            using (chunkGenWorkerMarker.Auto())
             {
-                if(!WorldSaveManager.Instance.TryLoadChunkFromDisk(task.Dimension, task.Chunk))
+                // Save-backed chunks load from disk; a missing or corrupt file falls
+                // back to deterministic generation.
+                if(task.LoadFromDisk)
+                {
+                    if(!WorldSaveManager.Instance.TryLoadChunkFromDisk(task.Dimension, task.Chunk))
+                        task.Dimension.FillNewChunk(task.Chunk);
+                }
+                else
+                {
                     task.Dimension.FillNewChunk(task.Chunk);
-            }
-            else
-            {
-                task.Dimension.FillNewChunk(task.Chunk);
+                }
             }
         }
         catch(System.Exception e)
@@ -238,12 +256,12 @@ public class WorldManager
     public void Tick(float dt)
     {
         PumpChunkGeneration();
-        WorldSaveManager.Instance.Tick(dt);
-        EntityManager.Instance.Update(dt);
-        UpdateLoadCenter();                  // after the entity batch: the player moved this tick already (rules L1/L2)
-        BlockEntityManager.Instance.Tick(dt);
-        RandomTickSystem.Instance.Tick(dt);   // MC random ticks: 20Hz block-domain step (design doc 随机刻系统-代码设计 §3)
-        ItemEntityManager.Instance.Update();
+        using (saveTickMarker.Auto()) WorldSaveManager.Instance.Tick(dt);
+        using (entitiesMarker.Auto()) EntityManager.Instance.Update(dt);
+        using (loadCenterMarker.Auto()) UpdateLoadCenter();   // after the entity batch: the player moved this tick already (rules L1/L2)
+        using (blockEntitiesMarker.Auto()) BlockEntityManager.Instance.Tick(dt);
+        using (randomTickMarker.Auto()) RandomTickSystem.Instance.Tick(dt);   // MC random ticks: 20Hz block-domain step (design doc 随机刻系统-代码设计 §3)
+        using (itemEntitiesMarker.Auto()) ItemEntityManager.Instance.Update();
     }
 
     // Load-center driver on the game tick (rule L2): every dynamic focus

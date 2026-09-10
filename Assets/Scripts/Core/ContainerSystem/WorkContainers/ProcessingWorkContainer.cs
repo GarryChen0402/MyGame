@@ -118,6 +118,20 @@ public class ProcessingWorkContainer : WorkContainer, IChannelSource
         data.ApplyChannel(start + 3, TotalTickTime);         // cookingTotalTime
     }
 
+    // ---- panel self-report ----
+
+    // Furnace panel: one slot per data container (input/fuel/output) and the
+    // four tick counters as channels. Names follow vanilla's furnace menu
+    // roles; channel order mirrors the ReadChannels order above.
+    public override void DescribePanel(PanelBuildContext ctx)
+    {
+        if(Input == null || Fuel == null || Output == null)return;   // unbound container: contributes nothing
+        ctx.AddSlot("input", Input.Inv, 0, new ContainerSlotAccess(Input, 0));
+        ctx.AddSlot("fuel", Fuel.Inv, 0, new ContainerSlotAccess(Fuel, 0));
+        ctx.AddSlot("output", Output.Inv, 0, new ContainerSlotAccess(Output, 0));
+        ctx.AddChannels(new[] { "fuel_left", "fuel_total", "cook_progress", "cook_total" }, this);
+    }
+
     private RecipeContent FindRecipe()
     {
         if (supportedRecipeTypes == null) return null;

@@ -54,10 +54,25 @@ public class CraftingWorkContainer : WorkContainer, ICraftingGridHost
     public void OnGridChanged() => solver?.OnGridChanged();
     public void OnResultTaken() => solver?.OnResultTaken();
 
-    // Public API kept for the UI (CraftingTableUI calls these on re-open /
-    // close, before and after solver assembly alike).
+    // Panel open/close actions: DescribePanel refreshes the preview on open
+    // (over persisted grid materials) and chains ClearPreview as the close
+    // action. Both are safe before solver assembly (null-conditional).
     public void RefreshPreview() => solver?.RefreshPreview();
     public void ClearPreview() => solver?.ClearPreview();
+
+    // ---- panel self-report ----
+
+    // Workbench panel: grid cells "grid0".."gridN-1" + the "result" slot,
+    // each with its owner-carrying accessor. The preview refresh on open and
+    // clear on close live here (the former BuildCraftingModel duties).
+    public override void DescribePanel(PanelBuildContext ctx)
+    {
+        if(Grid == null || Result == null)return;   // unbound container: contributes nothing
+        ctx.AddSlots("grid", Grid.Inv, Grid.Inv.MaxSlotCount, i => new CraftingGridSlotAccess(Grid, i, this));
+        ctx.AddSlot("result", Result.Inv, 0, new CraftingResultSlotAccess(Result, 0, this));
+        ctx.AddOnClose(ClearPreview);
+        RefreshPreview();   // open action: rebuild the live preview over persisted grid materials
+    }
 
     // Instant crafting: no periodic work; Tick stays empty to keep the
     // container pipeline uniform (BlockEntityManager ticks at 20 Hz).

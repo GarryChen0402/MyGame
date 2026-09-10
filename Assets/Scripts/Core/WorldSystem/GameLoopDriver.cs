@@ -1,3 +1,4 @@
+using Unity.Profiling;
 using UnityEngine;
 
 // Sole frame entry that steps the world logic on a fixed 20Hz game clock
@@ -14,6 +15,13 @@ using UnityEngine;
 public class GameLoopDriver : MonoBehaviour
 {
     private const int MaxCatchUpTicks = 5;
+
+    // Profiler markers (normal Profiler, no Deep Profile needed): frame-level
+    // breakdown of the catch-up tick loop, chunk pump, server poll and mirror sync.
+    private static readonly ProfilerMarker tickLoopMarker = new ProfilerMarker("GameLoop.Ticks");
+    private static readonly ProfilerMarker chunkPumpMarker = new ProfilerMarker("GameLoop.ChunkPump");
+    private static readonly ProfilerMarker pollMarker = new ProfilerMarker("GameLoop.Poll");
+    private static readonly ProfilerMarker mirrorSyncMarker = new ProfilerMarker("GameLoop.MirrorSync");
 
     // Debug acceptance toggle (rule R-C2-7, delivered at the end of C-1):
     // freezes tick settlement while render frames keep running. Mirror sync
@@ -35,12 +43,15 @@ public class GameLoopDriver : MonoBehaviour
         {
             accumulator += Time.deltaTime;
             int ticks = 0;
-            while(accumulator >= GameClock.TickInterval && ticks < MaxCatchUpTicks)
+            using (tickLoopMarker.Auto())
             {
-                accumulator -= GameClock.TickInterval;
-                GameClock.TickCount++;
-                WorldManager.Instance.Tick(GameClock.TickInterval);
-                ticks++;
+                while(accumulator >= GameClock.TickInterval && ticks < MaxCatchUpTicks)
+                {
+                    accumulator -= GameClock.TickInterval;
+                    GameClock.TickCount++;
+                    WorldManager.Instance.Tick(GameClock.TickInterval);
+                    ticks++;
+                }
             }
         }
         else if(WorldManager.Instance.Dimensions.Count > 0)
@@ -50,19 +61,22 @@ public class GameLoopDriver : MonoBehaviour
             // logic is frozen (enter-world / loading). No double pump when
             // unfrozen - Tick owns the pump in the game state. Dimensions
             // empty (main menu) means zero work and no queue to pump.
-            WorldManager.Instance.PumpChunkGeneration();
+            using (chunkPumpMarker.Auto())
+                WorldManager.Instance.PumpChunkGeneration();
         }
         GameClock.Alpha = PauseLogic ? 0f : Mathf.Clamp01(accumulator / GameClock.TickInterval);
 
         // Async enter-world bridge (Part B §3.3): deliver a finished
         // WorldServer worker result on the main thread - before the render
         // side syncs, so the session's submission chain lands in this frame.
-        WorldServer.Instance.Poll();
+        using (pollMarker.Auto())
+            WorldServer.Instance.Poll();
 
         // Mirror sync point (Phase C rule R-C1-0): after the fixed ticks ran
         // (or after a frozen frame, copying identical values), refresh every
         // bound mirror for the render side of this frame.
-        MirrorSync.Instance.Sync();
+        using (mirrorSyncMarker.Auto())
+            MirrorSync.Instance.Sync();
     }
 
     private void OnApplicationQuit()

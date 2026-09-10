@@ -77,19 +77,45 @@ public class MirrorSync
         return mirror;
     }
 
-    // Registers one Inventory as a mirrored segment inside an open session's
-    // PanelData (writes data slot range [start, start + MaxSlotCount)); the
-    // session owns the binding lifetime (RemovePanelBindings).
-    public void AddPanelSlotBinding(PanelData data, int start, Inventory source)
+    // Registers the work-container panel contributions into the session's
+    // data packet: slot contributions merge into runs over the same source
+    // (one binding copies a whole consecutive run per sync pass), channels
+    // lay out in contribution order. The session owns the binding lifetime
+    // (RemovePanelBindings).
+    public void AddPanelBindings(PanelData data, IReadOnlyList<PanelSlotSource> slots, IReadOnlyList<ChannelSource> channels)
     {
-        bindings.Add(new PanelSlotBinding { Data = data, Start = start, Source = source });
-    }
-
-    // Registers one channel source (work-container tick state read as ints,
-    // the former progress mirror - same session lifetime).
-    public void AddPanelChannelBinding(PanelData data, int start, IChannelSource source)
-    {
-        bindings.Add(new PanelChannelBinding { Data = data, Start = start, Source = source });
+        if(data == null)return;
+        if(slots != null)
+        {
+            int runStart = 0;
+            while(runStart < slots.Count)
+            {
+                var first = slots[runStart];
+                int runEnd = runStart + 1;
+                while(runEnd < slots.Count
+                    && slots[runEnd].Source == first.Source
+                    && slots[runEnd].SourceIndex == first.SourceIndex + (runEnd - runStart))
+                    runEnd++;
+                bindings.Add(new PanelSlotBinding
+                {
+                    Data = data,
+                    Start = runStart,
+                    Source = first.Source,
+                    SourceStart = first.SourceIndex,
+                    Count = runEnd - runStart
+                });
+                runStart = runEnd;
+            }
+        }
+        if(channels != null)
+        {
+            int start = 0;
+            foreach(var channel in channels)
+            {
+                bindings.Add(new PanelChannelBinding { Data = data, Start = start, Source = channel.Source });
+                start += channel.Names.Length;
+            }
+        }
     }
 
     // Drops every binding that writes into this session's data packet.
@@ -143,28 +169,32 @@ public class MirrorSync
         public override void Sync() => Mirror?.Apply(Source);
     }
 
-    // Panel path: many sources write into one shared value packet. The slot
-    // binding mirrors ContainerBinding but writes into a data segment; the
-    // declared segment length wins over a larger source container.
+    // Panel path: many sources write into one shared value packet. One
+    // binding copies a consecutive run of panel slots from a consecutive run
+    // of source cells; the declared run length wins over a larger source
+    // container.
     private class PanelSlotBinding : Binding
     {
         public PanelData Data;
-        public int Start;
+        public int Start;        // first panel slot of the run
         public Inventory Source;
+        public int SourceStart;  // first source cell copied
+        public int Count;        // cells in the run
 
         public override void Sync()
         {
             if(Data == null)return;
             if(Source == null)
             {
-                for(int i = Start; i < Data.Capacity; i++)Data.ApplySlot(i, 0, 0);
+                int last = System.Math.Min(Start + Count, Data.Capacity);
+                for(int i = Start; i < last; i++)Data.ApplySlot(i, 0, 0);
                 Data.CommitChanged();
                 return;
             }
-            int end = System.Math.Min(Source.MaxSlotCount, Data.Capacity - Start);
+            int end = System.Math.Min(System.Math.Min(Count, Source.MaxSlotCount - SourceStart), Data.Capacity - Start);
             for(int i = 0; i < end; i++)
             {
-                var stack = Source.GetItemStackAt(i);
+                var stack = Source.GetItemStackAt(SourceStart + i);
                 Data.ApplySlot(Start + i, stack?.itemId ?? 0, stack?.amount ?? 0);
             }
             Data.CommitChanged();
