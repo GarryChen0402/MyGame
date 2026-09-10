@@ -22,6 +22,36 @@ public partial class Minecraft
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_front", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_front"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_side", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_side"));
         ResourceSystem.Instance.RegisterTexture(ModId, "crafting_table_top", Resources.Load<Texture2D>("Textures/Blocks/crafting_table_top"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "oak_log_side", Resources.Load<Texture2D>("Textures/Blocks/oak_log_side"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "oak_log_top_bottom", Resources.Load<Texture2D>("Textures/Blocks/oak_log_top_bottom"));
+        ResourceSystem.Instance.RegisterTexture(ModId, "oak_sapling", Resources.Load<Texture2D>("Textures/Blocks/oak_sapling"));
+        // Leaves: one neutral greyscale base map (white_leaf) is shared by every
+        // leaf species; the species colour is baked in at registration. The base
+        // map itself is a working asset and is not registered.
+        ResourceSystem.Instance.RegisterTexture(ModId, "oak_leaves",
+            TintedTexture(Resources.Load<Texture2D>("Textures/Blocks/white_leaf"), OakLeavesTint));
+    }
+
+    // Species colour of oak leaves (design doc 树木系统 §3.5). Vanilla
+    // semantics: the rendered leaf = base map * tint, multiplied per channel as
+    // sRGB bytes (no linear-space conversion), alpha kept as-is.
+    private static readonly Color32 OakLeavesTint = new(93, 167, 23, 255);
+
+    // CPU-side tint of a greyscale base map, producing a fresh readable
+    // texture for the atlas packer (the source asset is never modified).
+    private static Texture2D TintedTexture(Texture2D source, Color32 tint)
+    {
+        var pixels = source.GetPixels32();
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i].r = (byte)(pixels[i].r * tint.r / 255);
+            pixels[i].g = (byte)(pixels[i].g * tint.g / 255);
+            pixels[i].b = (byte)(pixels[i].b * tint.b / 255);
+        }
+        var tinted = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+        tinted.SetPixels32(pixels);
+        tinted.Apply();
+        return tinted;
     }
 
     // ---- R: crack overlay textures ----

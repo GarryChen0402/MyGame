@@ -39,5 +39,62 @@ public partial class Minecraft
                 }
             }
         });
+
+        // ---- tree loop (design doc 树木系统 §7) ----
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "oak_log",
+            Groups = new()
+            {
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_log", Amount = 1 }, Weight = 1f }
+                } }
+            }
+        });
+
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "oak_sapling",
+            Groups = new()
+            {
+                // Misplaced saplings come back on break, so an accidental plant
+                // never consumes the drop.
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_sapling", Amount = 1 }, Weight = 1f }
+                } }
+            }
+        });
+
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "oak_leaves",
+            Groups = new()
+            {
+                // ~46 leaves per tree at 5% = ~2.3 saplings, so one grown tree
+                // pays for the next one.
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_sapling", Amount = 1 }, Weight = 0.05f }
+                } }
+            }
+        });
+
+        ResourceSystem.Instance.LootTables.Register(new LootTableDefinition
+        {
+            modId = ModId, name = "grass",
+            Groups = new()
+            {
+                // Interim bootstrap: the first sapling has to come from somewhere
+                // while natural tree generation is postponed (design doc §6).
+                // 50%: the entry point has to be reachable by hand-testing a
+                // handful of grass blocks.
+                new LootGroup { Condition = null, Entries = new()
+                {
+                    new LootEntry { ItemInfo = new ItemLootInfo { ItemFullName = $"{ModId}:oak_sapling", Amount = 1 }, Weight = 0.5f }
+                } }
+            }
+        });
     }
 }

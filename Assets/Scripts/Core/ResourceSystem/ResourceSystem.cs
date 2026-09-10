@@ -59,8 +59,24 @@ public partial class ResourceSystem
     private Texture2D blockAtlas;
     public Texture2D BlockAtlas => blockAtlas;
 
-    // BlockMaterial
-    public Material BlockMaterial {get;} = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+    // BlockMaterial: URP/Lit with alpha clipping switched on, so the atlas's
+    // cutout textures (leaves holes, the sapling cross, future plants) discard
+    // their transparent pixels instead of rendering them black. Clipping stays
+    // on the opaque pass - no blending, no sorting - and alpha=1 pixels (every
+    // pre-existing texture) are never clipped (design doc 树木系统 §8).
+    // Caveat for player builds: _ALPHATEST_ON is a local shader-feature
+    // keyword, so the variant has to survive stripping (shader variant
+    // collection, or a material asset with the toggle on).
+    public Material BlockMaterial {get;} = CreateBlockMaterial();
+
+    private static Material CreateBlockMaterial()
+    {
+        var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        material.SetFloat("_AlphaClip", 1f);
+        material.SetFloat("_Cutoff", 0.5f);
+        material.EnableKeyword("_ALPHATEST_ON");
+        return material;
+    }
 
     // Mob hurt-flash material: the block atlas under Entity/HurtFlash
     // (Resources/Shaders/EntityHurtFlash.shader), so mob shells can be tinted

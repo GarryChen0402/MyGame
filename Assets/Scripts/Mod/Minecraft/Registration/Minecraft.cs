@@ -17,6 +17,7 @@ public partial class Minecraft : IMod, ISteppedModRegistration
     // RegisterStep order below is unchanged and still fixes id assignment.
     private CustomModel cube;
     private CustomModel stairModel;
+    private CustomModel crossModel;
     private List<string> allIds;
     private BlockDefinition air;
     private BlockDefinition stoneDefinition;
@@ -26,15 +27,25 @@ public partial class Minecraft : IMod, ISteppedModRegistration
     private BlockDefinition cobblestoneDefinition;
     private BlockDefinition furnaceDefinition;
     private BlockDefinition craftingTableDefinition;
+    private BlockDefinition oakLogDefinition;
+    private BlockDefinition oakLeavesDefinition;
+    private BlockDefinition oakSaplingDefinition;
 
     // Cached block ids used by biome fill columns.
     private static ushort grassId, dirtId, stoneId;
 
-    // Default state ids for the grass random-tick spread, resolved lazily on
-    // first use: GetDefaultState needs the PostFreeze state table, which does
-    // not exist during registration (sentinel ushort.MaxValue = unresolved).
+    // Cached block ids used by the sapling growth hook (the sapling's own id is
+    // not needed: growth only writes logs and leaves).
+    private static ushort oakLogId, oakLeavesId;
+
+    // Default state ids for the random-tick hooks (grass spread, sapling
+    // growth), resolved lazily on first use: GetDefaultState needs the
+    // PostFreeze state table, which does not exist during registration
+    // (sentinel ushort.MaxValue = unresolved).
     private static ushort grassDefaultStateId = ushort.MaxValue;
     private static ushort dirtDefaultStateId = ushort.MaxValue;
+    private static ushort oakLogDefaultStateId = ushort.MaxValue;
+    private static ushort oakLeavesDefaultStateId = ushort.MaxValue;
 
     private static DimensionDefinition testDi = new()
     {

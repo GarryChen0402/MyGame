@@ -15,5 +15,9 @@ public partial class Minecraft
         stairModel.name = "stair";
         ResourceSystem.Instance.CustomModels.Register(stairModel);
         allIds = stairModel.GetAllFaceId();
+        crossModel = BlockModelParser.Parser(Resources.Load<TextAsset>("Models/cross").text);
+        crossModel.modId = ModId;
+        crossModel.name = "cross";
+        ResourceSystem.Instance.CustomModels.Register(crossModel);
     }
 }
