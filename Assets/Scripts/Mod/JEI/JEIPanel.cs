@@ -7,6 +7,8 @@ using UnityEngine.UI;
 // recipe fill / drag-delete). P1: a right-edge strip with the virtualized item
 // grid, live search and cheat-mode give. Visibility follows the input stack
 // (§6.8): shown only while a world panel is open, under a Ctrl+O master switch.
+// P7: R/U and the toggle arrive via the UIManager action ring - this class
+// only exposes ToggleFollow / OnRecipeKey as the registered callbacks.
 public class JEIPanel : MonoBehaviour, IScrollHandler
 {
     private const float StripWidth = 116f;   // 2 columns x 50 pitch + padding
@@ -127,10 +129,6 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
 
     private void Update()
     {
-        // Polled even while hidden: in game state (no panel) the switch can
-        // still be flipped, matching "the toggle is independent of panels".
-        if(KeyBindingManager.Instance.WasPressed("jei:toggle"))followEnabled = !followEnabled;
-
         bool visible = followEnabled && IsWorldPanelOpen();
         if(content.activeSelf != visible)
         {
@@ -149,20 +147,27 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
             scrollRow = 0;
             Rebind();
         }
-        if(!visible)return;
-
-        // R/U (design §6.4): polled every visible frame, context-gated inside
-        // WasPressed; the text-focus guard silences them while the search box
-        // has focus.
-        bool wantRecipes = KeyBindingManager.Instance.WasPressed("jei:show_recipes");
-        bool wantUses = KeyBindingManager.Instance.WasPressed("jei:show_uses");
-        if(wantRecipes || wantUses)OnRecipeKey(wantRecipes);
     }
 
-    // R/U semantics: a hovered item opens its recipe page (or navigates the
-    // open one); with no hover target the same keys retreat to the item list.
-    private void OnRecipeKey(bool recipesNotUses)
+    // Ctrl+O "follow panels" master switch (P7: no longer self-polled - the
+    // UIManager action ring routes the jei:toggle ui_action here; flippable in
+    // any context, the visibility recompute happens in Update).
+    public void ToggleFollow()
     {
+        followEnabled = !followEnabled;
+    }
+
+    // R/U semantics (design §6.4), routed from the UIManager action ring (P7):
+    // a hovered item opens its recipe page (or navigates the open one); with
+    // no hover target the same keys retreat to the item list. The hover lookup
+    // stays on the general CurrentHoverInfo feed - panel slots and JEI cells
+    // alike.
+    public void OnRecipeKey(bool recipesNotUses)
+    {
+        // The ring polls regardless of JEI visibility (its slot gate only
+        // concerns the hovered slot); keep the old scope: a hidden JEI ignores
+        // R/U. Covers "follow off" and "no panel open" alike.
+        if(!followEnabled || !IsWorldPanelOpen())return;
         var ui = UIManager.Instance;
         if(ui != null && ui.DragActive)return;   // hover feed is stale mid-drag
         IHoverItemSource source = HoverSource.Validate(ui == null ? null : ui.CurrentHoverInfo);

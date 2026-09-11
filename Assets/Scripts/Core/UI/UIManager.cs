@@ -163,9 +163,11 @@ public class UIManager : MonoBehaviour
     // ---- UI action ring (P6 of Docs/UI槽位编码与解析映射-实施文档.md) ----
 
     // Key-driven ui_actions poll here (single point): press → slot gate (only
-    // slot-targeted actions; the hovered slot must declare the id) → response
+    // slot-targeted actions; a hovered slot must declare the id) → response
     // callback. Callback-less actions stay with their legacy pollers (P6: the
-    // three open-entry actions in PlayerInputHandler).
+    // three open-entry actions in PlayerInputHandler). No hovered slot at all
+    // is outside the gate's reach (P7: consumers filter their own hover
+    // domain, e.g. JEI cells) - such a press still routes to the callback.
     private void PollUIActions()
     {
         var keys = KeyBindingManager.Instance;
@@ -178,8 +180,11 @@ public class UIManager : MonoBehaviour
             if(action.SlotTargeted)
             {
                 var hover = CurrentHoverSlotUI;
-                var entry = hover == null ? null : hover.BindingEntry;
-                if(entry == null || !entry.ActionIds.Contains(action.FullName))continue;
+                if(hover != null)
+                {
+                    var entry = hover.BindingEntry;
+                    if(entry == null || !entry.ActionIds.Contains(action.FullName))continue;
+                }
                 action.Callback(new UIActionContext { Slot = hover });
             }
             else action.Callback(new UIActionContext());
