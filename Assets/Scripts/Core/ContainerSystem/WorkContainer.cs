@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 public abstract class WorkContainer
 {
@@ -34,12 +35,14 @@ public class WorkContainerDefinition : ResourceType
     public System.Func<WorkContainerConfig, WorkContainer> Factory;
 }
 
-// One slot contribution of a panel: the alignment name, the mirrored source
-// cell (Source at SourceIndex) and the click accessor.
+// One slot contribution of a panel: the container-declared slot code, the
+// source container + cell it mirrors and the click accessor. The name IS the
+// container's own data-side code (P2: the code table lives on the container,
+// so the panel packet keys and the pack keys can never drift apart).
 public class PanelSlotSource
 {
     public string Name;
-    public Inventory Source;
+    public InventoryDataContainer Container;
     public int SourceIndex;
     public ISlotAccess Accessor;
 }
@@ -65,15 +68,24 @@ public class PanelBuildContext
     // contribution order (e.g. the crafting preview clear).
     public System.Action OnClose;
 
-    public void AddSlot(string name, Inventory source, int sourceIndex, ISlotAccess accessor)
-        => SlotSources.Add(new PanelSlotSource { Name = name, Source = source, SourceIndex = sourceIndex, Accessor = accessor });
-
-    // Grid-style bulk contribution: emits "prefix0".."prefixN-1", one
-    // consecutive source cell each.
-    public void AddSlots(string namePrefix, Inventory source, int count, System.Func<int, ISlotAccess> accessorFactory)
+    // One container cell, named by the container's own slot code (P2); a cell
+    // without a declared code drops the contribution with a warning.
+    public void AddSlot(InventoryDataContainer container, int sourceIndex, ISlotAccess accessor)
     {
-        for(int i = 0; i < count; i++)
-            SlotSources.Add(new PanelSlotSource { Name = namePrefix + i, Source = source, SourceIndex = i, Accessor = accessorFactory(i) });
+        string code = container?.SlotCode(sourceIndex);
+        if(code == null)
+        {
+            Debug.LogWarning($"[PanelBuildContext] container '{container?.Name}' has no slot code for cell {sourceIndex}; contribution skipped");
+            return;
+        }
+        SlotSources.Add(new PanelSlotSource { Name = code, Container = container, SourceIndex = sourceIndex, Accessor = accessor });
+    }
+
+    // Grid-style bulk contribution: one consecutive source cell per declared
+    // code.
+    public void AddSlots(InventoryDataContainer container, int count, System.Func<int, ISlotAccess> accessorFactory)
+    {
+        for(int i = 0; i < count; i++) AddSlot(container, i, accessorFactory(i));
     }
 
     public void AddChannels(string[] names, IChannelSource source)

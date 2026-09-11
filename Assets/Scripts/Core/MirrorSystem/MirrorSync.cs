@@ -37,8 +37,8 @@ public class MirrorSync
     {
         var p = Player.Instance;
         PlayerInventoryMirror = AddContainerBinding(p.inventory);
-        PlayerCraftGridMirror = AddContainerBinding(p.CraftingGrid.Inv);
-        PlayerCraftResultMirror = AddContainerBinding(p.CraftingResult.Inv);
+        PlayerCraftGridMirror = AddContainerBinding(p.CraftingGrid);
+        PlayerCraftResultMirror = AddContainerBinding(p.CraftingResult);
         PlayerHeldMirror = new HeldMirror();
         bindings.Add(new HeldBinding { Mirror = PlayerHeldMirror, Source = p.CursorStack });
         PlayerMirror = new PlayerMirror();
@@ -71,16 +71,28 @@ public class MirrorSync
     // resident bindings above); block-entity panel containers go through the
     // PanelData bindings below instead.
     public ContainerMirror AddContainerBinding(Inventory source)
+        => AddContainerBinding(source, null);
+
+    // Container-level overload (P2): the container doubles as the pack source,
+    // so its resident mirror carries the packed snapshot alongside the value
+    // slots (player craft grid/result; player backpack stays value-only until
+    // the backpack containerization lands).
+    public ContainerMirror AddContainerBinding(InventoryDataContainer container)
+        => AddContainerBinding(container?.Inv, container);
+
+    private ContainerMirror AddContainerBinding(Inventory source, DataContainer packSource)
     {
         var mirror = new ContainerMirror(source != null ? source.MaxSlotCount : 0);
-        bindings.Add(new ContainerBinding { Mirror = mirror, Source = source });
+        bindings.Add(new ContainerBinding { Mirror = mirror, Source = source, PackSource = packSource });
         return mirror;
     }
 
     // Registers the work-container panel contributions into the session's
-    // data packet: slot contributions merge into runs over the same source
+    // data packet: slot contributions merge into runs over the same container
     // (one binding copies a whole consecutive run per sync pass), channels
-    // lay out in contribution order. The session owns the binding lifetime
+    // lay out in contribution order. Each container's first run also owns the
+    // container's pack entry (P2, D3): the run rebuilds the pack when its
+    // value pass changed something. The session owns the binding lifetime
     // (RemovePanelBindings).
     public void AddPanelBindings(PanelData data, IReadOnlyList<PanelSlotSource> slots, IReadOnlyList<ChannelSource> channels)
     {
@@ -88,20 +100,28 @@ public class MirrorSync
         if(slots != null)
         {
             int runStart = 0;
+            int packIndex = -1;
+            InventoryDataContainer runContainer = null;
             while(runStart < slots.Count)
             {
                 var first = slots[runStart];
+                if(first.Container != runContainer)
+                {
+                    runContainer = first.Container;
+                    packIndex++;
+                }
                 int runEnd = runStart + 1;
                 while(runEnd < slots.Count
-                    && slots[runEnd].Source == first.Source
+                    && slots[runEnd].Container == runContainer
                     && slots[runEnd].SourceIndex == first.SourceIndex + (runEnd - runStart))
                     runEnd++;
                 bindings.Add(new PanelSlotBinding
                 {
                     Data = data,
                     Start = runStart,
-                    Source = first.Source,
+                    Container = runContainer,
                     SourceStart = first.SourceIndex,
+                    PackIndex = packIndex,
                     Count = runEnd - runStart
                 });
                 runStart = runEnd;
@@ -134,27 +154,36 @@ public class MirrorSync
         public abstract void Sync();
     }
 
-    // Player backpack sources are raw Inventory; block-entity container
-    // sources are container.Inv. Both read the same way.
+    // Player backpack sources are raw Inventory (no pack); container-level
+    // sources also carry the pack contract (PackSource) so the mirror gets a
+    // packed snapshot alongside the values.
     private class ContainerBinding : Binding
     {
         public ContainerMirror Mirror;
         public Inventory Source;
+        public DataContainer PackSource;
 
         public override void Sync()
         {
             if(Mirror == null)return;
+            bool valueChanged = false;
             if(Source == null)
             {
-                for(int i = 0; i < Mirror.Capacity; i++)Mirror.Apply(i, 0, 0);
-                Mirror.CommitChanged();
-                return;
+                for(int i = 0; i < Mirror.Capacity; i++)valueChanged |= Mirror.Apply(i, 0, 0);
             }
-            for(int i = 0; i < Mirror.Capacity; i++)
+            else
             {
-                var stack = Source.GetItemStackAt(i);
-                Mirror.Apply(i, stack?.itemId ?? 0, stack?.amount ?? 0);
+                for(int i = 0; i < Mirror.Capacity; i++)
+                {
+                    var stack = Source.GetItemStackAt(i);
+                    valueChanged |= Mirror.Apply(i, stack?.itemId ?? 0, stack?.amount ?? 0);
+                }
             }
+            // D5: rebuild the pack only when the value pass changed something
+            // (or before the first pack exists), so a static container never
+            // re-forms its string every frame.
+            if(PackSource != null && (valueChanged || Mirror.Pack == null))
+                Mirror.ApplyPack(PackSource.GetPackData());
             Mirror.CommitChanged();
         }
     }
@@ -169,34 +198,42 @@ public class MirrorSync
         public override void Sync() => Mirror?.Apply(Source);
     }
 
-    // Panel path: many sources write into one shared value packet. One
+    // Panel path: many containers write into one shared value packet. One
     // binding copies a consecutive run of panel slots from a consecutive run
-    // of source cells; the declared run length wins over a larger source
-    // container.
+    // of container cells; the declared run length wins over a larger source
+    // container. The binding doubles as the pack rebuild point of its run
+    // (P2, D3/D5): the container's pack contract re-forms the text only when
+    // the value pass changed something (or before the first pack exists).
     private class PanelSlotBinding : Binding
     {
         public PanelData Data;
         public int Start;        // first panel slot of the run
-        public Inventory Source;
+        public InventoryDataContainer Container;
         public int SourceStart;  // first source cell copied
+        public int PackIndex;    // pack entry of the session this run owns
         public int Count;        // cells in the run
 
         public override void Sync()
         {
             if(Data == null)return;
-            if(Source == null)
+            var source = Container?.Inv;
+            bool valueChanged = false;
+            if(source == null)
             {
                 int last = System.Math.Min(Start + Count, Data.Capacity);
-                for(int i = Start; i < last; i++)Data.ApplySlot(i, 0, 0);
-                Data.CommitChanged();
-                return;
+                for(int i = Start; i < last; i++)valueChanged |= Data.ApplySlot(i, 0, 0);
             }
-            int end = System.Math.Min(System.Math.Min(Count, Source.MaxSlotCount - SourceStart), Data.Capacity - Start);
-            for(int i = 0; i < end; i++)
+            else
             {
-                var stack = Source.GetItemStackAt(SourceStart + i);
-                Data.ApplySlot(Start + i, stack?.itemId ?? 0, stack?.amount ?? 0);
+                int end = System.Math.Min(System.Math.Min(Count, source.MaxSlotCount - SourceStart), Data.Capacity - Start);
+                for(int i = 0; i < end; i++)
+                {
+                    var stack = source.GetItemStackAt(SourceStart + i);
+                    valueChanged |= Data.ApplySlot(Start + i, stack?.itemId ?? 0, stack?.amount ?? 0);
+                }
             }
+            if(Container != null && (valueChanged || !Data.HasPack(PackIndex)))
+                Data.SetPack(PackIndex, Container.GetPackData());
             Data.CommitChanged();
         }
     }

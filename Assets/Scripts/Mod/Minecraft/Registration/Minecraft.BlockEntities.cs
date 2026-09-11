@@ -23,7 +23,11 @@ public partial class Minecraft
                 new DataContainerConfig
                 {
                     Name = "input", TypeFullname = "universal:inventory",
-                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config { Capacity = 1 })
+                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
+                    {
+                        Capacity = 1,
+                        SlotCodes = new[] { "input" }
+                    })
                 },
                 new DataContainerConfig
                 {
@@ -31,6 +35,7 @@ public partial class Minecraft
                     Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
                     {
                         Capacity = 1,
+                        SlotCodes = new[] { "fuel" },
                         AllowedTags = new() { "fuel" },
                         ExtractPolicy = ContainerAccess.Any
                     })
@@ -41,6 +46,7 @@ public partial class Minecraft
                     Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
                     {
                         Capacity = 1,
+                        SlotCodes = new[] { "output" },
                         InsertPolicy = ContainerAccess.Module,
                         ExtractPolicy = ContainerAccess.Any
                     })
@@ -75,7 +81,11 @@ public partial class Minecraft
                 new DataContainerConfig
                 {
                     Name = "grid", TypeFullname = "universal:inventory",
-                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config { Capacity = 9 })
+                    Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
+                    {
+                        Capacity = 9,
+                        SlotCodes = new[] { "grid0", "grid1", "grid2", "grid3", "grid4", "grid5", "grid6", "grid7", "grid8" }
+                    })
                 },
                 new DataContainerConfig
                 {
@@ -83,6 +93,7 @@ public partial class Minecraft
                     Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
                     {
                         Capacity = 1,
+                        SlotCodes = new[] { "result" },
                         InsertPolicy = ContainerAccess.Module,
                         ExtractPolicy = ContainerAccess.Any
                     })

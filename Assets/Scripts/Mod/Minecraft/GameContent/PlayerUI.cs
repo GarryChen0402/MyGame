@@ -13,6 +13,11 @@ public class PlayerUI : UIBehavior
 {
     private SlotUI[] gridSlots = new SlotUI[4];
     private SlotUI resultSlot = null;
+    // Two groups isolate the two container packs (P2, D3): the grid and the
+    // result containers both key their slots 'slot_0', so one group per
+    // container keeps the code routing unambiguous.
+    private InventoryUI gridGroup;
+    private InventoryUI resultGroup;
 
     // Placeholder skin mapping until the player gains a real skin texture; all
     // six faces share one registered texture (same setup as EntityVisualTest).
@@ -51,7 +56,11 @@ public class PlayerUI : UIBehavior
         // row*2+col), 110 px pitch; result slot to the right, workbench habit.
         // Phase C: display + click addresses bind the resident mirrors
         // (scope PlayerCrafting, canonical slot order: grid 0-3, result 4).
+        // The binding entries come from the type-level descriptor (P2): they
+        // feed the pack routing and never depend on uIDefinition injection.
         var ms = MirrorSync.Instance;
+        var descriptor = playerUIDefinition.Panel;
+        gridGroup = new InventoryUI();
         for(int i = 0; i < gridSlots.Length; i++)
         {
             var go = new GameObject($"Crafting Slot {i}");
@@ -59,14 +68,19 @@ public class PlayerUI : UIBehavior
             go.transform.SetParent(transform, false);
             go.transform.localPosition = new Vector3(85 + (i % 2) * 110, 110 - (i / 2) * 110, 0);
             gridSlots[i].BindInteractive(ms.PlayerCraftGridMirror, i,
-                new SlotAddr { scope = SlotScope.PlayerCrafting, slot = i });
+                new SlotAddr { scope = SlotScope.PlayerCrafting, slot = i },
+                descriptor.Resolve($"player_craft_grid_{i}"));
+            gridGroup.Add(gridSlots[i]);
         }
         var resultGo = new GameObject("Crafting Result Slot");
         resultSlot = resultGo.AddComponent<SlotUI>();
         resultGo.transform.SetParent(transform, false);
         resultGo.transform.localPosition = new Vector3(375f, 55f, 0f);
         resultSlot.BindInteractive(ms.PlayerCraftResultMirror, 0,
-            new SlotAddr { scope = SlotScope.PlayerCrafting, slot = gridSlots.Length });
+            new SlotAddr { scope = SlotScope.PlayerCrafting, slot = gridSlots.Length },
+            descriptor.Resolve("player_craft_result"));
+        resultGroup = new InventoryUI();
+        resultGroup.Add(resultSlot);
     }
 
     // Preview refresh on open moved to the logic side (OpenPlayerInventory);
@@ -78,9 +92,14 @@ public class PlayerUI : UIBehavior
     }
 
     // Per-frame mirror sweep while the panel is visible: captures the echo of
-    // every click/drag settlement and the live 2x2 preview.
+    // every click/drag settlement and the live 2x2 preview. Each group also
+    // consumes its own container pack (P2); a not-yet-registered mirror reads
+    // as no pack and simply skips.
     private void Update()
     {
+        var ms = MirrorSync.Instance;
+        gridGroup.ApplyPack(0, ms.PlayerCraftGridMirror?.Pack);
+        resultGroup.ApplyPack(0, ms.PlayerCraftResultMirror?.Pack);
         Refresh();
     }
 

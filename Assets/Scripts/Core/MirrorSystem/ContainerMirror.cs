@@ -27,6 +27,12 @@ public class ContainerMirror : ISlotReadSource
     public int Capacity { get; }
     public int Version { get; private set; }
 
+    // Pack text of the source container (P2, design D3): a keyed string built
+    // by the binding from the container's own pack contract; null until the
+    // first pass (or for sources without a pack contract). The UI-side group
+    // unpacks it into slot values.
+    public string Pack { get; private set; }
+
     private readonly SlotMirror[] slots;
     private bool changed;
 
@@ -40,13 +46,24 @@ public class ContainerMirror : ISlotReadSource
 
     // Writer side (MirrorSync bindings only): record the value, remember the
     // change so one CommitChanged can bump the version once per sync pass.
-    public void Apply(int index, ushort itemId, int amount)
+    // Returns true when the value actually changed (drives the pack rebuild
+    // in the binding, D5).
+    public bool Apply(int index, ushort itemId, int amount)
     {
-        if(index < 0 || index >= Capacity)return;
+        if(index < 0 || index >= Capacity)return false;
         var s = slots[index];
-        if(s.itemId == itemId && s.amount == amount)return;
+        if(s.itemId == itemId && s.amount == amount)return false;
         slots[index] = new SlotMirror { itemId = itemId, amount = amount };
         changed = true;
+        return true;
+    }
+
+    // Writer side (MirrorSync bindings only): store the pack snapshot; equal
+    // text is dropped so a caller racing a rebuild never churns the string.
+    public void ApplyPack(string pack)
+    {
+        if(Pack == pack)return;
+        Pack = pack;
     }
 
     public void CommitChanged()

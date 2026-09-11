@@ -22,10 +22,15 @@ public class CraftingTableUI : UIBehavior
     };
 
     private PanelLayoutHandles handles;
+    private InventoryUI packGroup;   // one group over the whole panel: grid and result packs route by code (P2)
+    private PanelData data = null;   // data packet of the open session
 
     private void Awake()
     {
         handles = PanelLayoutRunner.Build(this, Layout);
+        packGroup = new InventoryUI();
+        for(int i = 0; i < 9; i++)packGroup.Add(handles.Slots[$"grid{i}"]);
+        packGroup.Add(handles.Slots["result"]);
     }
 
     // Phase C: the open data is the value-only PanelData packet (no BE
@@ -37,6 +42,8 @@ public class CraftingTableUI : UIBehavior
     public override void SetData(object data)
     {
         if(data is not PanelData panel)return;
+        this.data = panel;
+        packGroup.Reset();   // reopen: replay the packs from scratch (P2, D4)
         if(!ValidatePanelData(panel, handles))return;
         for(int i = 0; i < 9; i++)handles.Bind(uIDefinition.Panel, $"grid{i}", panel);
         handles.Bind(uIDefinition.Panel, "result", panel);
@@ -48,9 +55,12 @@ public class CraftingTableUI : UIBehavior
     }
 
     // Per-frame mirror sweep while the panel is visible: captures the echo of
-    // every click/drag settlement and the live 3x3 preview.
+    // every click/drag settlement and the live 3x3 preview. The container
+    // packs ride along the same sweep (P2).
     private void Update()
     {
+        if(data != null)
+            for(int i = 0; i < data.Packs.Count; i++)packGroup.ApplyPack(i, data.Packs[i]);
         Refresh();
     }
 

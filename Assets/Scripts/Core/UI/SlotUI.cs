@@ -98,6 +98,7 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         this.slotIndex = slotIndex;
         addr = null;
         bindingEntry = null;
+        packValue = null;
         shown = false;   // first Refresh after a bind always renders
         Refresh();
     }
@@ -112,6 +113,7 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         this.slotIndex = slotIndex;
         this.addr = addr;
         bindingEntry = entry;
+        packValue = null;
         shown = false;
         Refresh();
     }
@@ -122,17 +124,41 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
     // display-only slots; carried since P0, consumed from P2/P6 on.
     public SlotBindingEntry BindingEntry => bindingEntry;
 
+    // ---- pack-decoded value override (P2, D4) ----
+
+    // Pack path: the value decoded from the container pack by the owning
+    // group (InventoryUI); while set it wins over the live value read, which
+    // stays as the fallback - both paths coexist.
+    private SlotMirror? packValue;
+
+    public void ApplyValue(SlotMirror value)
+    {
+        packValue = value;
+        Refresh();
+    }
+
+    // Drops the pack override (rebind/reopen), falling back to the live read.
+    public void ClearValue()
+    {
+        packValue = null;
+        Refresh();
+    }
+
+    // The value this slot renders: the pack override when set, else a live
+    // read of the bound source; unbound / out-of-range renders empty.
+    private SlotMirror CurrentValue()
+    {
+        if(packValue.HasValue)return packValue.Value;
+        if(source != null && slotIndex >= 0 && slotIndex < source.Capacity)
+            return source.GetSlot(slotIndex);
+        return default;
+    }
+
     public void Refresh()
     {
-        // Value read from the source; out-of-range / unbound renders empty.
-        ushort id = 0;
-        int amount = 0;
-        if(source != null && slotIndex >= 0 && slotIndex < source.Capacity)
-        {
-            var slot = source.GetSlot(slotIndex);
-            id = slot.itemId;
-            amount = slot.amount;
-        }
+        var slot = CurrentValue();
+        ushort id = slot.itemId;
+        int amount = slot.amount;
         bool empty = amount == 0;
         // Skip when the rendered state already matches: Refresh may be polled
         // every frame (furnace work tick) and Icon.SetItem re-renders a 3D
@@ -197,13 +223,12 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         hoverOverlay?.SetActive(false);
     }
 
-    // Tooltip feed: the live value behind this slot's address; empty slots
-    // (and unbound display-only slots) report none.
+    // Tooltip feed: the value behind this slot's address (pack override
+    // included); empty slots (and unbound display-only slots) report none.
     public bool TryGetHoverItemId(out ushort itemId)
     {
         itemId = 0;
-        if(source == null || slotIndex < 0 || slotIndex >= source.Capacity)return false;
-        var slot = source.GetSlot(slotIndex);
+        var slot = CurrentValue();
         if(slot.amount == 0)return false;
         itemId = slot.itemId;
         return true;

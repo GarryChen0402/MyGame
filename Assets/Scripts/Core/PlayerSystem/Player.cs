@@ -98,7 +98,11 @@ public class Player : LivingEntity, ICraftingGridHost
     {
         CraftingGrid = new InventoryDataContainer(new DataContainerConfig
         {
-            Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config { Capacity = 4 })
+            Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
+            {
+                Capacity = 4,
+                SlotCodes = new[] { "slot_0", "slot_1", "slot_2", "slot_3" }
+            })
         });
         // Module-only insert, mirroring the workbench result slot: players can
         // only ever take the preview out, never place into it.
@@ -107,6 +111,7 @@ public class Player : LivingEntity, ICraftingGridHost
             Parameters = JsonUtility.ToJson(new InventoryDataContainer.Config
             {
                 Capacity = 1,
+                SlotCodes = new[] { "slot_0" },
                 InsertPolicy = ContainerAccess.Module,
                 ExtractPolicy = ContainerAccess.Any
             })

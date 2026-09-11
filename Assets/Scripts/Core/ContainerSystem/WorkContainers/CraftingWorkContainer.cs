@@ -62,14 +62,15 @@ public class CraftingWorkContainer : WorkContainer, ICraftingGridHost
 
     // ---- panel self-report ----
 
-    // Workbench panel: grid cells "grid0".."gridN-1" + the "result" slot,
-    // each with its owner-carrying accessor. The preview refresh on open and
+    // Workbench panel: one contribution per grid container cell plus the
+    // result slot, each with its owner-carrying accessor; slot codes come from
+    // the containers' declared tables (P2). The preview refresh on open and
     // clear on close live here (the former BuildCraftingModel duties).
     public override void DescribePanel(PanelBuildContext ctx)
     {
         if(Grid == null || Result == null)return;   // unbound container: contributes nothing
-        ctx.AddSlots("grid", Grid.Inv, Grid.Inv.MaxSlotCount, i => new CraftingGridSlotAccess(Grid, i, this));
-        ctx.AddSlot("result", Result.Inv, 0, new CraftingResultSlotAccess(Result, 0, this));
+        ctx.AddSlots(Grid, Grid.Inv.MaxSlotCount, i => new CraftingGridSlotAccess(Grid, i, this));
+        ctx.AddSlot(Result, 0, new CraftingResultSlotAccess(Result, 0, this));
         ctx.AddOnClose(ClearPreview);
         RefreshPreview();   // open action: rebuild the live preview over persisted grid materials
     }

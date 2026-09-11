@@ -14,6 +14,13 @@ public class PanelData : ISlotReadSource
     public readonly string[] ChannelNames;        // channel alignment names, contribution order
     public readonly int[] Channels;               // generic integer channels; channel semantics live in the UI class
 
+    // Container-level pack texts (P2, design D3): one entry per container
+    // contribution run, in contribution order; the UI group unpacks them into
+    // slot values. A null entry (container without declared slot codes) is
+    // skipped by the UI.
+    private readonly List<string> packs = new();
+    public IReadOnlyList<string> Packs => packs;
+
     public int Version { get; private set; }
     private bool changed;
 
@@ -50,14 +57,29 @@ public class PanelData : ISlotReadSource
 
     // Writer side (MirrorSync panel bindings only): record the value, remember
     // the change so one CommitChanged bumps the version once per sync pass.
-    internal void ApplySlot(int index, ushort itemId, int amount)
+    // Returns true when the value actually changed (drives the pack rebuild
+    // in the binding, D5).
+    internal bool ApplySlot(int index, ushort itemId, int amount)
     {
-        if(index < 0 || index >= Slots.Length)return;
+        if(index < 0 || index >= Slots.Length)return false;
         var s = Slots[index];
-        if(s.itemId == itemId && s.amount == amount)return;
+        if(s.itemId == itemId && s.amount == amount)return false;
         Slots[index] = new SlotMirror { itemId = itemId, amount = amount };
         changed = true;
+        return true;
     }
+
+    // Writer side (MirrorSync panel bindings only): store the pack text of one
+    // container run; missing lower indices fill with empty placeholders so the
+    // list order stays the contribution order.
+    internal void SetPack(int index, string pack)
+    {
+        if(index < 0)return;
+        while(packs.Count <= index)packs.Add(null);
+        packs[index] = pack;
+    }
+
+    internal bool HasPack(int index) => index >= 0 && index < packs.Count && packs[index] != null;
 
     internal void ApplyChannel(int index, int value)
     {

@@ -19,6 +19,7 @@ public class InventoryDataContainer : DataContainer
         public ContainerAccess ExtractPolicy = ContainerAccess.Any;
         public List<string> AllowedItems;   // whitelist of item full names
         public List<string> AllowedTags;    // whitelist of item tags
+        public string[] SlotCodes;          // data-side code per slot (= pack key); undeclared = no pack
     }
 
     private Config cfg;                       // declaration config, read-only, not persisted
@@ -29,6 +30,13 @@ public class InventoryDataContainer : DataContainer
     {
         cfg = JsonUtility.FromJson<Config>(dataConfig.Parameters);
         Inv = new Inventory(cfg.Capacity);
+        // Declared codes must cover every slot; a mismatch disables the pack
+        // (explicit declaration, no inferred fallback).
+        if (cfg.SlotCodes != null && cfg.SlotCodes.Length != cfg.Capacity)
+        {
+            Debug.LogWarning($"[InventoryDataContainer] SlotCodes length {cfg.SlotCodes.Length} != capacity {cfg.Capacity}; pack disabled");
+            cfg.SlotCodes = null;
+        }
         if (cfg.AllowedItems != null)
         {
             allowedItemIds = new HashSet<ushort>();
@@ -95,6 +103,31 @@ public class InventoryDataContainer : DataContainer
     public ItemStack GetItemStackAt(int index)
     {
         return Inv.GetItemStackAt(index);
+    }
+
+    // ---- pack (P2) ----
+
+    // Data-side code of one slot (the pack key); null when undeclared - panel
+    // self-report and pack emission both skip undeclared slots.
+    public string SlotCode(int index)
+        => cfg.SlotCodes != null && index >= 0 && index < cfg.SlotCodes.Length ? cfg.SlotCodes[index] : null;
+
+    // Pack format (paired with the UI-side group + ItemDataParser by format
+    // only, no shared code): entries "code=payload" joined by ';'; payload is
+    // "empty" for an empty slot, "itemId,amount" otherwise.
+    public override string GetPackData()
+    {
+        if (cfg.SlotCodes == null) return null;
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < Inv.MaxSlotCount; i++)
+        {
+            if (i > 0) sb.Append(';');
+            sb.Append(cfg.SlotCodes[i]).Append('=');
+            var stack = Inv.GetItemStackAt(i);
+            if (stack == null || stack.IsEmpty()) sb.Append("empty");
+            else sb.Append(stack.itemId).Append(',').Append(stack.amount);
+        }
+        return sb.ToString();
     }
 
     // ---- persistence ----

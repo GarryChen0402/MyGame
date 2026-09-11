@@ -30,6 +30,7 @@ public class FurnaceUI : UIBehavior
     };
 
     private PanelLayoutHandles handles;
+    private InventoryUI packGroup;               // one group over the whole panel: container packs route by code (P2)
     private ProgressBarUI fireProgress = null;   // fuel burn gauge above the fuel slot
     private ProgressBarUI cookProgress = null;   // recipe progress arrow
     private PanelData data = null;               // data packet of the open session
@@ -39,6 +40,10 @@ public class FurnaceUI : UIBehavior
         handles = PanelLayoutRunner.Build(this, Layout);
         fireProgress = handles.Bars["fire"];
         cookProgress = handles.Bars["cook"];
+        packGroup = new InventoryUI();
+        packGroup.Add(handles.Slots["input"]);
+        packGroup.Add(handles.Slots["fuel"]);
+        packGroup.Add(handles.Slots["output"]);
     }
 
     // Phase C: the open data is the value-only PanelData packet (no BE
@@ -49,6 +54,7 @@ public class FurnaceUI : UIBehavior
     {
         if (data is not PanelData panel) return;
         this.data = panel;
+        packGroup.Reset();   // reopen: replay the packs from scratch (P2, D4)
         if (!ValidatePanelData(panel, handles)) return;
         handles.Bind(uIDefinition.Panel, "input", panel);
         handles.Bind(uIDefinition.Panel, "fuel", panel);
@@ -86,7 +92,8 @@ public class FurnaceUI : UIBehavior
     // Pushes the channel state into the two gauges while the panel is open
     // (Update stops when the UI is hidden): the sync layer copies the work
     // container's four tick ints into channels 0..3 every render frame, so
-    // the gauges and slots always read the last settled tick.
+    // the gauges and slots always read the last settled tick. The container
+    // packs ride along the same sweep (P2): one pack entry per container.
     private void Update()
     {
         if(data != null && data.ChannelCount >= 4)
@@ -96,6 +103,8 @@ public class FurnaceUI : UIBehavior
             cookProgress.Progress = data.GetChannel(3) <= 0 ? 0f
                 : (float)data.GetChannel(2) / data.GetChannel(3);
         }
+        if(data != null)
+            for(int i = 0; i < data.Packs.Count; i++)packGroup.ApplyPack(i, data.Packs[i]);
         Refresh();
     }
 
