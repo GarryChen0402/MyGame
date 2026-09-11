@@ -5,31 +5,46 @@ public class HotBarUI : UIBehavior
 {
     private static HotBarUI instance = null;
     public static HotBarUI Instance => instance;
+
+    // Panel geometry as data (L4 of Docs/可视化UI布局编辑器-实施文档.md): one 9-cell
+    // row, scale 1 and no background - the former Awake literals. Width and
+    // height only frame the editor canvas; absolutely positioned children are
+    // unaffected by sizeDelta.
+    public static readonly PanelLayout Layout = new()
+    {
+        Width = 920,
+        Height = 100,
+        Anchor = new(0.5f, 0),
+        Offset = new(0, 50),
+        Scale = 1,
+        Background = null,
+        Elements =
+        {
+            new GridSlotElement { IdPrefix = "hotbar", Rows = 1, Cols = 9, Pitch = 100, Origin = new(-400, 0) },
+        }
+    };
+
+    private PanelLayoutHandles handles;
     [SerializeField]
     private List<SlotUI> itemIcons = new();
 
     private bool bound;
     private InventoryUI packGroup;
+
     private void Awake()
     {
         if(instance == null)instance = this;
         else Destroy(gameObject);
-        var rt = gameObject.AddComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0);   // screen center
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0, 50);
+    }
 
-        for(int i = 0; i < 9; i++)
-        {
-            var slotGo = new GameObject($"hotbar_slot_{i}");
-            slotGo.transform.SetParent(gameObject.transform, false);
-            var slotUI = slotGo.AddComponent<SlotUI>();
-            slotGo.transform.localPosition = new Vector3(-400 + i * 100, 0, 0);
-            itemIcons.Add(slotUI);
-        }
-
-        // rt.sizeDelta = new Vector2(30, 30);   // 15px texture doubled for visibility
-
+    // Builds the row from the definition-borne layout (L4): UIManager calls
+    // this right after injecting uIDefinition and before SetData. Not Awake:
+    // at factory time the definition is not injected yet.
+    public override void OnDefinitionReady()
+    {
+        handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
+        itemIcons.Clear();
+        itemIcons.AddRange(handles.SlotOrder);
         // Pack group (P4): the 9 HUD cells route the backpack container's
         // packed snapshot through their binding entries (data codes slot_<i>).
         packGroup = new InventoryUI();
@@ -50,7 +65,7 @@ public class HotBarUI : UIBehavior
         {
             var descriptor = hotbarDefinition.Panel;
             for(int i = 0; i < itemIcons.Count; i++)
-                itemIcons[i].BindDisplay(mirror, i, descriptor.Resolve($"hotbar_{i}"));
+                itemIcons[i].BindDisplay(mirror, i, descriptor.Resolve($"hotbar{i}"));
             bound = true;
         }
         packGroup.ApplyPack(0, mirror.Pack);
@@ -71,16 +86,19 @@ public class HotBarUI : UIBehavior
         }
     };
 
-    // Resident binding carrier (P0, A9): 9 hand-written slots, codes written
-    // in code for now (moved to layout JSON at L4). The HUD row and the
-    // backpack's bottom row map to the same container cells; actionIds stay
-    // empty - the HUD is display-only today and R/U arrive via JEI's
-    // PreFreeze injection (P7).
+    // Resident binding carrier (P0, A9): 9 codes, written in code for now.
+    // The HUD row and the backpack's bottom row map to the same container
+    // cells; actionIds stay empty - the HUD is display-only today and R/U
+    // arrive via JEI's PreFreeze injection (P7). The ids follow the layout
+    // naming (L4: hotbar0..8), the data codes stay slot_<i>.
     private static PanelDescriptor BuildPanel()
     {
-        var panel = new PanelDescriptor();
+        var panel = new PanelDescriptor
+        {
+            Layout = PanelLayoutAssets.Load("UILayouts/hotbar", Layout)
+        };
         for(int i = 0; i < 9; i++)
-            panel.Bindings[$"hotbar_{i}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser());
+            panel.Bindings[$"hotbar{i}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser());
         return panel;
     }
 }

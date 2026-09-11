@@ -52,6 +52,13 @@ public class UIManager : MonoBehaviour
         if(PlayerInventoryRoot != null)return;
         if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName("minecraft:player_inventory", out var def))return;
         PlayerInventoryRoot = def.Factory();
+        // The backpack root never passes through OpenUI (E opens player_ui and
+        // activates this one instead), so inject the definition and run the
+        // assembly hook here, in OpenUI's order (L4 of Docs/可视化UI布局编辑器-实施文档.md) -
+        // otherwise the layout (JSON-resolved at registration) never reaches it.
+        var built = PlayerInventoryRoot.GetComponent<UIBehavior>();
+        built.uIDefinition = def;
+        built.OnDefinitionReady();
         PlayerInventoryRoot.transform.SetParent(transform, false);
         // Lazy creation would append above every existing root (including the
         // tooltip / loading layers); insert below TooltipRoot so the mouse-

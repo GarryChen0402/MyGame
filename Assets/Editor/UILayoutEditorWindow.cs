@@ -34,6 +34,9 @@ public class UILayoutEditorWindow : EditorWindow
     {
         ("furnace", () => FurnaceUI.Layout),
         ("crafting_table", () => CraftingTableUI.Layout),
+        ("player_inventory", () => PlayerInventoryUI.Layout),
+        ("hotbar", () => HotBarUI.Layout),
+        ("player_ui", () => PlayerUI.Layout),
     };
 
     private const int UndoLimit = 20;

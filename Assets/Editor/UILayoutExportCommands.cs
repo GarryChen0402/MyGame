@@ -16,6 +16,9 @@ public static class UILayoutExportCommands
         if(!Directory.Exists(dir))Directory.CreateDirectory(dir);
         Export(dir, "furnace", FurnaceUI.Layout);
         Export(dir, "crafting_table", CraftingTableUI.Layout);
+        Export(dir, "player_inventory", PlayerInventoryUI.Layout);
+        Export(dir, "hotbar", HotBarUI.Layout);
+        Export(dir, "player_ui", PlayerUI.Layout);
         AssetDatabase.Refresh();
     }
 

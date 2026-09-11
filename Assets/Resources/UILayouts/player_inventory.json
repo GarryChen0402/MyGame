@@ -1,0 +1,114 @@
+{
+    "formatVersion": 1,
+    "panel": "player_inventory",
+    "width": 920.0,
+    "height": 450.0,
+    "scale": 0.800000011920929,
+    "offset": {
+        "x": 0.0,
+        "y": 50.0
+    },
+    "anchor": {
+        "x": 0.5,
+        "y": 0.25
+    },
+    "background": {
+        "sprite": "minecraft:universal_bg",
+        "tint": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 1.0
+        }
+    },
+    "elements": [
+        {
+            "kind": "grid",
+            "id": "",
+            "idPrefix": "hotbar",
+            "pos": {
+                "x": 0.0,
+                "y": 0.0
+            },
+            "origin": {
+                "x": -400.0,
+                "y": -160.0
+            },
+            "rows": 1,
+            "cols": 9,
+            "pitch": 100.0,
+            "dir": 0,
+            "frame": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "front": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "back": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            }
+        },
+        {
+            "kind": "grid",
+            "id": "",
+            "idPrefix": "inv",
+            "pos": {
+                "x": 0.0,
+                "y": 0.0
+            },
+            "origin": {
+                "x": -400.0,
+                "y": 160.0
+            },
+            "rows": 3,
+            "cols": 9,
+            "pitch": 100.0,
+            "dir": 0,
+            "frame": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "front": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "back": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            }
+        }
+    ]
+}

@@ -6,44 +6,37 @@ using UnityEngine.UI;
 
 public class PlayerInventoryUI : UIBehavior
 {
-    private List<SlotUI> slots = new();
-    private InventoryUI packGroup;
-    private void Awake()
+    // Panel geometry as data (L4 of Docs/可视化UI布局编辑器-实施文档.md): the 36
+    // cells split into two grids - the bottom hotbar row (cells 0-8) and the
+    // 3x9 main grid - because the old loop starts at the bottom row and the
+    // two segments sit 120 px apart while the row pitch is 100. Build order
+    // matches the old cell order (hotbar row first), so SlotOrder[i] is
+    // backpack cell i.
+    public static readonly PanelLayout Layout = new()
     {
-        var rt = gameObject.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.25f);
-        rt.anchorMax = new Vector2(0.5f, 0.25f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(920, 420);
-        rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
-        rt.localPosition += new Vector3(0, 50, 0);
-
-        var bgGo = UIWidgetBackground.CreateNewBackground();
-        bgGo.transform.SetParent(transform, false);
-
-        // x [-400, 400]
-        int[] xPos = {-400, -300, -200, -100, 0, 100, 200, 300, 400};
-        // y [-160, 160, 60, -40]
-        int[] yPos = {-160, 160, 60, -40};
-        for(int y = 0; y < 4; y++)
+        Anchor = new(0.5f, 0.25f),
+        Offset = new(0, 50),
+        Elements =
         {
-            for(int x = 0; x < 9; x++)
-            {
-                var go = new GameObject($"{y*9+x}");
-                var slotUI = go.AddComponent<SlotUI>();
-                go.transform.SetParent(transform, false);
-                go.transform.localPosition = new Vector3(xPos[x], yPos[y], 0);
-                slots.Add(slotUI);
-            }
+            new GridSlotElement { IdPrefix = "hotbar", Rows = 1, Cols = 9, Pitch = 100, Origin = new(-400, -160) },
+            new GridSlotElement { IdPrefix = "inv", Rows = 3, Cols = 9, Pitch = 100, Origin = new(-400, 160) },
         }
+    };
+
+    private PanelLayoutHandles handles;
+    private InventoryUI packGroup;
+
+    // Builds the panel from the definition-borne layout (L4): UIManager's
+    // EnsurePlayerInventoryRoot calls this right after injecting the
+    // definition - the backpack root never passes through OpenUI. Not Awake:
+    // at factory time the definition is not injected yet.
+    public override void OnDefinitionReady()
+    {
+        handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
         // Pack group (P4): the 36 cells route the backpack container's packed
         // snapshot through their binding entries (data codes slot_<i>).
         packGroup = new InventoryUI();
-        foreach(var slot in slots)packGroup.Add(slot);
-        // No display bind here: the mirror registers when the player is
-        // created, which may be after this panel is built (UIManager.Awake
-        // pre-fabricates it) - reading Player here would move the creation
-        // point earlier. OnEnable binds once the player exists.
+        foreach(var slot in handles.SlotOrder)packGroup.Add(slot);
     }
 
     public static UIDefinition playerInvUIDefinition = new()
@@ -61,14 +54,17 @@ public class PlayerInventoryUI : UIBehavior
         }
     };
 
-    // Resident binding carrier (P0, A9): 36 hand-written slots, codes written
-    // in code for now (moved to layout JSON at L4). Every slot maps to its
-    // backpack container cell slot_<i> and responds to the core actions.
+    // Resident binding carrier (P0, A9): 36 codes, written in code for now.
+    // Every slot maps to its backpack container cell slot_<i>; the ids follow
+    // the layout naming (L4: hotbar0..8 / inv0..26), the data codes stay put.
     private static PanelDescriptor BuildPanel()
     {
-        var panel = new PanelDescriptor();
+        var panel = new PanelDescriptor
+        {
+            Layout = PanelLayoutAssets.Load("UILayouts/player_inventory", Layout)
+        };
         for(int i = 0; i < 36; i++)
-            panel.Bindings[$"player_inv_{i}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser()).WithCoreActions();
+            panel.Bindings[i < 9 ? $"hotbar{i}" : $"inv{i - 9}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser()).WithCoreActions();
         return panel;
     }
 
@@ -80,18 +76,27 @@ public class PlayerInventoryUI : UIBehavior
     // and never depend on uIDefinition injection.
     private void OnEnable()
     {
+        // The factory-built root is active the moment it is created, before
+        // UIManager injects the definition (which is what builds the slots) -
+        // that first activation is a no-op. The root is deactivated right
+        // after, and SetActive(true) on every open binds with everything
+        // built. No display bind before the mirror exists: it registers when
+        // the player is created, which may be after this panel is built
+        // (UIManager.Awake pre-fabricates it) - reading Player here would
+        // move the creation point earlier.
+        if(handles == null)return;
         var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
         packGroup.Reset();   // reopen: replay the pack from scratch (P2, D4)
         var descriptor = playerInvUIDefinition.Panel;
-        for(int i = 0; i < 36; i++)
-            slots[i].BindInteractive(mirror, i, new SlotAddr { scope = SlotScope.PlayerInventory, slot = i },
-                descriptor.Resolve($"player_inv_{i}"));
+        for(int i = 0; i < handles.SlotOrder.Count; i++)
+            handles.SlotOrder[i].BindInteractive(mirror, i, new SlotAddr { scope = SlotScope.PlayerInventory, slot = i },
+                descriptor.Resolve(i < 9 ? $"hotbar{i}" : $"inv{i - 9}"));
     }
 
     // Refresh sweeps every slot to reflect merges / swaps / quick-moves.
     public override void Refresh()
     {
-        for(int i = 0; i < slots.Count; i++)slots[i].Refresh();
+        foreach(var slot in handles.SlotOrder)slot.Refresh();
     }
 
     // Live sync while the panel is open: SlotUI.Refresh is nearly free when

@@ -11,8 +11,21 @@ using Unity.VisualScripting;
 // two-panel structure the workbench UI uses.
 public class PlayerUI : UIBehavior
 {
-    private SlotUI[] gridSlots = new SlotUI[4];
-    private SlotUI resultSlot = null;
+    // Panel geometry as data (L4 of Docs/可视化UI布局编辑器-实施文档.md): the 2x2
+    // grid and the result slot ride the layout; the 3D model preview stays
+    // code-created (design D7: no preview element type yet) and is built in
+    // OnDefinitionReady right after the layout.
+    public static readonly PanelLayout Layout = new()
+    {
+        Offset = new(0, 180),
+        Elements =
+        {
+            new GridSlotElement { IdPrefix = "craft", Rows = 2, Cols = 2, Pitch = 110, Origin = new(85, 110) },
+            new SlotElement { Id = "result", Pos = new(375, 55) },
+        }
+    };
+
+    private PanelLayoutHandles handles;
     // Two groups isolate the two container packs (P2, D3): the grid and the
     // result containers both key their slots 'slot_0', so one group per
     // container keeps the code routing unambiguous.
@@ -31,18 +44,12 @@ public class PlayerUI : UIBehavior
         ["right"] = "minecraft:firefly"
     };
 
-    private void Awake()
+    // Builds the panel from the definition-borne layout (L4): UIManager calls
+    // this right after injecting uIDefinition and before SetData. Not Awake:
+    // at factory time the definition is not injected yet.
+    public override void OnDefinitionReady()
     {
-        var rt = gameObject.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(920, 420);
-        rt.localScale = new Vector3(0.8f, 0.8f, 0.8f);
-        rt.localPosition += new Vector3(0, 180, 0);
-
-        var bgGo = UIWidgetBackground.CreateNewBackground();
-        bgGo.transform.SetParent(transform, false);
+        handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
 
         // Preview area (left): square so the square RenderTexture never
         // stretches. Content spans [-415, 425] local so the two halves sit
@@ -52,8 +59,6 @@ public class PlayerUI : UIBehavior
             "minecraft:player", PlayerFaceTextures);
         previewGo.transform.SetParent(transform, false);
 
-        // 2x2 crafting grid, row-major with rows top-to-bottom (index =
-        // row*2+col), 110 px pitch; result slot to the right, workbench habit.
         // Phase C: display + click addresses bind the resident mirrors
         // (scope PlayerCrafting, canonical slot order: grid 0-3, result 4).
         // The binding entries come from the type-level descriptor (P2): they
@@ -61,24 +66,18 @@ public class PlayerUI : UIBehavior
         var ms = MirrorSync.Instance;
         var descriptor = playerUIDefinition.Panel;
         gridGroup = new InventoryUI();
-        for(int i = 0; i < gridSlots.Length; i++)
+        for(int i = 0; i < 4; i++)
         {
-            var go = new GameObject($"Crafting Slot {i}");
-            gridSlots[i] = go.AddComponent<SlotUI>();
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(85 + (i % 2) * 110, 110 - (i / 2) * 110, 0);
-            gridSlots[i].BindInteractive(ms.PlayerCraftGridMirror, i,
+            var slot = handles.Slots[$"craft{i}"];
+            slot.BindInteractive(ms.PlayerCraftGridMirror, i,
                 new SlotAddr { scope = SlotScope.PlayerCrafting, slot = i },
-                descriptor.Resolve($"player_craft_grid_{i}"));
-            gridGroup.Add(gridSlots[i]);
+                descriptor.Resolve($"craft{i}"));
+            gridGroup.Add(slot);
         }
-        var resultGo = new GameObject("Crafting Result Slot");
-        resultSlot = resultGo.AddComponent<SlotUI>();
-        resultGo.transform.SetParent(transform, false);
-        resultGo.transform.localPosition = new Vector3(375f, 55f, 0f);
+        var resultSlot = handles.Slots["result"];
         resultSlot.BindInteractive(ms.PlayerCraftResultMirror, 0,
-            new SlotAddr { scope = SlotScope.PlayerCrafting, slot = gridSlots.Length },
-            descriptor.Resolve("player_craft_result"));
+            new SlotAddr { scope = SlotScope.PlayerCrafting, slot = 4 },
+            descriptor.Resolve("result"));
         resultGroup = new InventoryUI();
         resultGroup.Add(resultSlot);
     }
@@ -87,8 +86,7 @@ public class PlayerUI : UIBehavior
     // the mirror sweep picks the result up within one render frame.
     public override void Refresh()
     {
-        foreach(var slot in gridSlots)slot.Refresh();
-        resultSlot.Refresh();
+        foreach(var slot in handles.SlotOrder)slot.Refresh();
     }
 
     // Per-frame mirror sweep while the panel is visible: captures the echo of
@@ -112,19 +110,21 @@ public class PlayerUI : UIBehavior
         // The panel carries only the upper area (model + 2x2 grid); the 36-slot
         // backpack rides along as the shared lower panel (see class comment).
         OpenWithPlayerInventory = true,
-        // Resident binding carrier (P0, A9): the hand-written 2x2 grid and
-        // result slots, codes written in code for now (moved to layout JSON
-        // at L4). The grid and result containers report no names, so their
-        // data codes are the write-in slot_<i> (grid: 0..3, result: 0).
+        // Resident binding carrier (P0, A9): the 2x2 grid and result codes,
+        // written in code for now; the ids follow the layout naming (L4:
+        // craft0..3 / result). The grid and result containers report no
+        // names, so their data codes are the write-in slot_<i> (grid: 0..3,
+        // result: 0).
         Panel = new PanelDescriptor
         {
+            Layout = PanelLayoutAssets.Load("UILayouts/player_ui", Layout),
             Bindings =
             {
-                ["player_craft_grid_0"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
-                ["player_craft_grid_1"] = new SlotBindingEntry("slot_1", new ItemDataParser()).WithCoreActions(),
-                ["player_craft_grid_2"] = new SlotBindingEntry("slot_2", new ItemDataParser()).WithCoreActions(),
-                ["player_craft_grid_3"] = new SlotBindingEntry("slot_3", new ItemDataParser()).WithCoreActions(),
-                ["player_craft_result"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
+                ["craft0"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
+                ["craft1"] = new SlotBindingEntry("slot_1", new ItemDataParser()).WithCoreActions(),
+                ["craft2"] = new SlotBindingEntry("slot_2", new ItemDataParser()).WithCoreActions(),
+                ["craft3"] = new SlotBindingEntry("slot_3", new ItemDataParser()).WithCoreActions(),
+                ["result"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
             }
         },
         Factory = () =>

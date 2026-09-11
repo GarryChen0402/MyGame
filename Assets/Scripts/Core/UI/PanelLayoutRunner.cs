@@ -5,6 +5,11 @@ using UnityEngine;
 public class PanelLayoutHandles
 {
     public readonly Dictionary<string, SlotUI> Slots = new();
+    // Build order (E3 of the L4 migration): every built slot - single slots
+    // and grid cells alike, bars excluded - in creation order. Resident panels
+    // bind by position through this list (the i-th built slot is backpack
+    // cell i), so their binding stays correct even if a JSON id drifts.
+    public readonly List<SlotUI> SlotOrder = new();
     public readonly Dictionary<string, ProgressBarUI> Bars = new();
 
     // Explicit-mapping binding (P0): resolve the UI-side code through the
@@ -51,7 +56,7 @@ public static class PanelLayoutRunner
             switch(element)
             {
                 case SlotElement slot:
-                    handles.Slots[slot.Id] = BuildSlot(host.transform, slot.Id, slot.Pos, slot.Frame);
+                    BuildSlot(handles, host.transform, slot.Id, slot.Pos, slot.Frame);
                     break;
                 case GridSlotElement grid:
                     for(int i = 0; i < grid.Rows * grid.Cols; i++)
@@ -60,7 +65,7 @@ public static class PanelLayoutRunner
                         var pos = new Vector2(
                             grid.Origin.x + (i % grid.Cols) * grid.Pitch,
                             grid.Origin.y - (i / grid.Cols) * grid.Pitch);
-                        handles.Slots[id] = BuildSlot(host.transform, id, pos, null);
+                        BuildSlot(handles, host.transform, id, pos, null);
                     }
                     break;
                 case BarElement bar:
@@ -71,13 +76,17 @@ public static class PanelLayoutRunner
         return handles;
     }
 
-    private static SlotUI BuildSlot(Transform parent, string id, Vector2 pos, SpriteRef frame)
+    // Registers the slot in both the id map and the build-order list, so the
+    // two can never disagree about which slots exist.
+    private static SlotUI BuildSlot(PanelLayoutHandles handles, Transform parent, string id, Vector2 pos, SpriteRef frame)
     {
         var go = new GameObject(id);
         var slot = go.AddComponent<SlotUI>();
         go.transform.SetParent(parent, false);
         go.transform.localPosition = new Vector3(pos.x, pos.y, 0f);
         if(frame != null)slot.SetFrame(UISprites.Resolve(frame.Sprite, "minecraft:slot"), frame.Tint);
+        handles.Slots[id] = slot;
+        handles.SlotOrder.Add(slot);
         return slot;
     }
 
