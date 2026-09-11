@@ -31,10 +31,12 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         return whiteSprite;
     }
 
+    private Image bgImage;   // frame background; kept for SetFrame (layout data, L1)
+
     private void Awake()
     {
-        var bg_image = gameObject.AddComponent<Image>();
-        bg_image.sprite = Resources.Load<Sprite>("Textures/UI/slot");
+        bgImage = gameObject.AddComponent<Image>();
+        bgImage.sprite = UISprites.Resolve("minecraft:slot");
         // Explicit rect size: the slot used to inherit the RectTransform
         // default (100x100), silently coupling all layout math to an unnamed
         // number (P0 of Docs/UI布局系统-…).
@@ -43,7 +45,7 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         // edgeGo.transform.SetParent(gameObject.transform);
         // edgeGo.AddComponent<Image>().sprite = Resources.Load<Sprite>("Textures/UI/slot_ui_edge");
 
-        highlight = bg_image.gameObject.AddComponent<Outline>();
+        highlight = bgImage.gameObject.AddComponent<Outline>();
         highlight.effectDistance = new Vector2(3, 3);
         highlight.enabled = false;
 
@@ -83,6 +85,15 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         hoverImage.color = HoverColor;
         hoverImage.raycastTarget = false;
         hoverOverlay.SetActive(false);
+    }
+
+    // Applies a layout-provided frame (L1): a null sprite keeps the default
+    // minecraft:slot frame (the resolver already fell back); the tint
+    // multiplies the frame image (Color.white = unchanged).
+    public void SetFrame(Sprite sprite, Color tint)
+    {
+        if(sprite != null)bgImage.sprite = sprite;
+        bgImage.color = tint;
     }
 
     // ---- read-source binding (Phase C: display reads a slot snapshot;

@@ -36,20 +36,22 @@ public class PanelLayoutHandles
 }
 
 // Interpreter of one PanelLayout: builds the panel frame plus one GameObject
-// per element and returns the handles. Panels build once in Awake - every
-// number comes from the layout data.
+// per element and returns the handles. Panels build once from
+// UIBehavior.OnDefinitionReady (after UIManager injected the definition, so
+// the layout may come from a JSON asset) - every number comes from the
+// layout data.
 public static class PanelLayoutRunner
 {
     public static PanelLayoutHandles Build(UIBehavior host, PanelLayout layout)
     {
-        UIPanelBuilder.BuildFrame(host, layout.Width, layout.Height, layout.Offset);
+        UIPanelBuilder.BuildFrame(host, layout);
         var handles = new PanelLayoutHandles();
         foreach(var element in layout.Elements)
         {
             switch(element)
             {
                 case SlotElement slot:
-                    handles.Slots[slot.Id] = BuildSlot(host.transform, slot.Id, slot.Pos);
+                    handles.Slots[slot.Id] = BuildSlot(host.transform, slot.Id, slot.Pos, slot.Frame);
                     break;
                 case GridSlotElement grid:
                     for(int i = 0; i < grid.Rows * grid.Cols; i++)
@@ -58,7 +60,7 @@ public static class PanelLayoutRunner
                         var pos = new Vector2(
                             grid.Origin.x + (i % grid.Cols) * grid.Pitch,
                             grid.Origin.y - (i / grid.Cols) * grid.Pitch);
-                        handles.Slots[id] = BuildSlot(host.transform, id, pos);
+                        handles.Slots[id] = BuildSlot(host.transform, id, pos, null);
                     }
                     break;
                 case BarElement bar:
@@ -69,20 +71,21 @@ public static class PanelLayoutRunner
         return handles;
     }
 
-    private static SlotUI BuildSlot(Transform parent, string id, Vector2 pos)
+    private static SlotUI BuildSlot(Transform parent, string id, Vector2 pos, SpriteRef frame)
     {
         var go = new GameObject(id);
         var slot = go.AddComponent<SlotUI>();
         go.transform.SetParent(parent, false);
         go.transform.localPosition = new Vector3(pos.x, pos.y, 0f);
+        if(frame != null)slot.SetFrame(UISprites.Resolve(frame.Sprite, "minecraft:slot"), frame.Tint);
         return slot;
     }
 
     private static ProgressBarUI BuildBar(Transform parent, BarElement bar)
     {
         var go = ProgressBarUI.AddProgressBar(bar.Id, new Vector3(bar.Pos.x, bar.Pos.y, 0f), bar.Dir,
-            Resources.Load<Sprite>("Textures/UI/" + bar.Front),
-            bar.Back == null ? null : Resources.Load<Sprite>("Textures/UI/" + bar.Back));
+            bar.Front == null ? null : UISprites.Resolve(bar.Front.Sprite),
+            bar.Back == null ? null : UISprites.Resolve(bar.Back.Sprite));
         go.transform.SetParent(parent, false);
         return go.GetComponent<ProgressBarUI>();
     }

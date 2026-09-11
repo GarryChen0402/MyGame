@@ -118,6 +118,7 @@ public class UIManager : MonoBehaviour
 
         var built = uiGo.GetComponent<UIBehavior>();
         built.uIDefinition = uiDef;   // the panel's registration data (Panel descriptor rides here)
+        built.OnDefinitionReady();    // definition ready, data not yet injected (L1): panels build their layout here
         built.SetData(data);
         built.Open();
         if(uiDef.OpenWithPlayerInventory)

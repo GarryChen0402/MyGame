@@ -14,13 +14,18 @@ public class UIWidgetBackground : MonoBehaviour
         bg_image.type = Image.Type.Sliced;
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
-        bg_image.sprite = Resources.Load<Sprite>("Textures/UI/universal_bg");
+        bg_image.sprite = UISprites.Resolve("minecraft:universal_bg");
     }
 
     public void SetSprite(Sprite sprite)
     {
         if (sprite == null) return;
         bg_image.sprite = sprite;
+    }
+
+    public void SetColor(Color color)
+    {
+        bg_image.color = color;
     }
 
     public static GameObject CreateNewBackground(Sprite sprite = null)

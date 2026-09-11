@@ -32,7 +32,7 @@ public class WidgetTestUI : UIBehavior
     {
         var page = NewPage("Page 1");
 
-        var iconGo = UIIconWidget.CreateNewIcon(Resources.Load<Sprite>("Textures/UI/slot"), page);
+        var iconGo = UIIconWidget.CreateNewIcon(UISprites.Resolve("minecraft:slot"), page);
         Place(iconGo, new Vector2(-170, 60), new Vector2(64, 64));
 
         var textGo = UITextWidget.CreateNewText("Widget test - grant items below", page);

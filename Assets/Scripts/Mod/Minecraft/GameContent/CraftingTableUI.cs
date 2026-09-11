@@ -6,6 +6,8 @@ public class CraftingTableUI : UIBehavior
     // former hardcoded literal, so the migration is visually zero-change.
     // Slot ids grid0..grid8 / result are UI-side codes; the descriptor's
     // explicit Bindings map each to its container-reported data name (P0).
+    // L1: this static layout is the C# fallback for the JSON asset
+    // (UILayouts/crafting_table) and the export source (Tools/UI Layout).
     public static readonly PanelLayout Layout = new()
     {
         Elements =
@@ -25,9 +27,13 @@ public class CraftingTableUI : UIBehavior
     private InventoryUI packGroup;   // one group over the whole panel: grid and result packs route by code (P2)
     private PanelData data = null;   // data packet of the open session
 
-    private void Awake()
+    // Builds the panel from the definition-borne layout (L1): UIManager calls
+    // this right after injecting uIDefinition and before SetData, so the
+    // JSON-resolved layout (UIDefs registration) is what gets built. Not
+    // Awake - at factory time the definition is not injected yet.
+    public override void OnDefinitionReady()
     {
-        handles = PanelLayoutRunner.Build(this, Layout);
+        handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
         packGroup = new InventoryUI();
         for(int i = 0; i < 9; i++)packGroup.Add(handles.Slots[$"grid{i}"]);
         packGroup.Add(handles.Slots["result"]);
@@ -64,16 +70,9 @@ public class CraftingTableUI : UIBehavior
         Refresh();
     }
 
-    public static UIDefinition craftingTableUIDefinition = new()
-    {
-        modId = "minecraft",
-        name = "crafting_table",
-        Kind = UIKind.SinglePanel,
-        InputHandlerId = "minecraft:ui_input_handler",
-        OpenWithPlayerInventory = true,
-        Panel = new PanelDescriptor
+    public static UIDefinition craftingTableUIDefinition = UIDefs.SinglePanel<CraftingTableUI>(
+        "crafting_table", "Crafting Table UI", "UILayouts/crafting_table", Layout, new PanelDescriptor
         {
-            Layout = Layout,
             ChannelNames = new string[0],   // the workbench container contributes no channels
             // Explicit slot declarations (P0): ui code -> data code + parser
             // + responsive actions.
@@ -90,10 +89,5 @@ public class CraftingTableUI : UIBehavior
                 ["grid8"] = new SlotBindingEntry("grid8", new ItemDataParser()).WithCoreActions(),
                 ["result"] = new SlotBindingEntry("result", new ItemDataParser()).WithCoreActions(),
             }
-        },
-        Factory = () => {
-            var go = new GameObject("Crafting Table UI", typeof(CraftingTableUI));
-            return go;
-        }
-    };
+        });
 }

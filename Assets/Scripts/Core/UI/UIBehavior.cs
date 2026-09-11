@@ -8,6 +8,13 @@ public class UIBehavior : MonoBehaviour
     public UIDefinition uIDefinition;
     public virtual void SetData(object data){}
 
+    // Assembly hook (L1 of Docs/可视化UI布局编辑器-实施文档.md): called by
+    // UIManager once the definition has been injected and before SetData -
+    // panels whose layout rides on the definition (JSON-resolved by UIDefs at
+    // registration time) build their runtime structure here, never in Awake.
+    // Not called on UICache hits: such instances are already assembled.
+    public virtual void OnDefinitionReady(){}
+
     // Open-time declaration validation (P0 of Docs/UI槽位编码与解析映射-实施文档.md,
     // C6/A4): duplicate slot codes in the layout or the packet are a hard
     // error - dictionaries swallow duplicates and a binding could land on the

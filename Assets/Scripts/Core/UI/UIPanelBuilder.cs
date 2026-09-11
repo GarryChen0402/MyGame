@@ -6,19 +6,26 @@ using UnityEngine;
 // UIStyle instead of re-hardcoded per panel.
 public static class UIPanelBuilder
 {
-    // Center-anchored panel frame sized from the layout data, plus its
-    // background. Element positions are relative to this rect.
-    public static RectTransform BuildFrame(UIBehavior host, float width, float height, Vector3 offset)
+    // Panel frame from the layout data (anchor/scale/offset), plus its
+    // background unless the layout declares none (null = no background).
+    // Element positions are relative to this rect; pivot stays (0.5,0.5) so
+    // the anchor point is the panel center (design §4.1 定位语义).
+    public static RectTransform BuildFrame(UIBehavior host, PanelLayout layout)
     {
         var rt = host.gameObject.AddComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.anchorMin = rt.anchorMax = layout.Anchor;
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(width, height);
-        rt.localScale = new Vector3(UIStyle.PanelScale, UIStyle.PanelScale, 1f);
-        rt.localPosition += offset;
+        rt.sizeDelta = new Vector2(layout.Width, layout.Height);
+        rt.localScale = new Vector3(layout.Scale, layout.Scale, 1f);
+        rt.anchoredPosition = layout.Offset;
 
-        var bg = UIWidgetBackground.CreateNewBackground();
-        bg.transform.SetParent(host.transform, false);
+        if(layout.Background != null)
+        {
+            var bg = UIWidgetBackground.CreateNewBackground(
+                UISprites.Resolve(layout.Background.Sprite, "minecraft:universal_bg"));
+            bg.transform.SetParent(host.transform, false);
+            bg.GetComponent<UIWidgetBackground>().SetColor(layout.Background.Tint);
+        }
         return rt;
     }
 

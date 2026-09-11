@@ -5,7 +5,9 @@ public class FurnaceUI : UIBehavior
     // Panel geometry as data (S3 + layout doc P1): every value equals the
     // former hardcoded literal, so the migration is visually zero-change.
     // Slot ids are UI-side codes; the descriptor's explicit Bindings map each
-    // to its container-reported data name (P0).
+    // to its container-reported data name (P0). L1: this static layout is the
+    // C# fallback for the JSON asset (UILayouts/furnace) and the export
+    // source (Tools/UI Layout/Export Static Layouts).
     public static readonly PanelLayout Layout = new()
     {
         Elements =
@@ -18,13 +20,13 @@ public class FurnaceUI : UIBehavior
             new BarElement
             {
                 Id = "fire", Pos = new(-120, 0), Dir = ProgressBarUI.Direction.BottomToTop,
-                Front = "furnace_fire_front", Back = "furnace_fire_back"
+                Front = new SpriteRef("furnace_fire_front"), Back = new SpriteRef("furnace_fire_back")
             },
             // Cook gauge: the arrow fills left-to-right while a recipe cooks.
             new BarElement
             {
                 Id = "cook", Pos = Vector2.zero, Dir = ProgressBarUI.Direction.LeftToRight,
-                Front = "furnace_progress_front", Back = "furnace_progress_back"
+                Front = new SpriteRef("furnace_progress_front"), Back = new SpriteRef("furnace_progress_back")
             },
         }
     };
@@ -35,9 +37,13 @@ public class FurnaceUI : UIBehavior
     private ProgressBarUI cookProgress = null;   // recipe progress arrow
     private PanelData data = null;               // data packet of the open session
 
-    private void Awake()
+    // Builds the panel from the definition-borne layout (L1): UIManager calls
+    // this right after injecting uIDefinition and before SetData, so the
+    // JSON-resolved layout (UIDefs registration) is what gets built. Not
+    // Awake - at factory time the definition is not injected yet.
+    public override void OnDefinitionReady()
     {
-        handles = PanelLayoutRunner.Build(this, Layout);
+        handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
         fireProgress = handles.Bars["fire"];
         cookProgress = handles.Bars["cook"];
         packGroup = new InventoryUI();
@@ -61,16 +67,9 @@ public class FurnaceUI : UIBehavior
         handles.Bind(uIDefinition.Panel, "output", panel);
     }
 
-    public static UIDefinition furanceUIDefinition = new()
-    {
-        modId = "minecraft",
-        name = "furnace",
-        Kind = UIKind.SinglePanel,
-        InputHandlerId = "minecraft:ui_input_handler",
-        OpenWithPlayerInventory = true,
-        Panel = new PanelDescriptor
+    public static UIDefinition furanceUIDefinition = UIDefs.SinglePanel<FurnaceUI>(
+        "furnace", "Furnace UI", "UILayouts/furnace", Layout, new PanelDescriptor
         {
-            Layout = Layout,
             // Channel order mirrors ReadChannels: 0 lit remainder, 1 lit
             // total, 2 cook progress, 3 cook total (vanilla furnace order).
             ChannelNames = new[] { "fuel_left", "fuel_total", "cook_progress", "cook_total" },
@@ -82,12 +81,7 @@ public class FurnaceUI : UIBehavior
                 ["fuel"] = new SlotBindingEntry("fuel", new ItemDataParser()).WithCoreActions(),
                 ["output"] = new SlotBindingEntry("output", new ItemDataParser()).WithCoreActions(),
             }
-        },
-        Factory = () =>{
-            var go = new GameObject("Furnace UI", typeof(FurnaceUI));
-            return go;
-        }
-    };
+        });
 
     // Pushes the channel state into the two gauges while the panel is open
     // (Update stops when the UI is hidden): the sync layer copies the work
