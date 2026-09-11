@@ -6,7 +6,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Runtime service over the frozen ResourceSystem.KeyBindings table: keeps the
+// Runtime service over the frozen action tables (P5: UIActions/WorldActions
+// split by action class; the legacy KeyBindings table stays for the JEI three
+// until P7): keeps the
 // per-action user overrides (defaults live in the registry) plus per-frame
 // state, and answers the two semantic queries game code polls instead of
 // reading physical keys:
@@ -55,12 +57,15 @@ public class KeyBindingManager
             ? InputHandlerManager.Instance.CurrentInputHandler?.FullName : null;
 
         // Held state: physical full sweep, independent of context (context is
-        // enforced on the query side via IsAllowed).
+        // enforced on the query side via IsAllowed). The action tables are
+        // swept inline every frame, so registrations finishing during the
+        // stepped startup window are picked up without an index rebuild.
+        foreach(var binding in ResourceSystem.Instance.UIActions.Values)
+            UpdateHeld(binding, ctrl, shift, alt);
+        foreach(var binding in ResourceSystem.Instance.WorldActions.Values)
+            UpdateHeld(binding, ctrl, shift, alt);
         foreach(var binding in ResourceSystem.Instance.KeyBindings.Values)
-        {
-            GetCurrentBinding(binding, out var key, out var modifier);
-            down[binding.FullName] = Input.GetKey(key) && ModifierHeld(modifier, ctrl, shift, alt);
-        }
+            UpdateHeld(binding, ctrl, shift, alt);
 
         // Edges: each physical press is routed to at most one action - the one
         // bound to that key whose whitelist admits the current context. A held
@@ -79,7 +84,7 @@ public class KeyBindingManager
         string bare = null;
         foreach(string fullName in candidates)
         {
-            if(!ResourceSystem.Instance.KeyBindings.TryGetResourceWithFullName(fullName, out var binding))continue;
+            if(!TryFindAction(fullName, out var binding))continue;
             if(!ContextAllows(binding, topHandler))continue;
             GetCurrentBinding(binding, out _, out var modifier);
             if(modifier == KeyModifier.None)
@@ -99,7 +104,7 @@ public class KeyBindingManager
     public bool IsAllowed(string bindingFullName)
     {
         if(string.IsNullOrEmpty(bindingFullName))return false;   // no action bound to the session yet
-        if(!ResourceSystem.Instance.KeyBindings.TryGetResourceWithFullName(bindingFullName, out var binding))
+        if(!TryFindAction(bindingFullName, out var binding))
         {
             WarnUnknown(bindingFullName);
             return false;
@@ -133,7 +138,7 @@ public class KeyBindingManager
     public void SetBinding(string bindingFullName, KeyCode key,
         KeyModifier modifier = KeyModifier.None, bool persistent = true)
     {
-        if(!ResourceSystem.Instance.KeyBindings.TryGetResourceWithFullName(bindingFullName, out var binding))
+        if(!TryFindAction(bindingFullName, out var binding))
         {
             WarnUnknown(bindingFullName);
             return;
@@ -158,7 +163,7 @@ public class KeyBindingManager
 
     public void ResetBinding(string bindingFullName, bool persistent = true)
     {
-        if(!ResourceSystem.Instance.KeyBindings.TryGetResourceWithFullName(bindingFullName, out var binding))
+        if(!TryFindAction(bindingFullName, out var binding))
         {
             WarnUnknown(bindingFullName);
             return;
@@ -190,7 +195,13 @@ public class KeyBindingManager
     // it is legitimate context reuse (E: open/close). Warnings only, never fatal.
     private void ValidateAll()
     {
-        foreach(var binding in ResourceSystem.Instance.KeyBindings.Values)
+        // The action tables validate as one namespace (action names are global).
+        var list = new List<KeyBinding>();
+        list.AddRange(ResourceSystem.Instance.UIActions.Values);
+        list.AddRange(ResourceSystem.Instance.WorldActions.Values);
+        list.AddRange(ResourceSystem.Instance.KeyBindings.Values);
+
+        foreach(var binding in list)
         {
             if(binding.AllowedInputHandlers == null)continue;
             foreach(string handlerId in binding.AllowedInputHandlers)
@@ -199,8 +210,6 @@ public class KeyBindingManager
                     Debug.LogWarning($"[KeyBinding] {binding.FullName} whitelists unknown input handler '{handlerId}'");
             }
         }
-
-        var list = new List<KeyBinding>(ResourceSystem.Instance.KeyBindings.Values);
         for(int i = 0; i < list.Count; i++)
         {
             GetCurrentBinding(list[i], out var keyI, out var modI);
@@ -231,7 +240,7 @@ public class KeyBindingManager
         {
             foreach(var pair in ParseOverrideFile(File.ReadAllText(path)))
             {
-                if(!ResourceSystem.Instance.KeyBindings.TryGetResourceWithFullName(pair.Key, out var binding))
+                if(!TryFindAction(pair.Key, out var binding))
                 {
                     Debug.LogWarning($"[KeyBinding] save file holds unknown action '{pair.Key}', skipped");
                     continue;
@@ -292,14 +301,49 @@ public class KeyBindingManager
     private void RebuildKeyIndex()
     {
         actionsByKey.Clear();
-        foreach(var binding in ResourceSystem.Instance.KeyBindings.Values)
-        {
-            GetCurrentBinding(binding, out var key, out _);
-            if(!IsBindableKey(key))continue;
-            if(!actionsByKey.TryGetValue(key, out var list))actionsByKey[key] = list = new List<string>();
-            list.Add(binding.FullName);
-        }
+        foreach(var binding in ResourceSystem.Instance.UIActions.Values)AddToKeyIndex(binding);
+        foreach(var binding in ResourceSystem.Instance.WorldActions.Values)AddToKeyIndex(binding);
+        foreach(var binding in ResourceSystem.Instance.KeyBindings.Values)AddToKeyIndex(binding);
         keyIndexDirty = false;
+    }
+
+    private void AddToKeyIndex(KeyBinding binding)
+    {
+        GetCurrentBinding(binding, out var key, out _);
+        if(!IsBindableKey(key))return;
+        if(!actionsByKey.TryGetValue(key, out var list))actionsByKey[key] = list = new List<string>();
+        list.Add(binding.FullName);
+    }
+
+    private void UpdateHeld(KeyBinding binding, bool ctrl, bool shift, bool alt)
+    {
+        GetCurrentBinding(binding, out var key, out var modifier);
+        down[binding.FullName] = Input.GetKey(key) && ModifierHeld(modifier, ctrl, shift, alt);
+    }
+
+    // Cross-table action lookup (P5): action names are globally unique, so the
+    // search order carries no meaning; the legacy table holds the JEI three
+    // until P7 migrates them.
+    private static bool TryFindAction(string fullName, out KeyBinding action)
+    {
+        var rs = ResourceSystem.Instance;
+        if(rs.UIActions.TryGetResourceWithFullName(fullName, out var uiAction))
+        {
+            action = uiAction;
+            return true;
+        }
+        if(rs.WorldActions.TryGetResourceWithFullName(fullName, out var worldAction))
+        {
+            action = worldAction;
+            return true;
+        }
+        if(rs.KeyBindings.TryGetResourceWithFullName(fullName, out var legacy))
+        {
+            action = legacy;
+            return true;
+        }
+        action = null;
+        return false;
     }
 
     private void GetCurrentBinding(KeyBinding binding, out KeyCode key, out KeyModifier modifier)

@@ -33,11 +33,14 @@ public partial class Minecraft
     // ---- N: key bindings ----
     private void RegisterKeyBindings()
     {
-        // ---- input actions (default bindings; players rebind via overrides,
-        // game code only ever polls action ids, never physical keys) ----
-        void RegisterKeyBinding(string name, KeyCode key, string category, params string[] allowedHandlers)
+        // ---- input actions split by action class (P5): world-interaction
+        // actions and UI actions live in separate tables; players rebind via
+        // overrides, game code only ever polls action ids, never physical
+        // keys. (The JEI three still register on the legacy KeyBindings table
+        // until P7.) ----
+        void RegisterWorldAction(string name, KeyCode key, string category, params string[] allowedHandlers)
         {
-            ResourceSystem.Instance.KeyBindings.Register(new KeyBinding
+            ResourceSystem.Instance.WorldActions.Register(new WorldAction
             {
                 modId = ModId,
                 name = name,
@@ -46,26 +49,39 @@ public partial class Minecraft
                 AllowedInputHandlers = allowedHandlers == null ? null : new HashSet<string>(allowedHandlers)
             });
         }
-        RegisterKeyBinding("open_inventory", KeyCode.E, "game", "minecraft:player_input_handler");
+        void RegisterUIAction(string name, KeyCode key, string category, params string[] allowedHandlers)
+        {
+            ResourceSystem.Instance.UIActions.Register(new UIAction
+            {
+                modId = ModId,
+                name = name,
+                DefaultKey = key,
+                Category = category,
+                AllowedInputHandlers = allowedHandlers == null ? null : new HashSet<string>(allowedHandlers)
+            });
+        }
+        RegisterWorldAction("forward", KeyCode.W, "movement", "minecraft:player_input_handler");
+        RegisterWorldAction("back", KeyCode.S, "movement", "minecraft:player_input_handler");
+        RegisterWorldAction("left", KeyCode.A, "movement", "minecraft:player_input_handler");
+        RegisterWorldAction("right", KeyCode.D, "movement", "minecraft:player_input_handler");
+        // Space jumps (MC-style; the ascend/descend flight keys went away with
+        // the unified gravity physics, see Docs/受击击退与无敌帧实现方案.md).
+        RegisterWorldAction("jump", KeyCode.Space, "movement", "minecraft:player_input_handler");
+        RegisterWorldAction("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
+        RegisterWorldAction("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
+        // UI actions (game-state triggered, UI-owned; P6 routes them through
+        // the UI action ring - global actions, not slot-targeted).
+        RegisterUIAction("open_inventory", KeyCode.E, "game", "minecraft:player_input_handler");
         // Same default key as open_inventory on purpose: routing (KeyBindingManager
         // refresh) feeds the press to whichever action the current input context
         // admits, so E opens in game and closes inside a panel (design doc §6.1).
-        RegisterKeyBinding("close_ui", KeyCode.E, "ui", "minecraft:ui_input_handler");
-        RegisterKeyBinding("forward", KeyCode.W, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("back", KeyCode.S, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("left", KeyCode.A, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("right", KeyCode.D, "movement", "minecraft:player_input_handler");
-        // Space jumps (MC-style; the ascend/descend flight keys went away with
-        // the unified gravity physics, see Docs/受击击退与无敌帧实现方案.md).
-        RegisterKeyBinding("jump", KeyCode.Space, "movement", "minecraft:player_input_handler");
-        RegisterKeyBinding("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
-        RegisterKeyBinding("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
+        RegisterUIAction("close_ui", KeyCode.E, "ui", "minecraft:ui_input_handler");
         // Widget smoke-test UI (UI 组件化重构设计方案 §3.4): opens the tab /
         // icon / text / input / button demo panel (WidgetTestUI).
-        RegisterKeyBinding("open_widget_test", KeyCode.T, "game", "minecraft:player_input_handler");
+        RegisterUIAction("open_widget_test", KeyCode.T, "game", "minecraft:player_input_handler");
         // Entity model editor (design doc §7): plain P. Decision C originally
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
-        RegisterKeyBinding("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
+        RegisterUIAction("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
     }
 }

@@ -43,8 +43,12 @@ public partial class ResourceSystem
     public ResourceRegistryTable<UIDefinition> UIDefinitions {get;} = new();
     // Input Handler
     public ResourceRegistryTable<IInputHandler> InputHandlers {get;} = new();
-    // Input actions (physical key -> action table, MC KeyMapping style)
+    // Input actions (physical key -> action table, MC KeyMapping style). P5
+    // splits the single table by action class (world-interaction vs UI); the
+    // legacy table stays for the JEI three until P7 migrates them.
     public ResourceRegistryTable<KeyBinding> KeyBindings {get;} = new();
+    public ResourceRegistryTable<WorldAction> WorldActions {get;} = new();
+    public ResourceRegistryTable<UIAction> UIActions {get;} = new();
     //MobDefinition
     public ResourceRegistryTable<MobDefinition> MobDefinitions {get;} = new();
     // Mob AI behavior specs: assembly logic + per-species behavior numbers
@@ -126,6 +130,8 @@ public partial class ResourceSystem
         WorkContainerDefinitions.Freeze();
         BlockEntityDefinitions.Freeze();
         KeyBindings.Freeze();
+        WorldActions.Freeze();
+        UIActions.Freeze();
         MobDefinitions.Freeze();      // historically unfrozen; frozen now with AIDefinitions
         AIDefinitions.Freeze();
         BuffDefinitions.Freeze();
