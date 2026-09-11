@@ -22,7 +22,7 @@ public class PanelLayoutHandles
         slot.BindInteractive(data, index, new SlotAddr
         {
             scope = SlotScope.Panel,
-            panelModelId = data.SessionId,
+            beId = data.BeId,
             slot = index
         }, entry);
     }

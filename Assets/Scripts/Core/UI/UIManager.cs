@@ -129,7 +129,7 @@ public class UIManager : MonoBehaviour
         CancelDrag();   // panel closed mid-drag: drop the session untouched
         // Panel close command first (logic side): BE sessions run their close
         // action and deregister their mirror bindings (rule R-C1-0b).
-        if(currentPanel != null)ContainerCommandProcessor.Instance.ClosePanel(currentPanel.SessionId);
+        if(currentPanel != null)ContainerCommandProcessor.Instance.ClosePanel(currentPanel.BeId);
         currentPanel = null;
         currentUI?.Close();
         if(currentUI != null && CurrentUIhasInputHandler)

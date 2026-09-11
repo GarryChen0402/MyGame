@@ -4,14 +4,15 @@ using UnityEngine;
 // Slot addressing (Phase C rule R-C1-0b): the identity of every interactive
 // UI slot, resolved by ContainerCommandProcessor into an ISlotAccess at
 // command time. scopes: resident PlayerInventory / PlayerCrafting, or a
-// block-entity panel session (panelModelId = PanelData.SessionId, slot =
-// PanelData.Slots index - the canonical order shared with the UI).
+// block-entity panel session (beId = PanelData.BeId, the deterministic BE
+// address; slot = PanelData.Slots index - the canonical order shared with
+// the UI).
 public enum SlotScope { None, PlayerInventory, PlayerCrafting, Panel }
 
 public struct SlotAddr
 {
     public SlotScope scope;
-    public int panelModelId;   // valid when scope == Panel
+    public string beId;        // valid when scope == Panel (BlockEntityId.Of)
     public int slot;           // canonical slot index
 }
 
@@ -35,15 +36,14 @@ public class ContainerCommandProcessor
 {
     public static ContainerCommandProcessor Instance { get; } = new();
 
-    private readonly Dictionary<int, ContainerPanelSession> sessions = new();
-    private int nextSessionId = 1;
+    private readonly Dictionary<string, ContainerPanelSession> sessions = new();
 
     // Open panel that shift-moves from the backpack target (the former
     // currentUI.ContainerSlots equivalent): PlayerCrafting while the player
     // 2x2 panel is open, Panel while a BE panel session is open, None
     // otherwise (widget test / editor panels have no container slots).
     private SlotScope activeScope;
-    private int activeSessionId;
+    private string activeBeId = string.Empty;   // valid when activeScope == Panel
 
     // ---- slot settlements (instant; SCP semantics untouched) ----
 
@@ -111,7 +111,7 @@ public class ContainerCommandProcessor
             }
             case SlotScope.Panel:
             {
-                if(!sessions.TryGetValue(addr.panelModelId, out var s))return null;
+                if(!sessions.TryGetValue(addr.beId, out var s))return null;
                 if(addr.slot < 0 || addr.slot >= s.Accessors.Count)return null;
                 return s.Accessors[addr.slot];
             }
@@ -139,7 +139,7 @@ public class ContainerCommandProcessor
             }
             case SlotScope.Panel:
             {
-                if(!sessions.TryGetValue(activeSessionId, out var s))return null;
+                if(!sessions.TryGetValue(activeBeId, out var s))return null;
                 return s.Accessors;
             }
             default: return null;
@@ -158,6 +158,7 @@ public class ContainerCommandProcessor
     // packet is the whole data contract (rule R-C1-4).
     public PanelData OpenPanel(BlockEntity be)
     {
+        string beId = BlockEntityId.Of(be);
         var ctx = new PanelBuildContext();
         if(be != null)
         {
@@ -165,28 +166,28 @@ public class ContainerCommandProcessor
             if(ctx.SlotSources.Count == 0)
                 Debug.LogWarning($"[ContainerCommandProcessor] no work container described a panel for {be.Definition?.FullName}; opened an empty data packet");
         }
-        var data = new PanelData(nextSessionId++, ctx.SlotNames, ctx.ChannelNames);
+        var data = new PanelData(beId, ctx.SlotNames, ctx.ChannelNames);
         var session = new ContainerPanelSession { Data = data, OnClose = ctx.OnClose };
         foreach(var slot in ctx.SlotSources)session.Accessors.Add(slot.Accessor);
         MirrorSync.Instance.AddPanelBindings(data, ctx.SlotSources, ctx.ChannelSources);
-        sessions[data.SessionId] = session;
+        sessions[beId] = session;
         activeScope = SlotScope.Panel;
-        activeSessionId = data.SessionId;
+        activeBeId = beId;
         return data;
     }
 
     // Panel close command (fired by UIManager.CloseUI before hiding): runs
     // the session close action (workbench preview clear), drops the data
     // bindings and clears the active shift-move target.
-    public void ClosePanel(int sessionId)
+    public void ClosePanel(string beId)
     {
-        if(sessionId == 0 || !sessions.TryGetValue(sessionId, out var s))return;
+        if(string.IsNullOrEmpty(beId) || !sessions.TryGetValue(beId, out var s))return;
         s.OnClose?.Invoke();
-        sessions.Remove(sessionId);
+        sessions.Remove(beId);
         MirrorSync.Instance.RemovePanelBindings(s.Data);
-        if(activeSessionId == sessionId)
+        if(activeBeId == beId)
         {
-            activeSessionId = 0;
+            activeBeId = string.Empty;
             activeScope = SlotScope.None;
         }
     }
@@ -197,7 +198,7 @@ public class ContainerCommandProcessor
     {
         Player.Instance.Crafting?.RefreshPreview();
         activeScope = SlotScope.PlayerCrafting;
-        activeSessionId = 0;
+        activeBeId = string.Empty;
         UIManager.Instance?.OpenUI(PlayerUI.playerUIDefinition.FullName, null);
     }
 

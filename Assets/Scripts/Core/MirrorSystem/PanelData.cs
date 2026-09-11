@@ -8,7 +8,7 @@ using System.Collections.Generic;
 // bindings (rule R-C1-0); the UI face stays a pure read.
 public class PanelData : ISlotReadSource
 {
-    public int SessionId { get; internal set; }   // session identity (= the former PanelModel.ModelId)
+    public string BeId { get; internal set; }     // deterministic BE address (= BlockEntityId.Of; the former PanelModel.ModelId)
     public readonly string[] SlotNames;           // alignment names (container self-report); index order = contribution order
     public readonly SlotMirror[] Slots;           // value array; slot order = container contribution order
     public readonly string[] ChannelNames;        // channel alignment names, contribution order
@@ -17,9 +17,9 @@ public class PanelData : ISlotReadSource
     public int Version { get; private set; }
     private bool changed;
 
-    public PanelData(int sessionId, IReadOnlyList<string> slotNames, IReadOnlyList<string> channelNames)
+    public PanelData(string beId, IReadOnlyList<string> slotNames, IReadOnlyList<string> channelNames)
     {
-        SessionId = sessionId;
+        BeId = beId;
         SlotNames = CopyNames(slotNames);
         ChannelNames = CopyNames(channelNames);
         Slots = new SlotMirror[SlotNames.Length];
