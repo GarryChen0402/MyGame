@@ -29,6 +29,18 @@ public static class UISprites
         return sprite;
     }
 
+    // Existence probe for tools (L3 of the layout editor doc): true when the
+    // exact id - or its vanilla same-name fallback - loads. Mirrors Resolve's
+    // lookup order without the warning, so editor validation stays silent.
+    public static bool Exists(string id)
+    {
+        if(Load(id) != null)return true;
+        if(string.IsNullOrEmpty(id))return false;
+        int separator = id.IndexOf(':');
+        return separator > 0 && id.Substring(0, separator) != VanillaModId
+            && Load(id.Substring(separator + 1)) != null;
+    }
+
     private static Sprite Load(string id)
         => string.IsNullOrEmpty(id) ? null : Resources.Load<Sprite>(PathOf(id));
 

@@ -150,8 +150,14 @@ public static class PanelLayoutSerializer
         return layout;
     }
 
+    // Empty sprite = "no sprite" (L3 of the layout editor doc): JsonUtility
+    // cannot express null references (it writes them as empty default
+    // instances), so an empty sprite must fold to null here - otherwise a
+    // no-background asset would read back as the fallback backdrop.
     private static SpriteRef ToRef(SpriteRefData data)
-        => data == null ? null : new SpriteRef(data.sprite, data.tint == default ? Color.white : data.tint);
+        => data == null || string.IsNullOrEmpty(data.sprite)
+            ? null
+            : new SpriteRef(data.sprite, data.tint == default ? Color.white : data.tint);
 
     private static SpriteRefData ToData(SpriteRef reference)
         => reference == null ? null : new SpriteRefData { sprite = reference.Sprite, tint = reference.Tint };

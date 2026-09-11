@@ -33,6 +33,8 @@ public class UILayoutEditorWindow : EditorWindow
         ("crafting_table", () => CraftingTableUI.Layout),
     };
 
+    private const int UndoLimit = 20;
+
     private PanelLayoutData data;
     private string currentPath;
     private string[] assetPaths = Array.Empty<string>();
@@ -42,8 +44,14 @@ public class UILayoutEditorWindow : EditorWindow
     private bool snap = true;
     private bool dirty;
     private bool dragging;
+    private bool dragPushed;
     private Vector2 dragBase, dragValue;
     private Vector2 mouseAuthor;
+    // Object-level undo (design §4.3): the entry carries the asset path too,
+    // so undoing an Import restores the previous asset alongside its state.
+    private readonly List<(string path, PanelLayoutData data)> undoStack = new();
+    private readonly List<string> warnings = new();
+    private Vector2 warningScroll;
 
     [MenuItem("Tools/UI Layout Editor")]
     private static void Open()
@@ -56,12 +64,14 @@ public class UILayoutEditorWindow : EditorWindow
 
     private void OnGUI()
     {
+        HandleUndoShortcut();
         DrawToolbar();
         EditorGUILayout.BeginHorizontal();
         DrawLeftColumn();
         DrawCanvas();
         DrawAttributeColumn();
         EditorGUILayout.EndHorizontal();
+        DrawWarningBar();
         DrawStatusBar();
     }
 
@@ -151,6 +161,22 @@ public class UILayoutEditorWindow : EditorWindow
             selectedElement = -1;
             GUILayout.Label("(none)", EditorStyles.miniLabel);
         }
+        using(new EditorGUI.DisabledScope(data == null))
+        {
+            GUILayout.Space(4);
+            GUILayout.BeginHorizontal();
+            if(GUILayout.Button("+slot"))AddElement("slot");
+            if(GUILayout.Button("+grid"))AddElement("grid");
+            if(GUILayout.Button("+bar"))AddElement("bar");
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            using(new EditorGUI.DisabledScope(selectedElement < 0 || selectedElement >= data.elements.Count))
+            {
+                if(GUILayout.Button("Copy"))CopyElement();
+                if(GUILayout.Button("Delete"))DeleteElement();
+            }
+            GUILayout.EndHorizontal();
+        }
         EditorGUILayout.EndScrollView();
         EditorGUILayout.EndVertical();
     }
@@ -203,6 +229,7 @@ public class UILayoutEditorWindow : EditorWindow
                 if(selectedElement >= 0)
                 {
                     dragging = true;
+                    dragPushed = false;
                     dragBase = author;
                     dragValue = ElementPos(data.elements[selectedElement]);
                 }
@@ -210,6 +237,13 @@ public class UILayoutEditorWindow : EditorWindow
                 Repaint();
                 break;
             case EventType.MouseDrag when dragging && selectedElement >= 0 && selectedElement < data.elements.Count:
+                // The undo entry captures the pre-drag state at the first
+                // move, so a click that only selects never pollutes the stack.
+                if(!dragPushed)
+                {
+                    PushUndo();
+                    dragPushed = true;
+                }
                 var raw = dragValue + (author - dragBase);
                 if(snap && !e.shift)raw = Snap(raw);
                 SetElementPos(data.elements[selectedElement], raw);
@@ -372,6 +406,11 @@ public class UILayoutEditorWindow : EditorWindow
         }
         else
         {
+            // Pre-change snapshot for the undo stack: field edits are applied
+            // by the controls themselves, so the "before" state must be taken
+            // before they run; it is only pushed when a control reports a
+            // change (the copy itself is cheap - window state is tiny).
+            var snapshot = Clone(data);
             EditorGUI.BeginChangeCheck();
             GUILayout.Label("Frame", EditorStyles.boldLabel);
             data.panel = EditorGUILayout.TextField("Panel", data.panel);
@@ -387,7 +426,11 @@ public class UILayoutEditorWindow : EditorWindow
                 DrawElementFields(data.elements[selectedElement]);
             else
                 GUILayout.Label("(select an element on the canvas)", EditorStyles.miniLabel);
-            if(EditorGUI.EndChangeCheck())dirty = true;
+            if(EditorGUI.EndChangeCheck())
+            {
+                PushUndoSnapshot(currentPath, snapshot);
+                dirty = true;
+            }
         }
         EditorGUILayout.EndScrollView();
         EditorGUILayout.EndVertical();
@@ -455,6 +498,235 @@ public class UILayoutEditorWindow : EditorWindow
         GUILayout.EndHorizontal();
     }
 
+    // ------------------------------------------------------------------- undo
+
+    private void HandleUndoShortcut()
+    {
+        var e = Event.current;
+        if(e.type != EventType.KeyDown || e.keyCode != KeyCode.Z)return;
+        if(!e.control && !e.command)return;
+        if(EditorGUIUtility.editingTextField)return;   // a focused text field keeps its own Ctrl+Z
+        if(undoStack.Count == 0)return;
+        var entry = undoStack[^1];
+        undoStack.RemoveAt(undoStack.Count - 1);
+        data = entry.data;
+        currentPath = entry.path;
+        selectedElement = -1;
+        dragging = false;
+        dirty = true;   // the restored state is not what is on disk
+        e.Use();
+        Repaint();
+    }
+
+    private void PushUndo()
+    {
+        if(data == null)return;
+        PushUndoSnapshot(currentPath, Clone(data));
+    }
+
+    private void PushUndoSnapshot(string path, PanelLayoutData snapshot)
+    {
+        if(snapshot == null)return;
+        undoStack.Add((path, snapshot));
+        if(undoStack.Count > UndoLimit)undoStack.RemoveAt(0);
+    }
+
+    // Deep copy through the project's own serializer: the DTO round-trips
+    // losslessly (JsonUtility cannot express null refs - re-canonicalize).
+    private static PanelLayoutData Clone(PanelLayoutData source)
+    {
+        var copy = JsonUtility.FromJson<PanelLayoutData>(JsonUtility.ToJson(source));
+        if(copy == null)return null;
+        Canonicalize(copy);
+        return copy;
+    }
+
+    // -------------------------------------------------------- editing actions
+
+    private void AddElement(string kind)
+    {
+        PushUndo();
+        var element = new PanelElementData { kind = kind };
+        switch(kind)
+        {
+            case "slot":
+                element.id = UniqueName("slot");
+                break;
+            case "grid":
+                element.idPrefix = UniqueName("grid");
+                element.rows = 1;
+                element.cols = 1;
+                element.pitch = 100f;
+                element.origin = Vector2.zero;
+                break;
+            case "bar":
+                element.id = UniqueName("bar");
+                element.dir = (int)ProgressBarUI.Direction.LeftToRight;
+                break;
+        }
+        data.elements.Add(element);
+        selectedElement = data.elements.Count - 1;
+        dirty = true;
+    }
+
+    private void CopyElement()
+    {
+        if(selectedElement < 0 || selectedElement >= data.elements.Count)return;
+        PushUndo();
+        var copy = JsonUtility.FromJson<PanelElementData>(JsonUtility.ToJson(data.elements[selectedElement]));
+        switch(copy.kind)
+        {
+            case "slot":
+                copy.id = UniqueName(string.IsNullOrEmpty(copy.id) ? "slot" : copy.id);
+                copy.pos += new Vector2(20f, -20f);
+                break;
+            case "grid":
+                copy.idPrefix = UniqueName(string.IsNullOrEmpty(copy.idPrefix) ? "grid" : copy.idPrefix);
+                copy.origin += new Vector2(20f, -20f);
+                break;
+            case "bar":
+                copy.id = UniqueName(string.IsNullOrEmpty(copy.id) ? "bar" : copy.id);
+                copy.pos += new Vector2(20f, -20f);
+                break;
+        }
+        data.elements.Add(copy);
+        selectedElement = data.elements.Count - 1;
+        dirty = true;
+    }
+
+    private void DeleteElement()
+    {
+        if(selectedElement < 0 || selectedElement >= data.elements.Count)return;
+        PushUndo();
+        data.elements.RemoveAt(selectedElement);
+        selectedElement = -1;
+        dirty = true;
+    }
+
+    // "slot_1", "grid_1"... - the separator keeps a grid prefix from colliding
+    // with its own expansion (prefix "grid" expands to grid0..gridN).
+    private string UniqueName(string baseName)
+    {
+        var taken = new HashSet<string>();
+        foreach(var element in data.elements)
+        {
+            if(!string.IsNullOrEmpty(element.id))taken.Add(element.id);
+            if(element.kind == "grid" && !string.IsNullOrEmpty(element.idPrefix))
+            {
+                taken.Add(element.idPrefix);
+                for(int i = 0; i < element.rows * element.cols; i++)taken.Add(element.idPrefix + i);
+            }
+        }
+        int index = 1;
+        while(taken.Contains(baseName + "_" + index))index++;
+        return baseName + "_" + index;
+    }
+
+    // ---------------------------------------------------------------- warnings
+
+    private void DrawWarningBar()
+    {
+        if(data == null)return;
+        warnings.Clear();
+        CollectWarnings(warnings);
+        GUILayout.BeginVertical(EditorStyles.helpBox);
+        if(warnings.Count == 0)
+        {
+            GUILayout.Label("OK - no layout warnings", EditorStyles.miniLabel);
+        }
+        else
+        {
+            warningScroll = EditorGUILayout.BeginScrollView(warningScroll,
+                GUILayout.Height(Mathf.Min(warnings.Count, 4) * 16f + 6f));
+            foreach(var warning in warnings)GUILayout.Label("- " + warning, EditorStyles.miniLabel);
+            EditorGUILayout.EndScrollView();
+        }
+        GUILayout.EndVertical();
+    }
+
+    // Soft validation (design §4.3): report, never block the save.
+    private void CollectWarnings(List<string> results)
+    {
+        if(data.formatVersion != PanelLayoutSerializer.FormatVersion)
+            results.Add($"formatVersion {data.formatVersion} is not supported (expected {PanelLayoutSerializer.FormatVersion})");
+        var seen = new HashSet<string>();
+        foreach(var element in data.elements)
+        {
+            switch(element.kind)
+            {
+                case "slot":
+                    if(string.IsNullOrEmpty(element.id))results.Add("a slot has an empty id");
+                    else if(!seen.Add(element.id))results.Add($"duplicate slot name '{element.id}'");
+                    break;
+                case "grid":
+                    if(string.IsNullOrEmpty(element.idPrefix))
+                    {
+                        results.Add("a grid has an empty id prefix");
+                        break;
+                    }
+                    if(element.rows <= 0 || element.cols <= 0)
+                    {
+                        results.Add($"grid '{element.idPrefix}' has no cells");
+                        break;
+                    }
+                    for(int i = 0; i < element.rows * element.cols; i++)
+                    {
+                        string name = element.idPrefix + i;
+                        if(!seen.Add(name))results.Add($"duplicate slot name '{name}'");
+                    }
+                    break;
+                case "bar":
+                    if(string.IsNullOrEmpty(element.id))results.Add("a bar has an empty id");
+                    break;
+            }
+        }
+        foreach(var element in data.elements)
+        {
+            CheckOutside(results, element);
+            switch(element.kind)
+            {
+                case "slot":
+                    CheckSprite(results, ElementLabel(element), element.frame);
+                    break;
+                case "bar":
+                    CheckSprite(results, ElementLabel(element) + " front", element.front);
+                    CheckSprite(results, ElementLabel(element) + " back", element.back);
+                    break;
+            }
+        }
+        CheckSprite(results, "background", data.background);
+    }
+
+    private void CheckOutside(List<string> results, PanelElementData element)
+    {
+        float minX, maxX, minY, maxY;
+        if(element.kind == "grid")
+        {
+            if(element.rows <= 0 || element.cols <= 0)return;
+            minX = element.origin.x - BlockSize * 0.5f;
+            maxX = element.origin.x + (element.cols - 1) * element.pitch + BlockSize * 0.5f;
+            minY = element.origin.y - (element.rows - 1) * element.pitch - BlockSize * 0.5f;
+            maxY = element.origin.y + BlockSize * 0.5f;
+        }
+        else
+        {
+            minX = element.pos.x - BlockSize * 0.5f;
+            maxX = element.pos.x + BlockSize * 0.5f;
+            minY = element.pos.y - BlockSize * 0.5f;
+            maxY = element.pos.y + BlockSize * 0.5f;
+        }
+        float halfWidth = data.width * 0.5f, halfHeight = data.height * 0.5f;
+        if(maxX < -halfWidth || minX > halfWidth || maxY < -halfHeight || minY > halfHeight)
+            results.Add($"{ElementLabel(element)} lies fully outside the panel");
+    }
+
+    private static void CheckSprite(List<string> results, string owner, SpriteRefData reference)
+    {
+        if(reference == null || string.IsNullOrEmpty(reference.sprite))return;
+        if(!UISprites.Exists(reference.sprite))
+            results.Add($"{owner}: sprite '{reference.sprite}' not found");
+    }
+
     // -------------------------------------------------------------- file flows
 
     private void RefreshAssetList()
@@ -487,6 +759,9 @@ public class UILayoutEditorWindow : EditorWindow
             selectedElement = -1;
             dragging = false;
             dirty = false;
+            // Undo never crosses asset loads; Import is the one path that
+            // changes the asset while staying undoable (it pushes the pair).
+            undoStack.Clear();
         }
         catch(Exception e)
         {
@@ -509,6 +784,9 @@ public class UILayoutEditorWindow : EditorWindow
             break;
         }
         if(layout == null)return;
+        // Push before replacing: undoing an Import restores the previous
+        // asset and path (the entry carries both).
+        PushUndo();
         var imported = PanelLayoutSerializer.ToData(layout, name);
         Canonicalize(imported);
         data = imported;
