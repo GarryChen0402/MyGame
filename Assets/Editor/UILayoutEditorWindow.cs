@@ -4,14 +4,17 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-// L2 of Docs/可视化UI布局编辑器-实施文档.md (design §5 L2): the visual editor
-// for the UILayouts JSON assets. Pure editor tooling - it reads and writes the
-// very assets the L1 runtime loader consumes, through the shared DTO
+// L2/L3 of Docs/可视化UI布局编辑器-实施文档.md: the visual editor for the
+// UILayouts JSON assets. Pure editor tooling - it reads and writes the very
+// assets the L1 runtime loader consumes, through the shared DTO
 // (PanelLayoutData) and serializer (PanelLayoutSerializer), and touches no
-// runtime code. The canvas is a geometric sketch (blocks + ids, no sprite
-// rendering, design §4.3): element blocks are 100x100 author units, matching
-// the runtime GameObjects (bar included - ProgressBarUI's default size), and
-// rows of a grid run top-to-bottom like PanelLayoutRunner expands them.
+// runtime code. Element blocks are 100x100 author units, matching the runtime
+// GameObjects (bar included - ProgressBarUI's default size), and rows of a
+// grid run top-to-bottom like PanelLayoutRunner expands them. The "Sprites"
+// toggle swaps the sketch blocks for the actual textures (background sliced,
+// slot frames stretched, bars aspect-fitted halves); the attribute sprite
+// fields are asset-backed pickers over Resources/Textures/UI, the folder the
+// runtime resolver reads (E7 of the implementation doc).
 public class UILayoutEditorWindow : EditorWindow
 {
     private const string LayoutDir = "Assets/Resources/UILayouts";
@@ -42,6 +45,7 @@ public class UILayoutEditorWindow : EditorWindow
     private Vector2 listScroll, attrScroll;
     private float zoom = 1f;
     private bool snap = true;
+    private bool showSprites = true;
     private bool dirty;
     private bool dragging;
     private bool dragPushed;
@@ -92,6 +96,7 @@ public class UILayoutEditorWindow : EditorWindow
         }
         if(GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(70)))RefreshAssetList();
         GUILayout.FlexibleSpace();
+        showSprites = GUILayout.Toggle(showSprites, "Sprites", EditorStyles.toolbarButton, GUILayout.Width(60));
         GUILayout.Label($"Zoom {zoom:0.00}x", EditorStyles.miniLabel, GUILayout.Width(80));
         snap = GUILayout.Toggle(snap, "Snap 10px", EditorStyles.toolbarButton, GUILayout.Width(80));
         GUILayout.EndHorizontal();
@@ -306,6 +311,13 @@ public class UILayoutEditorWindow : EditorWindow
             center.x - data.width * zoom * 0.5f, center.y - data.height * zoom * 0.5f,
             data.width * zoom, data.height * zoom);
         EditorGUI.DrawRect(panelRect, new Color(0.26f, 0.26f, 0.29f, 1f));
+        if(showSprites && data.background != null)
+        {
+            // Mirrors BuildFrame's resolve: the declared sprite, falling back
+            // to the universal backdrop.
+            var background = PreviewSprite(data.background.sprite) ?? PreviewSprite("minecraft:universal_bg");
+            DrawSprite(panelRect, background, data.background.tint, DrawMode.Sliced);
+        }
         DrawOutline(panelRect, new Color(0.5f, 0.5f, 0.55f, 1f));
         DrawGrid(panelRect, center);
         DrawAxis(panelRect, center);
@@ -351,10 +363,10 @@ public class UILayoutEditorWindow : EditorWindow
         switch(element.kind)
         {
             case "slot":
-                DrawBlock(center, element.pos, element.id, SlotColor, selected);
+                DrawSlotCell(center, element, selected);
                 break;
             case "bar":
-                DrawBlock(center, element.pos, element.id, BarColor, selected);
+                DrawBarCell(center, element, selected);
                 break;
             case "grid":
                 if(element.rows <= 0 || element.cols <= 0)break;
@@ -369,13 +381,48 @@ public class UILayoutEditorWindow : EditorWindow
         }
     }
 
+    // Slot preview: the frame texture stretched to the 100x100 cell, like the
+    // runtime Image (no preserveAspect); block sketch when untextured.
+    private void DrawSlotCell(Vector2 canvasCenter, PanelElementData element, bool selected)
+    {
+        float size = BlockSize * zoom;
+        var rect = RectAt(canvasCenter, element.pos, size);
+        bool textured = showSprites && element.frame != null
+            && DrawSprite(rect, PreviewSprite(element.frame.sprite), element.frame.tint, DrawMode.Stretch);
+        if(!textured)EditorGUI.DrawRect(rect, selected ? Brighten(SlotColor) : SlotColor);
+        DrawOutline(rect, selected ? SelectionColor : Darken(SlotColor));
+        if(size >= 34f)GUI.Label(rect, element.id ?? "", EditorStyles.centeredGreyMiniLabel);
+    }
+
+    // Bar preview: the back aspect-fitted under the front drawn at half fill
+    // (radial directions draw whole - a radial cutout is not a rectangle); no
+    // tint, matching the runtime bar.
+    private void DrawBarCell(Vector2 canvasCenter, PanelElementData element, bool selected)
+    {
+        float size = BlockSize * zoom;
+        var rect = RectAt(canvasCenter, element.pos, size);
+        bool textured = false;
+        if(showSprites)
+        {
+            if(element.back != null)
+                textured |= DrawSprite(rect, PreviewSprite(element.back.sprite), Color.white, DrawMode.Aspect);
+            if(element.front != null)
+                textured |= DrawSpriteProgress(rect, PreviewSprite(element.front.sprite),
+                    (ProgressBarUI.Direction)element.dir, 0.5f);
+        }
+        if(!textured)EditorGUI.DrawRect(rect, selected ? Brighten(BarColor) : BarColor);
+        DrawOutline(rect, selected ? SelectionColor : Darken(BarColor));
+        if(size >= 34f)GUI.Label(rect, element.id ?? "", EditorStyles.centeredGreyMiniLabel);
+    }
+
+    private Rect RectAt(Vector2 canvasCenter, Vector2 authorPos, float size)
+        => new(canvasCenter.x + authorPos.x * zoom - size * 0.5f,
+            canvasCenter.y - authorPos.y * zoom - size * 0.5f, size, size);
+
     private void DrawBlock(Vector2 canvasCenter, Vector2 authorPos, string label, Color color, bool selected)
     {
         float size = BlockSize * zoom;
-        var rect = new Rect(
-            canvasCenter.x + authorPos.x * zoom - size * 0.5f,
-            canvasCenter.y - authorPos.y * zoom - size * 0.5f,
-            size, size);
+        var rect = RectAt(canvasCenter, authorPos, size);
         EditorGUI.DrawRect(rect, selected ? Brighten(color) : color);
         DrawOutline(rect, selected ? SelectionColor : Darken(color));
         if(size >= 34f)GUI.Label(rect, label ?? "", EditorStyles.centeredGreyMiniLabel);
@@ -393,6 +440,122 @@ public class UILayoutEditorWindow : EditorWindow
         => new(Mathf.Min(1f, c.r + 0.25f), Mathf.Min(1f, c.g + 0.25f), Mathf.Min(1f, c.b + 0.25f), Mathf.Min(1f, c.a + 0.3f));
 
     private static Color Darken(Color c) => new(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, 1f);
+
+    // ---- texture preview (the "Sprites" toggle) ----
+
+    private enum DrawMode { Stretch, Aspect, Sliced }
+
+    // Draws the sprite's texture into rect, tint multiplied; returns false
+    // when there is nothing to draw so callers fall back to the block sketch.
+    private bool DrawSprite(Rect rect, Sprite sprite, Color tint, DrawMode mode)
+    {
+        if(sprite == null || sprite.texture == null)return false;
+        var previous = GUI.color;
+        GUI.color = previous * tint;
+        switch(mode)
+        {
+            case DrawMode.Aspect:
+                DrawRegion(FitRect(rect, sprite), sprite, sprite.textureRect);
+                break;
+            case DrawMode.Sliced:
+                DrawSliced(rect, sprite);
+                break;
+            default:
+                DrawRegion(rect, sprite, sprite.textureRect);
+                break;
+        }
+        GUI.color = previous;
+        return true;
+    }
+
+    // region is in texture pixels (sprite.textureRect space).
+    private static void DrawRegion(Rect dst, Sprite sprite, Rect region)
+    {
+        var texture = sprite.texture;
+        GUI.DrawTextureWithTexCoords(dst, texture, new Rect(
+            region.x / texture.width, region.y / texture.height,
+            region.width / texture.width, region.height / texture.height));
+    }
+
+    // Letterboxes the sprite inside rect, like an Image with preserveAspect.
+    private static Rect FitRect(Rect rect, Sprite sprite)
+    {
+        float spriteAspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+        float rectAspect = rect.width / Mathf.Max(1f, rect.height);
+        if(spriteAspect > rectAspect)
+        {
+            float height = rect.width / spriteAspect;
+            return new Rect(rect.x, rect.center.y - height * 0.5f, rect.width, height);
+        }
+        float width = rect.height * spriteAspect;
+        return new Rect(rect.center.x - width * 0.5f, rect.y, width, rect.height);
+    }
+
+    // Nine-slice preview for the panel background (runtime Image.Type.Sliced):
+    // borders keep their native pixel size scaled by the canvas zoom, clamped
+    // so the middle band never inverts.
+    private void DrawSliced(Rect dst, Sprite sprite)
+    {
+        var border = sprite.border;          // (left, bottom, right, top)
+        var region = sprite.textureRect;
+        if((border.x <= 0f && border.y <= 0f && border.z <= 0f && border.w <= 0f)
+            || region.width <= 0f || region.height <= 0f)
+        {
+            DrawRegion(dst, sprite, region);
+            return;
+        }
+        float left = Mathf.Min(border.x * zoom, dst.width * 0.45f);
+        float right = Mathf.Min(border.z * zoom, dst.width * 0.45f);
+        float top = Mathf.Min(border.w * zoom, dst.height * 0.45f);
+        float bottom = Mathf.Min(border.y * zoom, dst.height * 0.45f);
+        float[] dstX = { dst.x, dst.x + left, dst.xMax - right };
+        float[] dstW = { left, dst.width - left - right, right };
+        float[] dstY = { dst.y, dst.y + top, dst.yMax - bottom };   // screen y: top row first
+        float[] dstH = { top, dst.height - top - bottom, bottom };
+        float[] srcX = { region.x, region.x + border.x, region.xMax - border.z };
+        float[] srcW = { border.x, region.width - border.x - border.z, border.z };
+        float[] srcY = { region.yMax - border.w, region.y + border.y, region.y };   // texture y: bottom-up
+        float[] srcH = { border.w, region.height - border.y - border.w, border.y };
+        for(int row = 0; row < 3; row++)
+            for(int col = 0; col < 3; col++)
+                if(dstW[col] > 0f && dstH[row] > 0f && srcW[col] > 0f && srcH[row] > 0f)
+                    DrawRegion(new Rect(dstX[col], dstY[row], dstW[col], dstH[row]), sprite,
+                        new Rect(srcX[col], srcY[row], srcW[col], srcH[row]));
+    }
+
+    // Front-fill preview at a fixed fraction: the rectangular cutouts for the
+    // horizontal/vertical directions, whole sprite for radial ones.
+    private static bool DrawSpriteProgress(Rect rect, Sprite sprite, ProgressBarUI.Direction dir, float fill)
+    {
+        if(sprite == null || sprite.texture == null)return false;
+        rect = FitRect(rect, sprite);
+        var region = sprite.textureRect;
+        switch(dir)
+        {
+            case ProgressBarUI.Direction.LeftToRight:
+                region.width *= fill;
+                rect.width *= fill;
+                break;
+            case ProgressBarUI.Direction.RightToLeft:
+                region.x += region.width * (1f - fill);
+                region.width *= fill;
+                rect.x += rect.width * (1f - fill);
+                rect.width *= fill;
+                break;
+            case ProgressBarUI.Direction.BottomToTop:
+                region.height *= fill;
+                rect.y += rect.height * (1f - fill);
+                rect.height *= fill;
+                break;
+            case ProgressBarUI.Direction.TopToBottom:
+                region.y += region.height * (1f - fill);
+                region.height *= fill;
+                rect.height *= fill;
+                break;
+        }
+        DrawRegion(rect, sprite, region);
+        return true;
+    }
 
     // --------------------------------------------------------------- attributes
 
@@ -467,18 +630,91 @@ public class UILayoutEditorWindow : EditorWindow
         }
     }
 
-    // An empty sprite clears the whole reference (= "no sprite"/"default"),
-    // so the nil state cannot be stranded in a half-filled SpriteRefData.
+    // Asset-backed sprite slot: the field shows the actual sprite (thumbnail,
+    // Unity's built-in picker on click, drag-and-drop from the Project
+    // window) and stores the logical id the runtime resolver consumes. Only
+    // assets under Resources/Textures/UI map to an id; the x button clears
+    // the reference ("no sprite": no background / default frame).
     private static void SpriteRefField(string label, ref SpriteRefData reference)
     {
         string current = reference != null ? reference.sprite : "";
-        string edited = EditorGUILayout.TextField(label, current);
-        if(edited != current)
-            reference = string.IsNullOrEmpty(edited)
-                ? null
-                : new SpriteRefData { sprite = edited, tint = reference != null ? reference.tint : Color.white };
+        var currentSprite = PreviewSprite(current);
+        GUILayout.BeginHorizontal();
+        var picked = (Sprite)EditorGUILayout.ObjectField(label, currentSprite, typeof(Sprite), false);
+        if(GUILayout.Button("x", EditorStyles.miniButton, GUILayout.Width(20)))
+            reference = null;
+        GUILayout.EndHorizontal();
+        if(picked != currentSprite)
+        {
+            if(picked == null)
+            {
+                reference = null;
+            }
+            else
+            {
+                string id = ToLogicalId(AssetDatabase.GetAssetPath(picked));
+                if(id == null)
+                    EditorUtility.DisplayDialog("UI Layout Editor",
+                        $"'{picked.name}' is outside Resources/Textures/UI; the runtime resolver reads sprites from that folder only.",
+                        "OK");
+                else
+                    reference = new SpriteRefData
+                    {
+                        sprite = id, tint = reference != null ? reference.tint : Color.white
+                    };
+            }
+        }
         if(reference != null)
             reference.tint = EditorGUILayout.ColorField(label + " Tint", reference.tint);
+    }
+
+    // ---------------------------------------------------------------- sprites
+    // Editor-side mirror of UISprites (E7) over exactly the folder the runtime
+    // resolver reads: logical id <-> Sprite asset. Built lazily and dropped
+    // by RefreshAssetList, so newly imported textures appear after Refresh.
+
+    private const string SpriteRoot = "Assets/Resources/Textures/UI";
+    private static bool spriteCacheBuilt;
+    private static readonly Dictionary<string, Sprite> spriteById = new();
+
+    private static void EnsureSpriteCache()
+    {
+        if(spriteCacheBuilt)return;
+        spriteCacheBuilt = true;
+        spriteById.Clear();
+        foreach(var sprite in Resources.LoadAll<Sprite>("Textures/UI"))
+        {
+            string id = ToLogicalId(AssetDatabase.GetAssetPath(sprite));
+            if(!string.IsNullOrEmpty(id))spriteById[id] = sprite;
+        }
+    }
+
+    // Asset path -> logical id, the inverse of UISprites.PathOf: flat files
+    // are vanilla (short id), one nested level is "<modId>:<name>"; anything
+    // outside the sprite root has no id.
+    private static string ToLogicalId(string assetPath)
+    {
+        string prefix = SpriteRoot + "/";
+        if(string.IsNullOrEmpty(assetPath) || !assetPath.StartsWith(prefix, StringComparison.Ordinal))return null;
+        string relative = assetPath.Substring(prefix.Length);
+        int dot = relative.LastIndexOf('.');
+        if(dot > 0)relative = relative.Substring(0, dot);
+        int slash = relative.IndexOf('/');
+        return slash < 0
+            ? relative
+            : relative.Substring(0, slash) + ":" + relative.Substring(slash + 1);
+    }
+
+    // Lookup in UISprites.Resolve's order (exact id first, then the vanilla
+    // same-name sprite), silent - the warning bar reports the misses.
+    private static Sprite PreviewSprite(string id)
+    {
+        if(string.IsNullOrEmpty(id))return null;
+        EnsureSpriteCache();
+        if(spriteById.TryGetValue(id, out var sprite))return sprite;
+        int separator = id.IndexOf(':');
+        if(separator > 0 && spriteById.TryGetValue(id.Substring(separator + 1), out sprite))return sprite;
+        return null;
     }
 
     // ------------------------------------------------------------------ status
@@ -731,6 +967,7 @@ public class UILayoutEditorWindow : EditorWindow
 
     private void RefreshAssetList()
     {
+        spriteCacheBuilt = false;   // newly imported textures appear on refresh
         if(!Directory.Exists(LayoutDir))
         {
             assetPaths = Array.Empty<string>();

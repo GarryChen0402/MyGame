@@ -71,7 +71,7 @@
             "id": "result",
             "idPrefix": "",
             "pos": {
-                "x": 200.0,
+                "x": 240.0,
                 "y": 0.0
             },
             "origin": {
@@ -102,6 +102,50 @@
             },
             "back": {
                 "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            }
+        },
+        {
+            "kind": "bar",
+            "id": "bar_1",
+            "idPrefix": "",
+            "pos": {
+                "x": 130.0,
+                "y": 0.0
+            },
+            "origin": {
+                "x": 0.0,
+                "y": 0.0
+            },
+            "rows": 0,
+            "cols": 0,
+            "pitch": 0.0,
+            "dir": 0,
+            "frame": {
+                "sprite": "",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "front": {
+                "sprite": "furnace_progress_back",
+                "tint": {
+                    "r": 1.0,
+                    "g": 1.0,
+                    "b": 1.0,
+                    "a": 1.0
+                }
+            },
+            "back": {
+                "sprite": "furnace_progress_front",
                 "tint": {
                     "r": 1.0,
                     "g": 1.0,
