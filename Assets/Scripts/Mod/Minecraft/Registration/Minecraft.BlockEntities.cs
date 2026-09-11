@@ -36,8 +36,7 @@ public partial class Minecraft
                     {
                         Capacity = 1,
                         SlotCodes = new[] { "fuel" },
-                        AllowedTags = new() { "fuel" },
-                        ExtractPolicy = ContainerAccess.Any
+                        SlotRules = new[] { new SlotRule { InsertTags = new() { "fuel" } } }
                     })
                 },
                 new DataContainerConfig
@@ -47,8 +46,7 @@ public partial class Minecraft
                     {
                         Capacity = 1,
                         SlotCodes = new[] { "output" },
-                        InsertPolicy = ContainerAccess.Module,
-                        ExtractPolicy = ContainerAccess.Any
+                        SlotRules = new[] { new SlotRule { InsertRequesters = ContainerAccess.Module } }
                     })
                 }
             },
@@ -94,8 +92,7 @@ public partial class Minecraft
                     {
                         Capacity = 1,
                         SlotCodes = new[] { "result" },
-                        InsertPolicy = ContainerAccess.Module,
-                        ExtractPolicy = ContainerAccess.Any
+                        SlotRules = new[] { new SlotRule { InsertRequesters = ContainerAccess.Module } }
                     })
                 }
             },

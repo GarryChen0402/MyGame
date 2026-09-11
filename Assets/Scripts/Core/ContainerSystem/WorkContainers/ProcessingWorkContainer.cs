@@ -162,7 +162,7 @@ public class ProcessingWorkContainer : WorkContainer, IChannelSource
     {
         foreach (var outEntry in recipe.Outputs)
         {
-            if (!Output.CanInsert(new ItemStack { itemId = GetItemId(outEntry.itemId), amount = outEntry.amount },
+            if (!Output.CanInsert(0, new ItemStack { itemId = GetItemId(outEntry.itemId), amount = outEntry.amount },
                     ContainerAccess.Module))
                 return false;
         }
@@ -178,7 +178,7 @@ public class ProcessingWorkContainer : WorkContainer, IChannelSource
         foreach (var outEntry in recipe.Outputs)
         {
             var stack = new ItemStack { itemId = GetItemId(outEntry.itemId), amount = outEntry.amount };
-            if (!Output.TryInsert(stack, ContainerAccess.Module))
+            if (!Output.TryInsert(0, stack, ContainerAccess.Module))
                 Debug.LogError("[ProcessingWorkContainer] output insert failed after capacity check");
         }
         return true;

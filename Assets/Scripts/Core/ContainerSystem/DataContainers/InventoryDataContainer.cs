@@ -1,30 +1,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum ContainerAccess
-{
-    Any,
-    Player,
-    Module,
-    None
-}
-
 public class InventoryDataContainer : DataContainer
 {
     [System.Serializable]
     public class Config
     {
         public int Capacity = 1;
-        public ContainerAccess InsertPolicy = ContainerAccess.Any;
-        public ContainerAccess ExtractPolicy = ContainerAccess.Any;
-        public List<string> AllowedItems;   // whitelist of item full names
-        public List<string> AllowedTags;    // whitelist of item tags
-        public string[] SlotCodes;          // data-side code per slot (= pack key); undeclared = no pack
+        public SlotRule[] SlotRules;   // per-slot access rules; null = all slots fully permissive
+        public string[] SlotCodes;     // data-side code per slot (= pack key); undeclared = no pack
     }
 
-    private Config cfg;                       // declaration config, read-only, not persisted
-    private HashSet<ushort> allowedItemIds;   // AllowedItems parsed to numeric ids once at construction
-    public Inventory Inv;                     // runtime slot data, serialized with the BE
+    private Config cfg;   // declaration config, read-only, not persisted
+    public Inventory Inv; // runtime slot data, serialized with the BE
 
     public InventoryDataContainer(DataContainerConfig dataConfig)
     {
@@ -37,40 +25,54 @@ public class InventoryDataContainer : DataContainer
             Debug.LogWarning($"[InventoryDataContainer] SlotCodes length {cfg.SlotCodes.Length} != capacity {cfg.Capacity}; pack disabled");
             cfg.SlotCodes = null;
         }
-        if (cfg.AllowedItems != null)
+        // JsonUtility round-trips an undeclared (null) rule table as an empty
+        // array, so an empty table means "not declared": all slots stay
+        // permissive like any other container without rules.
+        if (cfg.SlotRules != null && cfg.SlotRules.Length == 0) cfg.SlotRules = null;
+        // Declared rules must cover every slot; a mismatch denies every
+        // direction on every slot - a misdeclared permission must not
+        // silently open the container.
+        if (cfg.SlotRules != null && cfg.SlotRules.Length != cfg.Capacity)
         {
-            allowedItemIds = new HashSet<ushort>();
-            foreach (string fullName in cfg.AllowedItems)
-            {
-                if (ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(fullName, out ushort itemId))
-                    allowedItemIds.Add(itemId);
-                else
-                    Debug.LogWarning($"[InventoryDataContainer] Unknown allowed item '{fullName}', ignored");
-            }
+            Debug.LogWarning($"[InventoryDataContainer] SlotRules length {cfg.SlotRules.Length} != capacity {cfg.Capacity}; all slots denied");
+            cfg.SlotRules = new SlotRule[cfg.Capacity];
+            for (int i = 0; i < cfg.SlotRules.Length; i++)
+                cfg.SlotRules[i] = new SlotRule
+                {
+                    InsertRequesters = ContainerAccess.None,
+                    ExtractRequesters = ContainerAccess.None
+                };
         }
     }
 
-    public bool CanInsert(ItemStack stack, ContainerAccess requester)
+    private SlotRule RuleAt(int index)
+        => cfg.SlotRules != null && index >= 0 && index < cfg.SlotRules.Length ? cfg.SlotRules[index] : null;
+
+    // Per-slot policy: the rule at index gates requesters and tags; a null
+    // table leaves every slot fully permissive.
+    public bool CanInsert(int index, ItemStack stack, ContainerAccess requester)
     {
         if (stack == null || stack.IsEmpty()) return false;
-        if (cfg.InsertPolicy == ContainerAccess.None) return false;
-        if (cfg.InsertPolicy != ContainerAccess.Any && requester != cfg.InsertPolicy) return false;
         if (Inv == null) return false;
-        if (!IsItemAllowed(stack)) return false;
+        var rule = RuleAt(index);
+        if (rule != null && !rule.CanInsert(stack, requester)) return false;
         return Inv.CanAddItem(stack);
     }
 
-    public bool CanExtract(ContainerAccess requester)
+    public bool CanExtract(int index, ContainerAccess requester)
     {
-        if (cfg.ExtractPolicy == ContainerAccess.None) return false;
-        if (cfg.ExtractPolicy != ContainerAccess.Any && requester != cfg.ExtractPolicy) return false;
-        return Inv != null;
+        if (Inv == null) return false;
+        var rule = RuleAt(index);
+        if (rule != null && !rule.CanExtract(Inv.GetItemStackAt(index), requester)) return false;
+        return true;
     }
 
-    public bool TryInsert(ItemStack stack, ContainerAccess requester)
+    // The index selects the rule; filling itself stays container-wide (all
+    // current callers are single-slot output containers).
+    public bool TryInsert(int index, ItemStack stack, ContainerAccess requester)
     {
         if (stack == null || stack.IsEmpty()) return false;
-        if (!CanInsert(stack, requester)) return false;
+        if (!CanInsert(index, stack, requester)) return false;
         if (!Inv.TryAddItemStack(stack)) return false;
         MarkDirty();
         return true;
@@ -78,26 +80,10 @@ public class InventoryDataContainer : DataContainer
 
     public bool TryExtract(int index, int amount, ContainerAccess requester)
     {
-        if (!CanExtract(requester)) return false;
+        if (!CanExtract(index, requester)) return false;
         if (!Inv.TryConsumeItemAt(index, amount)) return false;
         MarkDirty();
         return true;
-    }
-
-    // AllowedItems and AllowedTags form a whitelist union; both empty = unrestricted.
-    private bool IsItemAllowed(ItemStack stack)
-    {
-        bool hasItems = cfg.AllowedItems != null && cfg.AllowedItems.Count > 0;
-        bool hasTags = cfg.AllowedTags != null && cfg.AllowedTags.Count > 0;
-        if (!hasItems && !hasTags) return true;
-        if (!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(stack.itemId, out var def)) return false;
-        if (hasItems && allowedItemIds != null && allowedItemIds.Contains(stack.itemId)) return true;
-        if (hasTags && def.Tags != null)
-        {
-            foreach (string tag in cfg.AllowedTags)
-                if (def.Tags.Contains(tag)) return true;
-        }
-        return false;
     }
 
     public ItemStack GetItemStackAt(int index)
@@ -132,7 +118,7 @@ public class InventoryDataContainer : DataContainer
 
     // ---- persistence ----
 
-    // Slot data only: capacity, policies and whitelists are declaration config
+    // Slot data only: capacity, rules and codes are declaration config
     // carried by the BE definition, never written to disk (design doc §7).
     [System.Serializable]
     public class SaveData

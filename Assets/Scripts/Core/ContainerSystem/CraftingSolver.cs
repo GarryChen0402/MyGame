@@ -80,7 +80,7 @@ public class CraftingSolver
     // Re-scans the grid and writes the first matching recipe's output into the
     // result slot. The slot is mutated directly - the preview is
     // container-internal state, not a player insertion, so the result
-    // container's Module-only InsertPolicy must not block it.
+    // container's Module-only insert rule must not block it.
     public void RefreshPreview()
     {
         if(Grid == null || Result == null)return;

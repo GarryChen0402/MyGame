@@ -112,8 +112,7 @@ public class Player : LivingEntity, ICraftingGridHost
             {
                 Capacity = 1,
                 SlotCodes = new[] { "slot_0" },
-                InsertPolicy = ContainerAccess.Module,
-                ExtractPolicy = ContainerAccess.Any
+                SlotRules = new[] { new SlotRule { InsertRequesters = ContainerAccess.Module } }
             })
         });
         Crafting = new CraftingSolver(CraftingGrid, CraftingResult, 2, 2,

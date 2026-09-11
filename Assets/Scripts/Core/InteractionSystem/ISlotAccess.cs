@@ -115,8 +115,8 @@ public class PlayerSlotAccess : InventorySlotAccess
     public override void MarkChanged() { }   // player inventory persists via its own save path
 }
 
-// Block-entity container slot: gates delegate to InventoryDataContainer's
-// policies (InsertPolicy / ExtractPolicy / AllowedItems / AllowedTags), and
+// Block-entity container slot: gates delegate to the owning container's
+// per-slot rules (SlotRule: requesters + tag whitelists per direction), and
 // successful writes mark the owning chunk dirty for autosave.
 public class ContainerSlotAccess : InventorySlotAccess
 {
@@ -129,9 +129,9 @@ public class ContainerSlotAccess : InventorySlotAccess
     }
 
     public override bool CanPlace(ItemStack stack)
-        => container != null && container.CanInsert(stack, ContainerAccess.Player);
+        => container != null && container.CanInsert(index, stack, ContainerAccess.Player);
 
-    public override bool CanTake() => container != null && container.CanExtract(ContainerAccess.Player);
+    public override bool CanTake() => container != null && container.CanExtract(index, ContainerAccess.Player);
 
     // DataContainer.MarkDirty is protected; reach the same dirty chain through
     // its public Host (BlockEntity.MarkDirty → OwnerChunk).
