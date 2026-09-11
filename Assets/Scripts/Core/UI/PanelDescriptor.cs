@@ -2,52 +2,21 @@ using System.Collections.Generic;
 
 // Type-level parsing description (S3 of Docs/改造提案-UI数据流拆分方案.md):
 // "given a PanelData, how does this UI read and lay it out". Pure data - the
-// layout geometry plus the channel names the UI consumes; the rendering math
-// stays in the UI class. Attached to the UIDefinition of a container panel.
+// layout geometry, the channel names the UI consumes, and the explicit
+// uiCode -> binding-entry dictionary (P0 of Docs/UI槽位编码与解析映射-实施文档.md);
+// the rendering math stays in the UI class. Attached to the UIDefinition of
+// a container panel (Layout stays null for hand-written resident UIs), ready
+// at registration time and read-only afterwards.
 public class PanelDescriptor
 {
     public PanelLayout Layout;
     public string[] ChannelNames;
 
-    // Open-time name-set check: every slot name the layout declares and every
-    // channel name must appear in the packet's name tables, and vice versa.
-    // Lists the differences so a mismatch names the offending ids instead of
-    // letting a position-based bind land on the wrong cell.
-    public bool Matches(PanelData data, out string mismatch)
-    {
-        var declaredSlots = new List<string>();
-        if(Layout != null)foreach(var element in Layout.Elements)element.CollectSlotNames(declaredSlots);
+    // UI-side slot code (layout element id) -> declaration. Declared, never
+    // inferred: a layout slot with no entry warns at open time and stays
+    // unbound (A4); duplicate codes are refused by the open-time validation.
+    public readonly Dictionary<string, SlotBindingEntry> Bindings = new();
 
-        var missing = new List<string>();
-        var extra = new List<string>();
-        Diff(declaredSlots, data.SlotNames, missing, extra);
-        Diff(ChannelNames, data.ChannelNames, missing, extra);
-
-        if(missing.Count == 0 && extra.Count == 0)
-        {
-            mismatch = null;
-            return true;
-        }
-        mismatch = $"missing [{string.Join(", ", missing)}] extra [{string.Join(", ", extra)}]";
-        return false;
-    }
-
-    private static void Diff(IReadOnlyList<string> declared, IReadOnlyList<string> actual,
-        List<string> missing, List<string> extra)
-    {
-        if(declared != null)
-            foreach(var name in declared)
-                if(!Contains(actual, name))missing.Add(name);
-        if(actual != null)
-            foreach(var name in actual)
-                if(!Contains(declared, name))extra.Add(name);
-    }
-
-    private static bool Contains(IReadOnlyList<string> names, string name)
-    {
-        if(names == null)return false;
-        for(int i = 0; i < names.Count; i++)
-            if(names[i] == name)return true;
-        return false;
-    }
+    public SlotBindingEntry Resolve(string uiCode)
+        => Bindings.TryGetValue(uiCode, out var entry) ? entry : null;
 }

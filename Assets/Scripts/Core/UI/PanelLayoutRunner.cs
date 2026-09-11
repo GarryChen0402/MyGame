@@ -7,22 +7,24 @@ public class PanelLayoutHandles
     public readonly Dictionary<string, SlotUI> Slots = new();
     public readonly Dictionary<string, ProgressBarUI> Bars = new();
 
-    // Name-aligned binding (S3): resolve the id against the packet's frozen
-    // name table and point the slot at the resolved index - runtime
-    // addressing stays a plain int (SlotAddr). A name absent from the packet
-    // leaves the slot display-only, so a binding can never land on the wrong
-    // cell by position.
-    public void Bind(string id, PanelData data)
+    // Explicit-mapping binding (P0): resolve the UI-side code through the
+    // descriptor's dictionary, address the packet by the resolved data code
+    // and hand the entry (parser + action ids) to the slot. A code without an
+    // entry, or a target the packet lacks, leaves the slot display-only - a
+    // binding can never land on the wrong cell by position.
+    public void Bind(PanelDescriptor descriptor, string id, PanelData data)
     {
         if(!Slots.TryGetValue(id, out var slot))return;
-        int index = data.SlotIndex(id);
+        var entry = descriptor?.Resolve(id);
+        if(entry == null)return;
+        int index = data.SlotIndex(entry.Target);
         if(index < 0)return;
         slot.BindInteractive(data, index, new SlotAddr
         {
             scope = SlotScope.Panel,
             panelModelId = data.SessionId,
             slot = index
-        });
+        }, entry);
     }
 
     // Clears every slot binding: a panel that refused to bind (name mismatch)

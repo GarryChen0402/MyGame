@@ -53,6 +53,7 @@ public class HotBarUI : UIBehavior
         modId = "minecraft",
         name = "hotbar",
         OpenWithPlayerInventory = false,
+        Panel = BuildPanel(),
         Factory = () =>
         {
             var hotBarGo = new GameObject("HotBar");
@@ -60,4 +61,17 @@ public class HotBarUI : UIBehavior
             return hotBarGo;
         }
     };
+
+    // Resident binding carrier (P0, A9): 9 hand-written slots, codes written
+    // in code for now (moved to layout JSON at L4). The HUD row and the
+    // backpack's bottom row map to the same container cells; actionIds stay
+    // empty - the HUD is display-only today and R/U arrive via JEI's
+    // PreFreeze injection (P7).
+    private static PanelDescriptor BuildPanel()
+    {
+        var panel = new PanelDescriptor();
+        for(int i = 0; i < 9; i++)
+            panel.Bindings[$"hotbar_{i}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser());
+        return panel;
+    }
 }

@@ -97,23 +97,30 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
         this.source = source;
         this.slotIndex = slotIndex;
         addr = null;
+        bindingEntry = null;
         shown = false;   // first Refresh after a bind always renders
         Refresh();
     }
 
     // Interactive slot: display plus the address the click/drag commands
     // settle through (see ContainerCommandProcessor; a null address slot is
-    // display-only and never clickable).
-    public void BindInteractive(ISlotReadSource source, int slotIndex, SlotAddr addr)
+    // display-only and never clickable). The optional binding entry (P0)
+    // rides along from the descriptor's declaration.
+    public void BindInteractive(ISlotReadSource source, int slotIndex, SlotAddr addr, SlotBindingEntry entry = null)
     {
         this.source = source;
         this.slotIndex = slotIndex;
         this.addr = addr;
+        bindingEntry = entry;
         shown = false;
         Refresh();
     }
 
     public SlotAddr? Addr => addr;
+
+    // Binding declaration of this slot (parser + action ids), null on
+    // display-only slots; carried since P0, consumed from P2/P6 on.
+    public SlotBindingEntry BindingEntry => bindingEntry;
 
     public void Refresh()
     {
@@ -149,6 +156,7 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
     private ISlotReadSource source;
     private int slotIndex;
     private SlotAddr? addr;
+    private SlotBindingEntry bindingEntry;
 
     // Managed by the UIManager drag session; the outline is drawn on the slot
     // background image so it never covers the icon.

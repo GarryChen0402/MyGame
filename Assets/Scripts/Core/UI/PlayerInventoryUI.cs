@@ -47,6 +47,7 @@ public class PlayerInventoryUI : UIBehavior
         name = "player_inventory",
         Kind = UIKind.PlayerInventory,
         OpenWithPlayerInventory = false,
+        Panel = BuildPanel(),
         Factory = () =>
         {
             var go = new GameObject("Player Inventory");
@@ -54,6 +55,17 @@ public class PlayerInventoryUI : UIBehavior
             return go;
         }
     };
+
+    // Resident binding carrier (P0, A9): 36 hand-written slots, codes written
+    // in code for now (moved to layout JSON at L4). Every slot maps to its
+    // backpack container cell slot_<i> and responds to the core actions.
+    private static PanelDescriptor BuildPanel()
+    {
+        var panel = new PanelDescriptor();
+        for(int i = 0; i < 36; i++)
+            panel.Bindings[$"player_inv_{i}"] = new SlotBindingEntry($"slot_{i}", new ItemDataParser()).WithCoreActions();
+        return panel;
+    }
 
     // Phase C: display + click address bind to the resident backpack mirror
     // (addresses are resolved by ContainerCommandProcessor, no accessor is

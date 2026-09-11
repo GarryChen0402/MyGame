@@ -4,8 +4,8 @@ public class CraftingTableUI : UIBehavior
 {
     // Panel geometry as data (S3 + layout doc P1); every value equals the
     // former hardcoded literal, so the migration is visually zero-change.
-    // The slot ids grid0..grid8 / result must equal the container-reported
-    // data names (CraftingWorkContainer).
+    // Slot ids grid0..grid8 / result are UI-side codes; the descriptor's
+    // explicit Bindings map each to its container-reported data name (P0).
     public static readonly PanelLayout Layout = new()
     {
         Elements =
@@ -29,16 +29,17 @@ public class CraftingTableUI : UIBehavior
     }
 
     // Phase C: the open data is the value-only PanelData packet (no BE
-    // reference). Every SetData re-binds all ten slots by name (S3): a slot
-    // the packet lacks is listed by ValidatePanelData and nothing is bound,
-    // so stale addresses can never linger. Preview refresh/clear on
-    // open/close moved to the logic side (OpenPanel/ClosePanel commands).
+    // reference). Every SetData re-binds all ten slots through the
+    // descriptor's explicit mapping (P0): an undeclared slot or missing
+    // target is warned about and stays unbound, so stale addresses can never
+    // linger. Preview refresh/clear on open/close moved to the logic side
+    // (OpenPanel/ClosePanel commands).
     public override void SetData(object data)
     {
         if(data is not PanelData panel)return;
         if(!ValidatePanelData(panel, handles))return;
-        for(int i = 0; i < 9; i++)handles.Bind($"grid{i}", panel);
-        handles.Bind("result", panel);
+        for(int i = 0; i < 9; i++)handles.Bind(uIDefinition.Panel, $"grid{i}", panel);
+        handles.Bind(uIDefinition.Panel, "result", panel);
     }
 
     public override void Refresh()
@@ -63,7 +64,22 @@ public class CraftingTableUI : UIBehavior
         Panel = new PanelDescriptor
         {
             Layout = Layout,
-            ChannelNames = new string[0]   // the workbench container contributes no channels
+            ChannelNames = new string[0],   // the workbench container contributes no channels
+            // Explicit slot declarations (P0): ui code -> data code + parser
+            // + responsive actions.
+            Bindings =
+            {
+                ["grid0"] = new SlotBindingEntry("grid0", new ItemDataParser()).WithCoreActions(),
+                ["grid1"] = new SlotBindingEntry("grid1", new ItemDataParser()).WithCoreActions(),
+                ["grid2"] = new SlotBindingEntry("grid2", new ItemDataParser()).WithCoreActions(),
+                ["grid3"] = new SlotBindingEntry("grid3", new ItemDataParser()).WithCoreActions(),
+                ["grid4"] = new SlotBindingEntry("grid4", new ItemDataParser()).WithCoreActions(),
+                ["grid5"] = new SlotBindingEntry("grid5", new ItemDataParser()).WithCoreActions(),
+                ["grid6"] = new SlotBindingEntry("grid6", new ItemDataParser()).WithCoreActions(),
+                ["grid7"] = new SlotBindingEntry("grid7", new ItemDataParser()).WithCoreActions(),
+                ["grid8"] = new SlotBindingEntry("grid8", new ItemDataParser()).WithCoreActions(),
+                ["result"] = new SlotBindingEntry("result", new ItemDataParser()).WithCoreActions(),
+            }
         },
         Factory = () => {
             var go = new GameObject("Crafting Table UI", typeof(CraftingTableUI));

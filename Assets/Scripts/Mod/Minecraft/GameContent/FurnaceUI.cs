@@ -4,8 +4,8 @@ public class FurnaceUI : UIBehavior
 {
     // Panel geometry as data (S3 + layout doc P1): every value equals the
     // former hardcoded literal, so the migration is visually zero-change.
-    // The slot ids are the alignment keys that must equal the container-
-    // reported data names (ProcessingWorkContainer reports input/fuel/output).
+    // Slot ids are UI-side codes; the descriptor's explicit Bindings map each
+    // to its container-reported data name (P0).
     public static readonly PanelLayout Layout = new()
     {
         Elements =
@@ -42,16 +42,17 @@ public class FurnaceUI : UIBehavior
     }
 
     // Phase C: the open data is the value-only PanelData packet (no BE
-    // reference). Slots bind by name (S3), so the packet's contribution order
-    // never matters; a descriptor/data mismatch is listed and refused.
+    // reference). Slots bind through the descriptor's explicit mapping (P0),
+    // so the packet's contribution order never matters; an undeclared slot or
+    // missing target is warned about and left unbound.
     public override void SetData(object data)
     {
         if (data is not PanelData panel) return;
         this.data = panel;
         if (!ValidatePanelData(panel, handles)) return;
-        handles.Bind("input", panel);
-        handles.Bind("fuel", panel);
-        handles.Bind("output", panel);
+        handles.Bind(uIDefinition.Panel, "input", panel);
+        handles.Bind(uIDefinition.Panel, "fuel", panel);
+        handles.Bind(uIDefinition.Panel, "output", panel);
     }
 
     public static UIDefinition furanceUIDefinition = new()
@@ -66,7 +67,15 @@ public class FurnaceUI : UIBehavior
             Layout = Layout,
             // Channel order mirrors ReadChannels: 0 lit remainder, 1 lit
             // total, 2 cook progress, 3 cook total (vanilla furnace order).
-            ChannelNames = new[] { "fuel_left", "fuel_total", "cook_progress", "cook_total" }
+            ChannelNames = new[] { "fuel_left", "fuel_total", "cook_progress", "cook_total" },
+            // Explicit slot declarations (P0): ui code -> data code + parser
+            // + responsive actions.
+            Bindings =
+            {
+                ["input"] = new SlotBindingEntry("input", new ItemDataParser()).WithCoreActions(),
+                ["fuel"] = new SlotBindingEntry("fuel", new ItemDataParser()).WithCoreActions(),
+                ["output"] = new SlotBindingEntry("output", new ItemDataParser()).WithCoreActions(),
+            }
         },
         Factory = () =>{
             var go = new GameObject("Furnace UI", typeof(FurnaceUI));

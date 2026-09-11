@@ -93,6 +93,21 @@ public class PlayerUI : UIBehavior
         // The panel carries only the upper area (model + 2x2 grid); the 36-slot
         // backpack rides along as the shared lower panel (see class comment).
         OpenWithPlayerInventory = true,
+        // Resident binding carrier (P0, A9): the hand-written 2x2 grid and
+        // result slots, codes written in code for now (moved to layout JSON
+        // at L4). The grid and result containers report no names, so their
+        // data codes are the write-in slot_<i> (grid: 0..3, result: 0).
+        Panel = new PanelDescriptor
+        {
+            Bindings =
+            {
+                ["player_craft_grid_0"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
+                ["player_craft_grid_1"] = new SlotBindingEntry("slot_1", new ItemDataParser()).WithCoreActions(),
+                ["player_craft_grid_2"] = new SlotBindingEntry("slot_2", new ItemDataParser()).WithCoreActions(),
+                ["player_craft_grid_3"] = new SlotBindingEntry("slot_3", new ItemDataParser()).WithCoreActions(),
+                ["player_craft_result"] = new SlotBindingEntry("slot_0", new ItemDataParser()).WithCoreActions(),
+            }
+        },
         Factory = () =>
         {
             var go = new GameObject("Player UI");
