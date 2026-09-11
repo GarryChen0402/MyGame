@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Independent item-browser mod (design: Docs/JEI式物品浏览器-功能调研与设计草案.md).
-// P1: follow-panel item list, live search and cheat-mode give, on its own
-// overlay root. The base game knows nothing about it - everything it needs is
-// reached through Core seams (UIActions registry, UIManager.CreateOverlayRoot,
+// Independent item-browser mod (design: Docs/JEI式物品浏览器-功能调研与设计草案.md;
+// pipeline design: Docs/JEI管线化-设计草案.md). P1: follow-panel item list, live
+// search and cheat-mode give. P8: the panel rides the standard UI pipeline - a
+// UIDefinition of kind Overlay (root owned by UIManager) built on first open.
+// The base game knows nothing about it - everything it needs is reached
+// through Core seams (UIActions registry, UIDefinitions registry,
 // ContainerCommandProcessor.GiveItem).
 public class JEIMod : IMod
 {
@@ -15,12 +17,29 @@ public class JEIMod : IMod
     // priorities keep discovery order and a higher one loads strictly later.
     public int LoadPriority => 1;
 
-    // Built after bootstrap; the ui_action callbacks route through it. Null
-    // before that (and on failed boot) - the callbacks guard.
+    // Set from the OpenUI return (P8) once bootstrap completes; the ui_action
+    // callbacks route through it. Null before that (and on failed boot) - the
+    // callbacks guard. The UI itself is owned by the UIManager cache.
     private JEIPanel panel;
 
     public void RegisterAllResources()
     {
+        // P8: the panel itself is a standard UI definition of kind Overlay
+        // (coexistence layer, no currentUI). The factory builds a full-stretch
+        // host for the panel's right-edge strip; UIManager parents it under
+        // its Overlay root on first open (lazy).
+        ResourceSystem.Instance.UIDefinitions.Register(new UIDefinition
+        {
+            modId = ModId,
+            name = "panel",
+            Kind = UIKind.Overlay,
+            Factory = () =>
+            {
+                var root = UIPanelBuilder.BuildStretchRoot(null, "JEI Panel");
+                root.gameObject.AddComponent<JEIPanel>();
+                return root.gameObject;
+            }
+        });
         // P7: all three are ui_actions now - the UIManager action ring owns
         // polling and routing (this mod never polls its own keys anymore).
         // Whitelisted for both in-game and panel context; the handler stack top
@@ -74,14 +93,15 @@ public class JEIMod : IMod
         }
     }
 
-    // The overlay root is built after bootstrap, not during registration: the
-    // item registry and the UI layer are only usable from here on, and the
-    // engine's canvas host is guaranteed to exist.
+    // The panel opens after bootstrap, not during registration: the item
+    // registry and the UI layer are only usable from here on, and the engine's
+    // canvas host is guaranteed to exist. The first OpenUI builds the panel
+    // (lazy, P8) and idempotently reactivates it on later boots; the callbacks
+    // keep their reference from the panel's own registration.
     private void OnBootstrapCompleted(BootstrapCompletedEvent evt)
     {
         EventBus.Instance.Unsubscribe<BootstrapCompletedEvent>(OnBootstrapCompleted);
         if(!evt.Success || UIManager.Instance == null)return;
-        var root = UIManager.Instance.CreateOverlayRoot("JEIRoot");
-        panel = root.AddComponent<JEIPanel>();
+        panel = UIManager.Instance.OpenUI("jei:panel") as JEIPanel;
     }
 }

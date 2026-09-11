@@ -10,6 +10,7 @@ public class UIManager : MonoBehaviour
     private GameObject HUDRoot = null;
     private GameObject PlayerInventoryRoot = null;
     private GameObject SinglePanelRoot = null;
+    private GameObject OverlayRoot = null;
     private GameObject TooltipRoot = null;
 
     private Dictionary<string, UIBehavior> UICache = new();
@@ -21,11 +22,15 @@ public class UIManager : MonoBehaviour
 
         HUDRoot = UIPanelBuilder.BuildStretchRoot(transform, "HUD").gameObject;
         SinglePanelRoot = UIPanelBuilder.BuildStretchRoot(transform, "SinglePanel").gameObject;
-        // Not registered yet during stepper-driven startup (L1) - the root is
-        // built lazily at first use instead (Part B §5.4).
-        EnsurePlayerInventoryRoot();
-
         TooltipRoot = UIPanelBuilder.BuildStretchRoot(transform, "Tool tip").gameObject;
+        // Coexistence layer (P8): above the panel layer, below the player
+        // inventory and tooltip layers and the topmost loading overlay.
+        OverlayRoot = UIPanelBuilder.BuildStretchRoot(transform, "Overlay").gameObject;
+        OverlayRoot.transform.SetSiblingIndex(TooltipRoot.transform.GetSiblingIndex());
+        // Not registered yet during stepper-driven startup (L1) - the root is
+        // built lazily at first use instead (Part B §5.4). Created after
+        // TooltipRoot so its lazy insert-point anchor (below Tooltip) holds.
+        EnsurePlayerInventoryRoot();
 
         // Topmost overlay layer (added last = renders above every other root of
         // this canvas): hosts the loading backdrop of the async enter-world
@@ -55,12 +60,6 @@ public class UIManager : MonoBehaviour
         PlayerInventoryRoot.SetActive(false);
     }
 
-    private UIBehavior currentUI = null;
-    private bool CurrentUIhasInputHandler = false;
-    // Data packet of the panel UI this manager opened (data as PanelData);
-    // the close command needs its session id to tear down the BE session
-    // (logic side). null = no session (player UI / widget test / editors).
-    private PanelData currentPanel;
     // In-game HUD is no longer opened on Start: the session controller opens
     // it when entering a world, so the menu state stays HUD-free.
     public void OpenGameHUD()
@@ -73,23 +72,23 @@ public class UIManager : MonoBehaviour
         OpenUI("minecraft:held_item");
     }
 
-    // Mod-facing seam: builds a new stretch root between the panel layer and
-    // the tooltip / loading layers (mod overlay content such as JEI renders
-    // above panels but below the cursor and topmost layers). Mods call this
-    // once from their own initialization; the returned root is theirs to host.
-    public GameObject CreateOverlayRoot(string name)
-    {
-        var root = UIPanelBuilder.BuildStretchRoot(transform, name).gameObject;
-        if(TooltipRoot != null)root.transform.SetSiblingIndex(TooltipRoot.transform.GetSiblingIndex());
-        return root;
-    }
+    private UIBehavior currentUI = null;
+    private bool CurrentUIhasInputHandler = false;
+    // Data packet of the panel UI this manager opened (data as PanelData);
+    // the close command needs its session id to tear down the BE session
+    // (logic side). null = no session (player UI / widget test / editors).
+    private PanelData currentPanel;
 
-    public void OpenUI(string uiId, object data = null)
+    // Returns the built (or cached) behaviour instance so callers that need a
+    // typed handle (e.g. the JEI panel, P8) do not have to re-find it.
+    public UIBehavior OpenUI(string uiId, object data = null)
     {
-        if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName(uiId, out var uiDef))return;
+        if(!ResourceSystem.Instance.UIDefinitions.TryGetResourceWithFullName(uiId, out var uiDef))return null;
         // ResourceSystem.Instance.InputHandlers.TryGetResourceWithFullName(uiDef.InputHandlerId, out var inputHandler);
         if(UICache.TryGetValue(uiId, out var ui))
         {
+            // Overlay stays outside the single-panel session: reopening it is
+            // an idempotent no-op (P8), so CloseUI keeps tracking its own UI.
             if(uiDef.Kind == UIKind.SinglePanel)currentUI = ui;
 
             ui.SetData(data);
@@ -102,26 +101,40 @@ public class UIManager : MonoBehaviour
             CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
             // if(inputHandler != null)InputHandlerManager.Instance.Push(inputHandler);
             if(uiDef.Kind == UIKind.SinglePanel)currentPanel = data as PanelData;
-            return;
+            return ui;
         }
 
         var uiGo = uiDef.Factory();
-        if(uiDef.Kind == UIKind.HUD)uiGo.transform.SetParent(HUDRoot.transform, false);
-        else if(uiDef.Kind == UIKind.Tooltip)uiGo.transform.SetParent(TooltipRoot.transform, false);
-        else uiGo.transform.SetParent(SinglePanelRoot.transform, false);
+        switch(uiDef.Kind)
+        {
+            case UIKind.HUD: uiGo.transform.SetParent(HUDRoot.transform, false); break;
+            case UIKind.Tooltip: uiGo.transform.SetParent(TooltipRoot.transform, false); break;
+            // Coexistence layer (P8): a persistent panel that pays no single-
+            // panel semantics - currentUI/currentPanel are deliberately left
+            // untouched (see the cache-hit branch below).
+            case UIKind.Overlay: uiGo.transform.SetParent(OverlayRoot.transform, false); break;
+            default: uiGo.transform.SetParent(SinglePanelRoot.transform, false); break;
+        }
 
-        currentUI = uiGo.GetComponent<UIBehavior>();
-        currentUI.uIDefinition = uiDef;   // the panel's registration data (Panel descriptor rides here)
-        currentUI.SetData(data);
-        currentUI.Open();
+        var built = uiGo.GetComponent<UIBehavior>();
+        built.uIDefinition = uiDef;   // the panel's registration data (Panel descriptor rides here)
+        built.SetData(data);
+        built.Open();
         if(uiDef.OpenWithPlayerInventory)
         {
             EnsurePlayerInventoryRoot();
             PlayerInventoryRoot?.SetActive(true);
         }
-        CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
-        if(uiDef.Kind == UIKind.SinglePanel)currentPanel = data as PanelData;
-        UICache[uiId] = currentUI;
+        // Overlay never joins the single-panel session (P8): it is a coexisting
+        // layer, not the UI CloseUI later tears down.
+        if(uiDef.Kind != UIKind.Overlay)
+        {
+            currentUI = built;
+            CurrentUIhasInputHandler = InputHandlerManager.Instance.TryPush(uiDef.InputHandlerId);
+            if(uiDef.Kind == UIKind.SinglePanel)currentPanel = data as PanelData;
+        }
+        UICache[uiId] = built;
+        return built;
     }
 
     public void CloseUI()

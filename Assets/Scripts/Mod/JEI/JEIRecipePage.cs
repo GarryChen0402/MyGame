@@ -15,12 +15,12 @@ using UnityEngine.EventSystems;
 // strip's list scrolling.
 public class JEIRecipePage : MonoBehaviour, IScrollHandler
 {
-    private const float PanelW = 260f;
-    private const float PanelH = 220f;
-    private const float CellSize = 46f;
-    private const float CellPitch = 50f;
+    private const float PanelW = 420f;
+    private const float PanelH = 330f;
+    private const float CellSize = 80f;
+    private const float CellPitch = 84f;
     private const float RowY0 = 62f;
-    private const float ArrowW = 30f;
+    private const float ArrowW = 40f;
     private const float Gap = 6f;
     private const int MaxGrid = 3;      // the game's crafting grid is 3x3
     private const int InputSlots = 9;
@@ -69,10 +69,10 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         // "->" instead of a real arrow: the UI font lacks arrow glyphs and TMP
         // would warn every frame drawing the replacement box (precedent:
         // UIDropdownWidget).
-        arrowText = MakeText(0f, 0f, ArrowW, 20f, 14f, TextAlignmentOptions.Center);
+        arrowText = MakeText(0f, 0f, ArrowW, 20f, 16f, TextAlignmentOptions.Center);
         arrowText.SetText("->");
-        timeText = MakeText(0f, 0f, 50f, 16f, 12f, TextAlignmentOptions.Center);
-        emptyText = MakeText(50f, 130f, PanelW - 100f, 24f, 16f, TextAlignmentOptions.Center);
+        timeText = MakeText(0f, 0f, 50f, 18f, 14f, TextAlignmentOptions.Center);
+        emptyText = MakeText(50f, 150f, PanelW - 100f, 24f, 16f, TextAlignmentOptions.Center);
         emptyText.SetText("No Recipes");
         emptyText.SetColor(new Color(0.3f, 0.3f, 0.3f, 1f));
 
@@ -178,7 +178,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
             string row = recipe.Shape[r];
             for(int c = 0; c < cols; c++)
             {
-                ushort id = 0;
+                ushort id = JEICell.NoItem;
                 if(c < row.Length && row[c] != ' ' && recipe.ShapeKeys != null
                    && recipe.ShapeKeys.TryGetValue(row[c], out string itemName))
                     TryResolve(itemName, out id);
@@ -203,7 +203,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         float startX = BlockStartX(gridW);
         for(int i = 0; i < count; i++)
         {
-            ushort id = 0;
+            ushort id = JEICell.NoItem;
             TryResolve(recipe.Inputs[i].itemId, out id);
             Place(i, startX + (i % cols) * CellPitch, RowY0 + (i / cols) * CellPitch, id, recipe.Inputs[i].amount);
         }
@@ -223,7 +223,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         float startX = BlockStartX(gridW);
         for(int i = 0; i < count; i++)
         {
-            ushort id = 0;
+            ushort id = JEICell.NoItem;
             TryResolve(recipe.Inputs[i].itemId, out id);
             Place(i, startX + i * CellPitch, RowY0, id, recipe.Inputs[i].amount);
         }
@@ -231,7 +231,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         PlaceArrow(startX, gridW, rowCenterY);
         float arrowX = startX + gridW + Gap;
         timeText.SetText((recipe.ProcessingTickTime / 20f).ToString("0.#", CultureInfo.InvariantCulture) + "s");
-        SetRect(timeText.gameObject, arrowX + ArrowW * 0.5f - 25f, rowCenterY + 8f, 50f, 16f);
+        SetRect(timeText.gameObject, arrowX + ArrowW * 0.5f - 25f, rowCenterY + 8f, 50f, 18f);
         timeText.gameObject.SetActive(true);
         PlaceOutputs(recipe, startX, gridW, rowCenterY);
         return count;
@@ -245,7 +245,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         float top = rowCenterY - CellSize * 0.5f;
         for(int i = 0; i < count; i++)
         {
-            ushort id = 0;
+            ushort id = JEICell.NoItem;
             TryResolve(recipe.Outputs[i].itemId, out id);
             Place(InputSlots + i, outputX, top + i * CellPitch, id, recipe.Outputs[i].amount);
         }
@@ -289,7 +289,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
 
     private static bool TryResolve(string fullName, out ushort id)
     {
-        id = 0;
+        id = JEICell.NoItem;
         return !string.IsNullOrEmpty(fullName) && ResourceSystem.Instance.ItemDefinitions.TryGetNumberId(fullName, out id);
     }
 

@@ -2,21 +2,23 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-// JEI overlay root (design §4.1: an overlay layer, never a SinglePanel - it
-// must coexist with the open container panel for give feedback and, later,
-// recipe fill / drag-delete). P1: a right-edge strip with the virtualized item
-// grid, live search and cheat-mode give. Visibility follows the input stack
-// (§6.8): shown only while a world panel is open, under a Ctrl+O master switch.
-// P7: R/U and the toggle arrive via the UIManager action ring - this class
-// only exposes ToggleFollow / OnRecipeKey as the registered callbacks.
-public class JEIPanel : MonoBehaviour, IScrollHandler
+// JEI panel (design §4.1: a coexistence layer, never a SinglePanel - it must
+// stay on screen next to the open container panel for give feedback and,
+// later, recipe fill / drag-delete). P1: a right-edge strip with the
+// virtualized item grid, live search and cheat-mode give. Visibility follows
+// the input stack (§6.8): shown only while a world panel is open, under a
+// Ctrl+O master switch. P7: R/U and the toggle arrive via the UIManager action
+// ring - this class only exposes ToggleFollow / OnRecipeKey as the registered
+// callbacks. P8: a standard UIBehaviour riding the UI pipeline as UIKind
+// Overlay (host GO parented under the UIManager Overlay root).
+public class JEIPanel : UIBehavior, IScrollHandler
 {
-    private const float StripWidth = 116f;   // 2 columns x 50 pitch + padding
-    private const float CellSize = 46f;
-    private const float CellPitch = 50f;
+    private const float StripWidth = 520f;   // 6 columns x 84 pitch + padding
+    private const float CellSize = 80f;
+    private const float CellPitch = 84f;
     private const float TopPadding = 8f;
     private const float SearchHeight = 34f;
-    private const int Columns = 2;
+    private const int Columns = 6;
 
     private readonly JEIDataService data = new();
     private readonly System.Collections.Generic.List<JEICell> cells = new();
@@ -29,11 +31,11 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
     private int scrollRow;
     private bool followEnabled = true;
 
+    // Host GO is the factory-built stretch root (P8): keep it active at all
+    // times - the visibility switch lives on "Content", a deactivated host
+    // would stop this Update and could never come back.
     private void Awake()
     {
-        // Host GO is the engine-created stretch root (CreateOverlayRoot): keep
-        // it active at all times - the visibility switch lives on "Content",
-        // a deactivated host would stop this Update and could never come back.
         iconCache = gameObject.AddComponent<JEIIconCache>();
 
         content = new GameObject("Content", typeof(RectTransform));
@@ -201,7 +203,7 @@ public class JEIPanel : MonoBehaviour, IScrollHandler
         for(int i = 0; i < cells.Count; i++)
         {
             int index = first + i;
-            cells[i].SetItem(index < items.Count ? items[index] : (ushort)0);
+            cells[i].SetItem(index < items.Count ? items[index] : JEICell.NoItem);
         }
         noResultText.gameObject.SetActive(items.Count == 0);
     }

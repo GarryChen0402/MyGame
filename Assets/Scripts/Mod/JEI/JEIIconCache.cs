@@ -19,7 +19,7 @@ public class JEIIconCache : MonoBehaviour
     // null until the icon is ready (the cell shows an empty slot meanwhile).
     public RenderTexture Get(ushort itemId)
     {
-        if(itemId == 0)return null;
+        if(itemId == JEICell.NoItem)return null;
         if(cache.TryGetValue(itemId, out var ready))return ready;
         if(queued.Add(itemId))pending.Enqueue(itemId);
         return null;

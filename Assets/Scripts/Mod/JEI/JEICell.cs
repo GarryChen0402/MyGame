@@ -3,34 +3,31 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-// One cell of the JEI item grid: slot backdrop + cached icon + hover tint +
-// amount badge + click-to-give. Deliberately not a SlotUI - it has no mirror /
+// One cell of the JEI item grid: cached icon + hover tint + amount badge +
+// click-to-give. Deliberately not a SlotUI - it has no mirror /
 // SlotAddr, and it settles through the give command directly. Feeds the general
 // tooltip via IHoverItemSource, exactly like SlotUI does. The recipe page
 // reuses the same cell with clickable:false (display-only, design decision 1).
 public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler,
     IHoverItemSource
 {
-    private const float IconInset = 5f;
+    // Item id 0 is a real item (minecraft:stone registers first), so empty
+    // cells need a sentinel outside the reachable id range.
+    public const ushort NoItem = ushort.MaxValue;
+
+    // 8px per side: the 64x64 icon render target displays 1:1 in an 80px cell.
+    private const float IconInset = 8f;
     private static readonly Color HoverColor = new(1f, 1f, 1f, 0.3f);
-    private static Sprite slotSprite;
 
     private CanvasGroup group;
-    private Image bg;
     private RawImage icon;
     private TextMeshProUGUI amountText;
     private GameObject hoverOverlay;
     private JEIIconCache iconCache;
-    private ushort itemId;   // 0 = empty cell (past the end of the filtered list)
+    private ushort itemId = NoItem;   // NoItem = empty cell (past the end of the filtered list)
     private int amount = 1;
     private bool clickable = true;
     private bool shown = true;
-
-    private static Sprite SlotSprite()
-    {
-        if(slotSprite == null)slotSprite = Resources.Load<Sprite>("Textures/UI/slot");
-        return slotSprite;
-    }
 
     public void Init(JEIIconCache cache, float size, bool clickable = true)
     {
@@ -41,15 +38,16 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
         // Pool visibility + hit switch. A CanvasGroup instead of SetActive:
         // deactivating a cell under the pointer skips its OnPointerExit, and
         // re-activation routing is unreliable. alpha 0 + blocksRaycasts false
-        // hides every child graphic (backdrop, icon, badge, hover tint) while
+        // hides every child graphic (icon, badge, hover tint) while
         // the GO stays active.
         group = gameObject.AddComponent<CanvasGroup>();
 
-        bg = gameObject.AddComponent<Image>();
-        bg.sprite = SlotSprite();
-        // Raycast target on the cell body: hover / click / wheel all land here
-        // (wheel events bubble up to the panel's IScrollHandler).
-        bg.raycastTarget = true;
+        // Invisible hit surface (clear color, no sprite): hover / click / wheel
+        // land on the cell body (wheel events bubble up to the panel's
+        // IScrollHandler); the cell itself draws no backdrop.
+        var hit = gameObject.AddComponent<Image>();
+        hit.color = new Color(0f, 0f, 0f, 0f);
+        hit.raycastTarget = true;
 
         var iconGo = new GameObject("Icon", typeof(RectTransform));
         iconGo.transform.SetParent(transform, false);
@@ -95,12 +93,12 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
     // bound). amount > 1 shows the badge (recipe view inputs/outputs).
     public void SetItem(ushort id, int amount = 1)
     {
-        if(id == 0)amount = 1;   // normalize empty: repeated SetItem(0) still short-circuits
+        if(id == NoItem)amount = 1;   // normalize empty: repeated SetItem(NoItem) still short-circuits
         if(itemId == id && this.amount == amount)return;
         itemId = id;
         this.amount = amount;
-        icon.enabled = shown && id != 0;
-        if(id == 0)icon.texture = null;
+        icon.enabled = shown && id != NoItem;
+        if(id == NoItem)icon.texture = null;
         amountText.text = amount > 1 ? amount.ToString() : "";
     }
 
@@ -108,7 +106,7 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
     // Hidden pool cells must not enqueue renders: bail before touching the cache.
     private void Update()
     {
-        if(!shown || itemId == 0)return;
+        if(!shown || itemId == NoItem)return;
         var rt = iconCache.Get(itemId);
         if(rt != null && icon.texture != rt)icon.texture = rt;
     }
@@ -120,7 +118,7 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
         shown = value;
         group.alpha = value ? 1f : 0f;
         group.blocksRaycasts = value;
-        icon.enabled = value && itemId != 0;
+        icon.enabled = value && itemId != NoItem;
         if(!value)ForceUnhover();
     }
 
@@ -137,7 +135,7 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
     {
         // Display-only cells (recipe page): click-through navigation is P3, so
         // until then a click here must do nothing at all.
-        if(!clickable || itemId == 0)return;
+        if(!clickable || itemId == NoItem)return;
         if(!ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(itemId, out var def))return;
         // Cheat-mode semantics (decision D2): left = one stack, right = one item.
         int amount = eventData.button == PointerEventData.InputButton.Right ? 1 : def.MaxStack;
@@ -147,8 +145,8 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
     public void OnPointerEnter(PointerEventData eventData)
     {
         var ui = UIManager.Instance;
-        if(ui != null && itemId != 0)ui.CurrentHoverInfo = this;
-        if(itemId != 0)hoverOverlay.SetActive(true);
+        if(ui != null && itemId != NoItem)ui.CurrentHoverInfo = this;
+        if(itemId != NoItem)hoverOverlay.SetActive(true);
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -161,6 +159,6 @@ public class JEICell : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
     public bool TryGetHoverItemId(out ushort id)
     {
         id = itemId;
-        return itemId != 0;
+        return itemId != NoItem;
     }
 }
