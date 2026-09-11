@@ -28,6 +28,10 @@ public class HotBarUI : UIBehavior
     [SerializeField]
     private List<SlotUI> itemIcons = new();
 
+    private readonly List<Vector3> basePositions = new();
+    private int selectedShown = int.MinValue;
+    private const float SelectedRaise = 20f;
+
     private bool bound;
     private InventoryUI packGroup;
 
@@ -45,6 +49,8 @@ public class HotBarUI : UIBehavior
         handles = PanelLayoutRunner.Build(this, uIDefinition.Panel.Layout);
         itemIcons.Clear();
         itemIcons.AddRange(handles.SlotOrder);
+        basePositions.Clear();
+        foreach(var slot in itemIcons)basePositions.Add(slot.transform.localPosition);
         // Pack group (P4): the 9 HUD cells route the backpack container's
         // packed snapshot through their binding entries (data codes slot_<i>).
         packGroup = new InventoryUI();
@@ -59,6 +65,7 @@ public class HotBarUI : UIBehavior
     // type-level descriptor (P2/P4) and feed its code routing.
     private void Update()
     {
+        ApplySelectionRaise();
         var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
         if(mirror == null)return;   // resident sources register when the player is created
         if(!bound)
@@ -70,6 +77,24 @@ public class HotBarUI : UIBehavior
         }
         packGroup.ApplyPack(0, mirror.Pack);
         for(int i = 0; i < itemIcons.Count; i++)itemIcons[i].Refresh();
+    }
+
+    // Selected-cell feedback (vanilla-style raise): the chosen cell sits
+    // SelectedRaise px above its layout position. Base positions are captured
+    // once at build, so the offset can never accumulate across frames.
+    private void ApplySelectionRaise()
+    {
+        if(itemIcons.Count == 0)return;
+        var player = Player.Instance;
+        int selected = player != null ? player.SelectedSlotIndex : -1;
+        if(selected == selectedShown)return;
+        selectedShown = selected;
+        for(int i = 0; i < itemIcons.Count; i++)
+        {
+            var position = basePositions[i];
+            if(i == selected)position.y += SelectedRaise;
+            itemIcons[i].transform.localPosition = position;
+        }
     }
 
     public static UIDefinition hotbarDefinition = new()

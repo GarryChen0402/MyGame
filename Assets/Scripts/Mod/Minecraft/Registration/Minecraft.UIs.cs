@@ -105,6 +105,10 @@ public partial class Minecraft
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
         RegisterUIAction("open_entity_model_editor", KeyCode.P, "game", null, false, "minecraft:player_input_handler");
+        // Number keys quick-select the matching hotbar cell (vanilla's
+        // hotbar.1-9 analog); rebindable like any world action.
+        for(int i = 0; i < 9; i++)
+            RegisterWorldAction($"hotbar_{i + 1}", KeyCode.Alpha1 + i, "game", "minecraft:player_input_handler");
 
         // Core slot actions (P6, design §2.6): pointer-driven (no physical key,
         // non-rebindable); the UIManager ring resolves them from the pointer

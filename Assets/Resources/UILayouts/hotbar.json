@@ -2,8 +2,8 @@
     "formatVersion": 1,
     "panel": "hotbar",
     "width": 920.0,
-    "height": 100.0,
-    "scale": 1.0,
+    "height": 88.0,
+    "scale": 0.8999999761581421,
     "offset": {
         "x": 0.0,
         "y": 50.0

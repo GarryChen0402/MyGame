@@ -86,24 +86,44 @@ public class PlayerInputHandler : IInputHandler
         if(keys.WasPressed("minecraft:jump"))player.Intent.jumpRequested = true;
     }
 
+    private static readonly string[] HotbarSelectActions =
+    {
+        "minecraft:hotbar_1", "minecraft:hotbar_2", "minecraft:hotbar_3",
+        "minecraft:hotbar_4", "minecraft:hotbar_5", "minecraft:hotbar_6",
+        "minecraft:hotbar_7", "minecraft:hotbar_8", "minecraft:hotbar_9"
+    };
+
+    // Shared selection entry for the wheel and the number keys: wraps into
+    // 0..8, writes the index and logs the newly held stack (dev aid kept from
+    // the former wheel-only path).
+    private void SelectHotbarSlot(int index)
+    {
+        const int count = 9;
+        index = ((index % count) + count) % count;
+        player.SelectedSlotIndex = index;
+        ItemStack selected = player.inventory.GetItemStackAt(index);
+        if(selected != null && !selected.IsEmpty() &&
+           ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(selected.itemId, out var selectedDef))
+            Debug.Log($"Slot {index}: {selectedDef.FullName} x{selected.amount}");
+        else
+            Debug.Log($"Slot {index}: (empty)");
+    }
+
     private void InteractionHandler(KeyBindingManager keys)
     {
         // Mouse wheel cycles the selected inventory slot (wraps around).
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if(scroll != 0f && player.inventory.Inv.itemStacks.Count > 0)
-        {
-            player.SelectedSlotIndex += scroll > 0f ? 1 : -1;
-            // int count = player.inventory.itemStacks.Count;
-            int count = 9;
-            player.SelectedSlotIndex = ((player.SelectedSlotIndex % count) + count) % count;
+            SelectHotbarSlot(player.SelectedSlotIndex + (scroll > 0f ? 1 : -1));
 
-            // Log the item now selected in the new slot.
-            ItemStack selected = player.inventory.GetItemStackAt(player.SelectedSlotIndex);
-            if(selected != null && !selected.IsEmpty() &&
-               ResourceSystem.Instance.ItemDefinitions.TryGetResourceWithNumberId(selected.itemId, out var selectedDef))
-                Debug.Log($"Slot {player.SelectedSlotIndex}: {selectedDef.FullName} x{selected.amount}");
-            else
-                Debug.Log($"Slot {player.SelectedSlotIndex}: (empty)");
+        // Number keys 1-9 jump directly to the matching hotbar cell.
+        for(int i = 0; i < HotbarSelectActions.Length; i++)
+        {
+            if(keys.WasPressed(HotbarSelectActions[i]))
+            {
+                SelectHotbarSlot(i);
+                break;
+            }
         }
 
         // Left-click (P4 of the item drop dev plan): a mob under the crosshair
