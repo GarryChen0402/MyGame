@@ -206,14 +206,16 @@ public class ContainerCommandProcessor
 
     // Grants `amount` of the named item in MaxStack chunks; stops when the
     // backpack cannot hold more (same settlement the panel used to run).
-    public void GiveItem(string fullName, int amount)
+    // Returns how many were actually granted (legacy callers ignore it; the
+    // /give command echoes it).
+    public int GiveItem(string fullName, int amount)
     {
-        if(amount <= 0)return;
+        if(amount <= 0)return 0;
         var rs = ResourceSystem.Instance;
-        if(!rs.ItemDefinitions.TryGetResourceWithFullName(fullName, out var def))return;
-        if(!rs.ItemDefinitions.TryGetNumberId(fullName, out ushort id))return;
+        if(!rs.ItemDefinitions.TryGetResourceWithFullName(fullName, out var def))return 0;
+        if(!rs.ItemDefinitions.TryGetNumberId(fullName, out ushort id))return 0;
         var inventory = Player.Instance?.inventory?.Inv;
-        if(inventory == null)return;
+        if(inventory == null)return 0;
 
         int remaining = amount;
         while(remaining > 0)
@@ -225,5 +227,6 @@ public class ContainerCommandProcessor
         }
         int granted = amount - remaining;
         Debug.Log($"[GiveItem] granted {granted}/{amount} {def.FullName}");
+        return granted;
     }
 }

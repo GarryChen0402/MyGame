@@ -57,6 +57,8 @@ public partial class ResourceSystem
     public ResourceRegistryTable<BuffDefinition> BuffDefinitions {get;} = new();
     // Loot tables (block/mob definitions reference them by FullName)
     public ResourceRegistryTable<LootTableDefinition> LootTables {get;} = new();
+    // Commands (T segment): [Command]-scanned classes; string-keyed lookups only
+    public ResourceRegistryTable<CommandBase> Commands {get;} = new();
 
     // Texture
     public ResourceRegistryTable<TextureResource> Textures {get; } = new();
@@ -137,6 +139,7 @@ public partial class ResourceSystem
         BuffDefinitions.Freeze();
         ValidateLootReferences();     // loot refs log errors, do not abort startup
         LootTables.Freeze();
+        Commands.Freeze();
     }
 
     public void PostFreeze()

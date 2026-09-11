@@ -19,6 +19,7 @@ public class MirrorSync
     public ContainerMirror PlayerCraftResultMirror { get; private set; } // 1
     public HeldMirror PlayerHeldMirror { get; private set; }
     public PlayerMirror PlayerMirror { get; private set; }               // camera read side (rule R-C2-5)
+    public ChatLogMirror ChatLogMirror { get; private set; }             // command echo (D6); process-lifetime
 
     // ---- per-render-frame sync point (GameLoopDriver.Update tail) ----
 
@@ -43,6 +44,16 @@ public class MirrorSync
         bindings.Add(new HeldBinding { Mirror = PlayerHeldMirror, Source = p.CursorStack });
         PlayerMirror = new PlayerMirror();
         bindings.Add(new PlayerBinding { Mirror = PlayerMirror, Source = p });
+    }
+
+    // Command echo channel (D6): process-lifetime like the log itself, so it
+    // registers once at command-system bring-up (registration segment T), not
+    // per player. Idempotent - a second call is a no-op.
+    public void RegisterChatLogSource()
+    {
+        if(ChatLogMirror != null)return;
+        ChatLogMirror = new ChatLogMirror();
+        bindings.Add(new ChatLogBinding { Mirror = ChatLogMirror, Source = ChatLog.Instance });
     }
 
     // ---- entity mirrors (logic spawn entries register; rule R-C1-0c/R-C2-1) ----
@@ -261,6 +272,16 @@ public class MirrorSync
     {
         public EntityMirror Mirror;
         public Entity Source;
+
+        public override void Sync() => Mirror?.ApplyFrom(Source);
+    }
+
+    // Chat log source: process-lifetime singleton, so the binding lives for
+    // the whole run (registered at command-system bring-up).
+    private class ChatLogBinding : Binding
+    {
+        public ChatLogMirror Mirror;
+        public ChatLog Source;
 
         public override void Sync() => Mirror?.ApplyFrom(Source);
     }

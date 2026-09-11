@@ -10,9 +10,10 @@ public partial class Minecraft : IMod, ISteppedModRegistration
 
     // Registration state hoisted to fields (Part B §5.3 split discipline:
     // segment boundaries may not slice statements, so state crossing a
-    // boundary moves to the instance). The 19 segments A-S (doc §2.3) are the
+    // boundary moves to the instance). Segments A-S (doc §2.3) are the
     // natural boundaries of the former monolithic RegisterAllResources -
     // statements are neither reordered nor split, only wrapped in methods.
+    // T (commands) is appended after the A-S id-assignment freeze.
     // Each segment now lives in a partial file under Registration/; the
     // RegisterStep order below is unchanged and still fixes id assignment.
     private CustomModel cube;
@@ -61,7 +62,7 @@ public partial class Minecraft : IMod, ISteppedModRegistration
         DimensionGeneratorName = $"{ModId}:biome_dim_generator"
     };
 
-    public int StepCount => 19;
+    public int StepCount => 20;
 
     public void RegisterStep(int stepIndex)
     {
@@ -86,6 +87,10 @@ public partial class Minecraft : IMod, ISteppedModRegistration
             case 16: RegisterAi(); break;                           // Q: AI spec
             case 17: RegisterCrackTextures(); break;                // R: crack overlay textures
             case 18: RegisterLootTables(); break;                   // S: loot tables
+            // T is the first segment appended after the A-S compat freeze:
+            // it touches only the new Commands table, so existing id
+            // assignment (and save compatibility) is untouched.
+            case 19: RegisterCommands(); break;                     // T: commands
         }
     }
 

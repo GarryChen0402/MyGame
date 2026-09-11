@@ -20,10 +20,19 @@ public partial class Minecraft
         // General hover tooltip (Core layer, D6 of the JEI design doc): lives
         // with the game HUD so item names show even without the JEI mod.
         ResourceSystem.Instance.UIDefinitions.Register(TooltipUI.tooltipUIDefinition);
+        // Chat panel (P1 of Docs/指令系统-实施文档.md; D4=A): code-built shell,
+        // opened by the open_chat action below (default /).
+        ResourceSystem.Instance.UIDefinitions.Register(ChatPanelUI.chatPanelUIDefinition);
+        // Transient chat HUD: newest lines bottom-left for ~10s; opened with
+        // the game HUD, yields while the chat panel is open.
+        ResourceSystem.Instance.UIDefinitions.Register(ChatHudUI.chatHudUIDefinition);
 
 
         ResourceSystem.Instance.InputHandlers.Register(new PlayerInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new UIInputHandler());
+        // Chat's own context: typing keys stay inert and JEI's world-panel
+        // follow never fires while chatting (ChatPanelUI's InputHandlerId).
+        ResourceSystem.Instance.InputHandlers.Register(new ChatInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new MenuInputHandler());
         // Early-touch the shell manager singleton: since the Attach direct
         // calls became spawn events (Phase C R-C2-3) nothing else instantiates
@@ -105,6 +114,10 @@ public partial class Minecraft
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
         RegisterUIAction("open_entity_model_editor", KeyCode.P, "game", null, false, "minecraft:player_input_handler");
+        // Chat entry (D1=A): Slash opens the chat panel - callback-less like
+        // the open-entry actions above (the poll lives in PlayerInputHandler;
+        // the whitelist keeps a panel's ui_input_handler context out).
+        RegisterUIAction("open_chat", KeyCode.Slash, "game", null, false, "minecraft:player_input_handler");
         // Number keys quick-select the matching hotbar cell (vanilla's
         // hotbar.1-9 analog); rebindable like any world action.
         for(int i = 0; i < 9; i++)

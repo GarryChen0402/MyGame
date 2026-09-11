@@ -77,6 +77,9 @@ public class UIManager : MonoBehaviour
         // carried must never be covered by hover text.
         OpenUI("minecraft:tooltip");
         OpenUI("minecraft:held_item");
+        // Transient chat lines: opened last so they render above the rest of
+        // the HUD.
+        OpenUI("minecraft:chat_hud");
     }
 
     private UIBehavior currentUI = null;

@@ -40,6 +40,7 @@ public class WorldManager
     private static readonly ProfilerMarker blockEntitiesMarker = new ProfilerMarker("World.BlockEntities");
     private static readonly ProfilerMarker randomTickMarker = new ProfilerMarker("World.RandomTick");
     private static readonly ProfilerMarker itemEntitiesMarker = new ProfilerMarker("World.ItemEntities");
+    private static readonly ProfilerMarker commandTickMarker = new ProfilerMarker("World.Commands");
 
     // Multi-focus registration (decision C). The enter-world sequence registers
     // its PlayerLoadFocus before the initial ring submission so completed
@@ -262,6 +263,9 @@ public class WorldManager
         using (blockEntitiesMarker.Auto()) BlockEntityManager.Instance.Tick(dt);
         using (randomTickMarker.Auto()) RandomTickSystem.Instance.Tick(dt);   // MC random ticks: 20Hz block-domain step (design doc 随机刻系统-代码设计 §3)
         using (itemEntitiesMarker.Auto()) ItemEntityManager.Instance.Update();
+        // External input last: queued commands settle after the world stepped
+        // this tick (D2 - parse + settlement never run on the input frame).
+        using (commandTickMarker.Auto()) CommandDispatcher.Instance.Tick();
     }
 
     // Load-center driver on the game tick (rule L2): every dynamic focus

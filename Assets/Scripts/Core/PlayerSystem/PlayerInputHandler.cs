@@ -39,6 +39,9 @@ public class PlayerInputHandler : IInputHandler
         // the Ctrl+P combo collides with the Unity editor's play shortcut.
         if(keys.WasPressed("minecraft:open_entity_model_editor"))
             UIManager.Instance?.OpenUI("entity_model_editor:entity_model_editor");
+        // Chat panel (default /): command entry (P1 of Docs/指令系统-实施文档.md).
+        if(keys.WasPressed("minecraft:open_chat"))
+            UIManager.Instance?.OpenUI("minecraft:chat_panel");
         MoveHandler(keys);
         InteractionHandler(keys);
     }
