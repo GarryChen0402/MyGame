@@ -70,7 +70,7 @@ public class ItemEntity : Entity
         if(item.MaxRange.x < p.MinRange.x - 1.0f || item.MinRange.x > p.MaxRange.x + 1.0f)return;
         if(item.MaxRange.z < p.MinRange.z - 1.0f || item.MinRange.z > p.MaxRange.z + 1.0f)return;
         if(item.MaxRange.y <= p.MinRange.y - 0.5f || item.MinRange.y >= p.MaxRange.y + 0.5f)return;
-        if(!player.inventory.TryAddItemStack(Stack))return;   // no room: hover
+        if(!player.inventory.Inv.TryAddItemStack(Stack))return;   // no room: hover
         ItemEntityManager.Instance.DespawnItemEntity(this);
     }
 

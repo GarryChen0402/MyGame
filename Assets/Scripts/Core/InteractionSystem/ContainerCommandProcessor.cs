@@ -98,7 +98,7 @@ public class ContainerCommandProcessor
             {
                 var p = Player.Instance;
                 if(p?.inventory == null)return null;
-                return new PlayerSlotAccess(p.inventory, addr.slot);
+                return new PlayerSlotAccess(p.inventory.Inv, addr.slot);
             }
             case SlotScope.PlayerCrafting:
             {
@@ -212,7 +212,7 @@ public class ContainerCommandProcessor
         var rs = ResourceSystem.Instance;
         if(!rs.ItemDefinitions.TryGetResourceWithFullName(fullName, out var def))return;
         if(!rs.ItemDefinitions.TryGetNumberId(fullName, out ushort id))return;
-        var inventory = Player.Instance?.inventory;
+        var inventory = Player.Instance?.inventory?.Inv;
         if(inventory == null)return;
 
         int remaining = amount;

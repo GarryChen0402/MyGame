@@ -268,23 +268,15 @@ public class WorldSaveManager
             {
                 position = player.Position,
                 pitch = player.pitch,
-                yaw = player.yaw,
-                inventory = new List<ItemStackSaveData>()
+                yaw = player.yaw
             };
             if(player.CraftingGrid != null)
                 data.craftingGrid = player.CraftingGrid.ExportSave().slots;
             if(ResourceSystem.Instance.DimensionDefinitions.TryGetStringId(player.DimensionId, out string dimName))
                 data.dimensionId = dimName;
-            var stacks = player.inventory.itemStacks;
-            for(int i = 0; i < stacks.Count; i++)
-            {
-                var stack = stacks[i];
-                if(stack == null || stack.IsEmpty()) continue;
-                if(!ResourceSystem.Instance.ItemDefinitions.TryGetStringId(stack.itemId, out string itemName)) continue;
-                // slotIndex pins each stack to its slot so a reload restores
-                // the exact backpack layout instead of shifting items forward.
-                data.inventory.Add(new ItemStackSaveData { itemId = itemName, amount = stack.amount, slotIndex = i });
-            }
+            // Backpack: the container exports the slot-pinned layout (P4) -
+            // the former inline loop, now the shared container path.
+            data.inventory = player.inventory.ExportSave().slots;
             ChunkSerializer.WriteFileAtomic(Path.Combine(WorldRootPath, "player.json"), JsonUtility.ToJson(data));
         }
         catch(Exception e)

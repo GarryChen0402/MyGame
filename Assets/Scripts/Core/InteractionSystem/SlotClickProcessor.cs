@@ -112,7 +112,7 @@ public static class SlotClickProcessor
         if(source is ContainerSlotAccess)
         {
             if(!source.CanTake())return;
-            var playerInv = Player.Instance?.inventory;
+            var playerInv = Player.Instance?.inventory?.Inv;
             if(playerInv == null)return;
             if(playerInv.TryAddItemStack(src))   // whole stack or nothing
                 source.MarkChanged();

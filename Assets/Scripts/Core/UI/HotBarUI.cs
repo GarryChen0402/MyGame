@@ -9,6 +9,7 @@ public class HotBarUI : UIBehavior
     private List<SlotUI> itemIcons = new();
 
     private bool bound;
+    private InventoryUI packGroup;
     private void Awake()
     {
         if(instance == null)instance = this;
@@ -29,22 +30,30 @@ public class HotBarUI : UIBehavior
 
         // rt.sizeDelta = new Vector2(30, 30);   // 15px texture doubled for visibility
 
+        // Pack group (P4): the 9 HUD cells route the backpack container's
+        // packed snapshot through their binding entries (data codes slot_<i>).
+        packGroup = new InventoryUI();
+        foreach(var slot in itemIcons)packGroup.Add(slot);
     }
 
     // Phase C: reads the resident backpack mirror instead of the live
     // inventory. SlotUI.Refresh diffs internally, so a per-frame sweep only
     // re-renders changed slots. Hotbar slots never bind interactive - they
-    // stay unclickable, exactly like before.
+    // stay unclickable, exactly like before. The pack pass (P4) consumes the
+    // backpack container's packed snapshot; the binding entries come from the
+    // type-level descriptor (P2/P4) and feed its code routing.
     private void Update()
     {
         var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
         if(mirror == null)return;   // resident sources register when the player is created
         if(!bound)
         {
-            for(int i = 0; i < itemIcons.Count; i++)itemIcons[i].BindDisplay(mirror, i);
+            var descriptor = hotbarDefinition.Panel;
+            for(int i = 0; i < itemIcons.Count; i++)
+                itemIcons[i].BindDisplay(mirror, i, descriptor.Resolve($"hotbar_{i}"));
             bound = true;
-            return;
         }
+        packGroup.ApplyPack(0, mirror.Pack);
         for(int i = 0; i < itemIcons.Count; i++)itemIcons[i].Refresh();
     }
 

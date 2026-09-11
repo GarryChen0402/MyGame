@@ -90,7 +90,7 @@ public class PlayerInputHandler : IInputHandler
     {
         // Mouse wheel cycles the selected inventory slot (wraps around).
         float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if(scroll != 0f && player.inventory.itemStacks.Count > 0)
+        if(scroll != 0f && player.inventory.Inv.itemStacks.Count > 0)
         {
             player.SelectedSlotIndex += scroll > 0f ? 1 : -1;
             // int count = player.inventory.itemStacks.Count;

@@ -7,6 +7,7 @@ using UnityEngine.UI;
 public class PlayerInventoryUI : UIBehavior
 {
     private List<SlotUI> slots = new();
+    private InventoryUI packGroup;
     private void Awake()
     {
         var rt = gameObject.AddComponent<RectTransform>();
@@ -35,6 +36,10 @@ public class PlayerInventoryUI : UIBehavior
                 slots.Add(slotUI);
             }
         }
+        // Pack group (P4): the 36 cells route the backpack container's packed
+        // snapshot through their binding entries (data codes slot_<i>).
+        packGroup = new InventoryUI();
+        foreach(var slot in slots)packGroup.Add(slot);
         // No display bind here: the mirror registers when the player is
         // created, which may be after this panel is built (UIManager.Awake
         // pre-fabricates it) - reading Player here would move the creation
@@ -70,12 +75,17 @@ public class PlayerInventoryUI : UIBehavior
     // Phase C: display + click address bind to the resident backpack mirror
     // (addresses are resolved by ContainerCommandProcessor, no accessor is
     // held here). Binding is idempotent, so re-binding on every show keeps
-    // the display in sync with the mirror registration.
+    // the display in sync with the mirror registration. The binding entries
+    // come from the type-level descriptor (P2/P4): they feed the pack routing
+    // and never depend on uIDefinition injection.
     private void OnEnable()
     {
         var mirror = MirrorSync.Instance?.PlayerInventoryMirror;
+        packGroup.Reset();   // reopen: replay the pack from scratch (P2, D4)
+        var descriptor = playerInvUIDefinition.Panel;
         for(int i = 0; i < 36; i++)
-            slots[i].BindInteractive(mirror, i, new SlotAddr { scope = SlotScope.PlayerInventory, slot = i });
+            slots[i].BindInteractive(mirror, i, new SlotAddr { scope = SlotScope.PlayerInventory, slot = i },
+                descriptor.Resolve($"player_inv_{i}"));
     }
 
     // Refresh sweeps every slot to reflect merges / swaps / quick-moves.
@@ -90,8 +100,11 @@ public class PlayerInventoryUI : UIBehavior
     // also picks up direct inventory writes - give commands, pickups,
     // crafting - that never pass through the click path. Unity skips Update
     // on inactive GameObjects, so this runs only while the panel is visible.
+    // The pack pass (P4) consumes the backpack container's packed snapshot
+    // before the sweep; a not-yet-registered mirror reads as no pack.
     private void Update()
     {
+        packGroup.ApplyPack(0, MirrorSync.Instance?.PlayerInventoryMirror?.Pack);
         Refresh();
     }
 }

@@ -23,7 +23,7 @@ public class Entity // Data Class
     public Vector3 PrevPosition;
     public float PrevYaw;
     public float PrevPitch;
-    public Inventory inventory;
+    public InventoryDataContainer inventory;
     public float pitch = 0;
     public float yaw = 0;
     public ushort DimensionId;

@@ -91,13 +91,14 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, ID
     // Display-only slot (hotbar): shows the source value, never interactive.
     // A null source renders empty - bindings may precede the resident player
     // registration during startup, and panels with no data (widget test) show
-    // blank slots that stay unclickable.
-    public void BindDisplay(ISlotReadSource source, int slotIndex)
+    // blank slots that stay unclickable. The optional binding entry (P0/P4)
+    // rides along from the descriptor's declaration (pack routing).
+    public void BindDisplay(ISlotReadSource source, int slotIndex, SlotBindingEntry entry = null)
     {
         this.source = source;
         this.slotIndex = slotIndex;
         addr = null;
-        bindingEntry = null;
+        bindingEntry = entry;
         packValue = null;
         shown = false;   // first Refresh after a bind always renders
         Refresh();

@@ -67,16 +67,10 @@ public class MirrorSync
 
     // ---- standalone container bindings (resident player sources) ----
 
-    // Registers one Inventory as a mirrored source (player sources register
-    // resident bindings above); block-entity panel containers go through the
-    // PanelData bindings below instead.
-    public ContainerMirror AddContainerBinding(Inventory source)
-        => AddContainerBinding(source, null);
-
-    // Container-level overload (P2): the container doubles as the pack source,
-    // so its resident mirror carries the packed snapshot alongside the value
-    // slots (player craft grid/result; player backpack stays value-only until
-    // the backpack containerization lands).
+    // Container-level binding (P2/P4): the container doubles as the pack
+    // source, so its resident mirror carries the packed snapshot alongside
+    // the value slots (player backpack, craft grid/result); block-entity
+    // panel containers go through the PanelData bindings below instead.
     public ContainerMirror AddContainerBinding(InventoryDataContainer container)
         => AddContainerBinding(container?.Inv, container);
 
@@ -154,9 +148,9 @@ public class MirrorSync
         public abstract void Sync();
     }
 
-    // Player backpack sources are raw Inventory (no pack); container-level
-    // sources also carry the pack contract (PackSource) so the mirror gets a
-    // packed snapshot alongside the values.
+    // Resident sources copy from the container's raw Inventory; every
+    // container-level source also carries the pack contract (PackSource) so
+    // the mirror gets a packed snapshot alongside the values.
     private class ContainerBinding : Binding
     {
         public ContainerMirror Mirror;
