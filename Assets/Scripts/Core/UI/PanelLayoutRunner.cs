@@ -94,7 +94,8 @@ public static class PanelLayoutRunner
     {
         var go = ProgressBarUI.AddProgressBar(bar.Id, new Vector3(bar.Pos.x, bar.Pos.y, 0f), bar.Dir,
             bar.Front == null ? null : UISprites.Resolve(bar.Front.Sprite),
-            bar.Back == null ? null : UISprites.Resolve(bar.Back.Sprite));
+            bar.Back == null ? null : UISprites.Resolve(bar.Back.Sprite),
+            bar.Front?.Tint, bar.Back?.Tint);
         go.transform.SetParent(parent, false);
         return go.GetComponent<ProgressBarUI>();
     }

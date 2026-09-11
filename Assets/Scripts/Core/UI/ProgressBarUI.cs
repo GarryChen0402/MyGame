@@ -67,16 +67,18 @@ public class ProgressBarUI : MonoBehaviour
         return image;
     }
 
-    public void Setup(Sprite front, Direction direction, Sprite back = null)
+    public void Setup(Sprite front, Direction direction, Sprite back = null, Color? frontTint = null, Color? backTint = null)
     {
         if(back != null)
         {
             bgImage.enabled = true;
             bgImage.sprite = back;
+            bgImage.color = backTint ?? Color.white;
         }
         if(front == null)return;
 
         fillImage.sprite = front;
+        fillImage.color = frontTint ?? Color.white;
         fillImage.type = Image.Type.Filled;
 
         // Map the semantic direction onto Image's (fillMethod, fillOrigin) pair.
@@ -112,14 +114,15 @@ public class ProgressBarUI : MonoBehaviour
         ApplyFill();
     }
 
-    public static GameObject AddProgressBar(string name, Vector3 position, Direction direction, Sprite front, Sprite back)
+    public static GameObject AddProgressBar(string name, Vector3 position, Direction direction, Sprite front, Sprite back,
+        Color? frontTint = null, Color? backTint = null)
     {
         var go = new GameObject(name);
         // go.transform.SetParent(transform, false);
         go.transform.localPosition = position;
         go.AddComponent<RectTransform>();
         var bar = go.AddComponent<ProgressBarUI>();
-        bar.Setup(front, direction, back);
+        bar.Setup(front, direction, back, frontTint, backTint);
         return go;
     }
 }

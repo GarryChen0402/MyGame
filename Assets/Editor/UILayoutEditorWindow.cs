@@ -398,8 +398,8 @@ public class UILayoutEditorWindow : EditorWindow
     }
 
     // Bar preview: the back aspect-fitted under the front drawn at half fill
-    // (radial directions draw whole - a radial cutout is not a rectangle); no
-    // tint, matching the runtime bar.
+    // (radial directions draw whole - a radial cutout is not a rectangle);
+    // both carry their tint, like the runtime bar.
     private void DrawBarCell(Vector2 canvasCenter, PanelElementData element, bool selected)
     {
         float size = BlockSize * zoom;
@@ -408,9 +408,9 @@ public class UILayoutEditorWindow : EditorWindow
         if(showSprites)
         {
             if(element.back != null)
-                textured |= DrawSprite(rect, PreviewSprite(element.back.sprite), Color.white, DrawMode.Aspect);
+                textured |= DrawSprite(rect, PreviewSprite(element.back.sprite), element.back.tint, DrawMode.Aspect);
             if(element.front != null)
-                textured |= DrawSpriteProgress(rect, PreviewSprite(element.front.sprite),
+                textured |= DrawSpriteProgress(rect, PreviewSprite(element.front.sprite), element.front.tint,
                     (ProgressBarUI.Direction)element.dir, 0.5f);
         }
         if(!textured)EditorGUI.DrawRect(rect, selected ? Brighten(BarColor) : BarColor);
@@ -528,7 +528,7 @@ public class UILayoutEditorWindow : EditorWindow
 
     // Front-fill preview at a fixed fraction: the rectangular cutouts for the
     // horizontal/vertical directions, whole sprite for radial ones.
-    private static bool DrawSpriteProgress(Rect rect, Sprite sprite, ProgressBarUI.Direction dir, float fill)
+    private static bool DrawSpriteProgress(Rect rect, Sprite sprite, Color tint, ProgressBarUI.Direction dir, float fill)
     {
         if(sprite == null || sprite.texture == null)return false;
         rect = FitRect(rect, sprite);
@@ -556,7 +556,10 @@ public class UILayoutEditorWindow : EditorWindow
                 rect.height *= fill;
                 break;
         }
+        var previous = GUI.color;
+        GUI.color = previous * tint;
         DrawRegion(rect, sprite, region);
+        GUI.color = previous;
         return true;
     }
 
