@@ -67,19 +67,38 @@ public class UIManager : MonoBehaviour
         PlayerInventoryRoot.SetActive(false);
     }
 
+    // The game HUD set. Open order matters: tooltip after the hotbar (the
+    // item being carried must never be covered by hover text) and chat lines
+    // last so they render above the rest of the HUD; CloseGameHUD walks the
+    // same list.
+    private static readonly string[] GameHudIds = {
+        "minecraft:crosshair",
+        "minecraft:hotbar",
+        "minecraft:tooltip",
+        "minecraft:held_item",
+        "minecraft:chat_hud"
+    };
+
     // In-game HUD is no longer opened on Start: the session controller opens
     // it when entering a world, so the menu state stays HUD-free.
     public void OpenGameHUD()
     {
-        OpenUI("minecraft:crosshair");
-        OpenUI("minecraft:hotbar");
-        // Tooltip below the cursor-held item (opened last): the item being
-        // carried must never be covered by hover text.
-        OpenUI("minecraft:tooltip");
-        OpenUI("minecraft:held_item");
-        // Transient chat lines: opened last so they render above the rest of
-        // the HUD.
-        OpenUI("minecraft:chat_hud");
+        foreach(string id in GameHudIds)OpenUI(id);
+    }
+
+    // Pause page / world teardown: hide the HUD without panel semantics. The
+    // cache holds the instances from the open path; a missing entry means that
+    // HUD was never opened (UI.Close on an inactive GO is a no-op anyway).
+    public void CloseGameHUD()
+    {
+        foreach(string id in GameHudIds)
+        {
+            if(!UICache.TryGetValue(id, out var ui))continue;
+            ui.Close();
+            // Stale-pointer cleanup: the world-entry open path leaves currentUI
+            // on the last HUD opened (HUDs never own an input handler).
+            if(ReferenceEquals(currentUI, ui))currentUI = null;
+        }
     }
 
     private UIBehavior currentUI = null;
@@ -155,8 +174,12 @@ public class UIManager : MonoBehaviour
         // action and deregister their mirror bindings (rule R-C1-0b).
         if(currentPanel != null)ContainerCommandProcessor.Instance.ClosePanel(currentPanel.BeId);
         currentPanel = null;
+        // Captured before the close: a panel's OnDisable may re-enter OpenUI
+        // (the pause page reopens the HUD) and clobber the flag before the pop
+        // below - a skipped pop would strand its input handler on the stack.
+        bool hadInputHandler = CurrentUIhasInputHandler;
         currentUI?.Close();
-        if(currentUI != null && CurrentUIhasInputHandler)
+        if(currentUI != null && hadInputHandler)
         {
             InputHandlerManager.Instance.Pop();
             CurrentUIhasInputHandler = false;

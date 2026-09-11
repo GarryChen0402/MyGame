@@ -17,6 +17,9 @@ public partial class Minecraft
         ResourceSystem.Instance.UIDefinitions.Register(WidgetTestUI.widgetTestUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(EntityModelEditorUI.editorUIDefinition);
         ResourceSystem.Instance.UIDefinitions.Register(MenuUI.mainMenuUIDefinition);
+        // In-game pause page (ESC): true-pause + Save and Quit to Title; its
+        // own input context keeps JEI and the action whitelists out (PauseMenuUI).
+        ResourceSystem.Instance.UIDefinitions.Register(PauseMenuUI.pauseMenuUIDefinition);
         // General hover tooltip (Core layer, D6 of the JEI design doc): lives
         // with the game HUD so item names show even without the JEI mod.
         ResourceSystem.Instance.UIDefinitions.Register(TooltipUI.tooltipUIDefinition);
@@ -34,6 +37,7 @@ public partial class Minecraft
         // follow never fires while chatting (ChatPanelUI's InputHandlerId).
         ResourceSystem.Instance.InputHandlers.Register(new ChatInputHandler());
         ResourceSystem.Instance.InputHandlers.Register(new MenuInputHandler());
+        ResourceSystem.Instance.InputHandlers.Register(new PauseInputHandler());
         // Early-touch the shell manager singleton: since the Attach direct
         // calls became spawn events (Phase C R-C2-3) nothing else instantiates
         // it, and a spawn before its ctor subscribed would lose the shell.

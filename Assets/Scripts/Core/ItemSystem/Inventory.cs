@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using MCPForUnity.Editor.Services.AssetGen.Providers;
 
 public class Inventory
 {

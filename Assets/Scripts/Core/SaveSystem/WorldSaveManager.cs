@@ -53,6 +53,11 @@ public class WorldSaveManager
         if(meta.version >= 2 && meta.spawn != Vector3.zero)spawnCached = meta.spawn;
     }
 
+    // Return-to-title: clears the active marker so "null = menu phase" holds
+    // again (HasActiveWorld gates SavePlayer/SaveWorldMeta, T6). The next
+    // SetActiveWorld re-stamps folder/name/time/spawn from the slot on disk.
+    public void DeactivateWorld() => worldRootPath = null;
+
     private const float AutosaveIntervalSeconds = 60f;
     private float autosaveTimer;
 

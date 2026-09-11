@@ -24,6 +24,12 @@ public class PlayerInputHandler : IInputHandler
     public override void OnUpdate()
     {
         if(player == null)return;
+        // Pause page (ESC is a system key - never in the binding table): inert
+        // unless the world is live, so menu/loading/F8-freeze states are
+        // immune. No double-fire: the pushed pause context keeps this handler
+        // out of Update from the next frame on.
+        if(!GameLoopDriver.PauseLogic && Input.GetKeyDown(KeyCode.Escape))
+            UIManager.Instance?.OpenUI("minecraft:pause_menu");
         var keys = KeyBindingManager.Instance;
         // Open the player UI through the command entry (Phase C): the entry
         // runs the open action (2x2 preview refresh) before showing the panel.

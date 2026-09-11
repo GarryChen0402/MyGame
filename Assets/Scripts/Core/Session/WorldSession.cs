@@ -143,4 +143,27 @@ public static class WorldSession
         entryTracker = null;   // re-entry window closes with the gate
         LoadingOverlay.Hide();
     }
+
+    // World -> menu teardown (pause page's Save and Quit; called by
+    // GameEntryController.ReturnToMainMenu with the logic already frozen).
+    // Order matters: save first, then walk the live unload cascades from the
+    // data layer down to the shells, then restore the menu-phase invariants
+    // ("no active world", empty dimension table, no resident entities).
+    public static void ExitWorld()
+    {
+        if(pending || entryTracker != null)return;            // entry in flight: nothing live to exit
+        if(!WorldSaveManager.Instance.HasActiveWorld)return;  // menu phase: no-op
+        GameLoopDriver.PauseLogic = true;                     // frozen through the whole teardown
+        // Sync-write every chunk (enabled + disabled) + drain the write queue
+        // + player + meta. Runs before the unload cascade so UnloadChunk's
+        // dirty-save branch sees every chunk already saved.
+        WorldSaveManager.Instance.SaveAllOnQuit();
+        // A mining session holds old-world coords and drives the crack overlay;
+        // aborting publishes the interrupted DTO so the overlay clears.
+        Player.Instance.AbortInteractionSession();
+        WorldManager.Instance.ClearWorld();
+        EntityManager.Instance.DestroyAll();
+        WorldRenderer.Instance?.ClearRenderDimension();
+        WorldSaveManager.Instance.DeactivateWorld();
+    }
 }

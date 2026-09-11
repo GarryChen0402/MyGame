@@ -59,6 +59,22 @@ public class WorldRenderer : MonoBehaviour
         SyncExistingRenderers();
     }
 
+    // Return-to-title teardown (WorldSession.ExitWorld): full unmount plus a
+    // residue sweep. Shells are destroyed, then every rebuild queue is dropped
+    // so a stale mesh task (worker still building, or a ready-list upload
+    // whose coord now belongs to the next world) can never apply onto a
+    // new-world renderer. CurrentRenderDimension goes null first: Update's
+    // queue pass and the dispatch both early-return on it.
+    public void ClearRenderDimension()
+    {
+        CurrentRenderDimension = null;
+        foreach(var renderer in chunkRenderers.Values)Destroy(renderer.gameObject);
+        chunkRenderers.Clear();
+        rebuildEntries.Clear();
+        inflight.Clear();
+        ready.Clear();
+    }
+
     // View: renderer lifecycle is driven by ChunkLoaded / ChunkUnloaded events.
     private void OnChunkLoaded(ChunkLoadedEvent evt)
     {

@@ -72,4 +72,25 @@ public class EntityManager
         });
         return true;
     }
+
+    // Session teardown sweep (WorldSession.ExitWorld). The Player is resident
+    // across sessions (its ctor auto-registered it and it must survive) -
+    // skipped. Drops usually already left through the chunk-unload cascade;
+    // DespawnItemEntity is idempotent (tracked-membership sentinel), so
+    // leftovers go through the same door.
+    public void DestroyAll()
+    {
+        var snapshot = new List<Entity>(entities);   // Unregister mutates the set
+        foreach(var entity in snapshot)
+        {
+            if(entity is Player)continue;
+            if(entity is ItemEntity item)
+            {
+                ItemEntityManager.Instance.DespawnItemEntity(item);
+                continue;
+            }
+            Unregister(entity);
+            entity.OnDestroy();   // DestroyEntity (PhysicsManager) + mirror + shell despawn
+        }
+    }
 }

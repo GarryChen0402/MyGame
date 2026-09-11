@@ -79,6 +79,27 @@ public class WorldManager
     // keeps the live instance and its enabled chunks.
     public void RegisterDimension(ushort dimId, Dimension dimension) => Dimensions[dimId] = dimension;
 
+    // Return-to-title teardown (WorldSession.ExitWorld): unload every enabled
+    // chunk through the normal cascade (renderer/BE/drop cleanup fires from
+    // ChunkUnloadedEvent), then drop focus state, in-flight generation and the
+    // dimension table itself. Clearing genQueue + genInflight is what makes
+    // stale workers harmless: results are only ever consumed by the pump's
+    // scan of genInflight, so a cleared task is unreachable - it keeps filling
+    // its own (now garbage) chunk and touches no shared state.
+    public void ClearWorld()
+    {
+        genQueue.Clear();
+        genInflight.Clear();
+        loadFocuses.Clear();
+        foreach(var dim in Dimensions.Values)
+        {
+            List<Vector2Int> coords = new();
+            foreach(var chunk in dim.GetEnableChunks())coords.Add(chunk.ChunkCoord);
+            foreach(Vector2Int coord in coords)dim.UnloadChunk(coord);   // collect-then-remove
+        }
+        Dimensions.Clear();
+    }
+
     public bool TryGetOrGenerateDimension(string dimensionFullName, out Dimension dimension)
     {
         dimension = null;

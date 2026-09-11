@@ -43,4 +43,17 @@ public class GameEntryController : MonoBehaviour
         UIManager.Instance.OpenGameHUD();
         WorldSession.StartEnterWorld(folder);
     }
+
+    // Pause page's "Save and Quit to Title" - the only world -> menu path.
+    // CloseUI runs the pause panel's OnDisable (resumes the logic + reopens
+    // the HUD); the re-freeze and HUD close land in the SAME synchronous
+    // stack, so no tick can interleave and the reopen is never rendered.
+    public void ReturnToMainMenu()
+    {
+        UIManager.Instance.CloseUI();
+        GameLoopDriver.PauseLogic = true;
+        UIManager.Instance.CloseGameHUD();
+        WorldSession.ExitWorld();
+        OpenMenu();   // Phase6 is idempotent: re-freezes + opens main_menu (menu handler -> cursor unlock)
+    }
 }
