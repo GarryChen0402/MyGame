@@ -4,8 +4,12 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Recipe view of the JEI overlay (design §6.4): a panel docked left of the
-// item strip - the list stays visible and usable, matching the vanilla layout.
+// Recipe screen of the JEI mod (design §6.4; standalone form per D10, 2026-09-11):
+// a standard SinglePanel registered as "jei:recipe" by JEIMod and opened from
+// the R/U keys - open closes the previously open UI first (close-then-open
+// lives in JEIPanel.OnRecipeKey) and closing returns to the game state, never
+// to the old panel. It pushes the ui input handler, so the strip's follow
+// condition stays true and the item list remains usable beside it.
 // One recipe per page, three layouts by RecipeKind: shaped draws the Shape
 // grid (spaces become empty slots), shapeless tiles Inputs in 3 columns,
 // processing is a single input row with an arrow, cook seconds and the output.
@@ -13,10 +17,10 @@ using UnityEngine.EventSystems;
 // destroyed. Own IScrollHandler: EventSystem routes a wheel to the first
 // ancestor handler, so scrolling here pages the view and never reaches the
 // strip's list scrolling.
-public class JEIRecipePage : MonoBehaviour, IScrollHandler
+public class JEIRecipePage : UIBehavior, IScrollHandler
 {
-    private const float PanelW = 420f;
-    private const float PanelH = 330f;
+    private const float PanelW = 560f;
+    private const float PanelH = 430f;
     private const float CellSize = 80f;
     private const float CellPitch = 84f;
     private const float RowY0 = 62f;
@@ -28,7 +32,6 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
 
     private readonly List<JEICell> cells = new();
     private JEIIconCache iconCache;
-    private JEIDataService data;
     private UIButtonWidget backButton;
     private UIButtonWidget prevButton;
     private UIButtonWidget nextButton;
@@ -42,14 +45,13 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
     private int index;
     private bool warnedClamp;
 
-    public void Init(JEIDataService dataService, JEIIconCache cache)
+    public void Init(JEIIconCache cache)
     {
-        data = dataService;
         iconCache = cache;
 
         var rt = (RectTransform)transform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);   // strip's left edge
-        rt.pivot = new Vector2(1f, 0.5f);                      // grows leftwards
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // standalone centered screen
+        rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(PanelW, PanelH);
         rt.anchoredPosition = Vector2.zero;
 
@@ -59,7 +61,7 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         UIWidgetBackground.CreateNewBackground().transform.SetParent(transform, false);
 
         backButton = MakeButton("Back", 10f, 5f, 52f);
-        backButton.OnClick.AddListener(Hide);
+        backButton.OnClick.AddListener(CloseSelf);
         titleText = MakeText(70f, 5f, 180f, 22f, 16f, TextAlignmentOptions.Left);
         prevButton = MakeButton("<", 10f, 30f, 24f, 20f);
         prevButton.OnClick.AddListener(() => ChangePage(-1));
@@ -97,21 +99,20 @@ public class JEIRecipePage : MonoBehaviour, IScrollHandler
         gameObject.SetActive(false);
     }
 
-    // Query entry point: opens (or navigates) the page for one item. No
-    // results is a valid state - the page then shows its "No Recipes" empty
-    // state so the R/U keypress has visible feedback (design §6.4).
-    public void Show(ushort itemId, bool recipesNotUses)
+    // UIManager entry (OpenUI data): the caller resolves the list from the
+    // hovered item (JEIPanel.OnRecipeKey); every open resets to the first page.
+    public override void SetData(object data)
     {
-        recipes = recipesNotUses ? data.GetRecipesMaking(itemId) : data.GetRecipesUsing(itemId);
+        recipes = data as IReadOnlyList<RecipeContent>;
         index = 0;
-        gameObject.SetActive(true);
         LayoutPage();
     }
 
-    public void Hide()
+    // Back leaves the recipe screen: the close command tears it down and the
+    // game state resumes - the previously open panel is not restored (D10).
+    private void CloseSelf()
     {
-        foreach(var cell in cells)cell.ForceUnhover();
-        gameObject.SetActive(false);
+        UIManager.Instance?.CloseUI();
     }
 
     public void OnScroll(PointerEventData eventData)

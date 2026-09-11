@@ -10,7 +10,10 @@ using UnityEngine.UI;
 // Ctrl+O master switch. P7: R/U and the toggle arrive via the UIManager action
 // ring - this class only exposes ToggleFollow / OnRecipeKey as the registered
 // callbacks. P8: a standard UIBehaviour riding the UI pipeline as UIKind
-// Overlay (host GO parented under the UIManager Overlay root).
+// Overlay (host GO parented under the UIManager Overlay root). D10: the recipe
+// view is its own SinglePanel ("jei:recipe") - OnRecipeKey resolves the hovered
+// item and drives it through close-then-open; the strip itself stays alongside
+// (the recipe screen pushes the ui handler, keeping the follow condition true).
 public class JEIPanel : UIBehavior, IScrollHandler
 {
     private const float StripWidth = 520f;   // 6 columns x 84 pitch + padding
@@ -25,7 +28,6 @@ public class JEIPanel : UIBehavior, IScrollHandler
     private JEIIconCache iconCache;
     private GameObject content;
     private GameObject grid;
-    private JEIRecipePage recipePage;
     private UITextWidget noResultText;
     private int visibleRows;
     private int scrollRow;
@@ -70,13 +72,6 @@ public class JEIPanel : UIBehavior, IScrollHandler
         BuildCells();
         BuildSearchBox();
 
-        // Recipe view (P2): docked left of the strip, visible with the strip
-        // and driven by the R/U keys (see Update).
-        var recipePageGo = new GameObject("Recipe Page", typeof(RectTransform));
-        recipePageGo.transform.SetParent(content.transform, false);
-        recipePage = recipePageGo.AddComponent<JEIRecipePage>();
-        recipePage.Init(data, iconCache);
-
         noResultText = UITextWidget.CreateNewText("No items", content).GetComponent<UITextWidget>();
         noResultText.gameObject.name = "No Items";
         var noResultRt = (RectTransform)noResultText.transform;
@@ -87,8 +82,13 @@ public class JEIPanel : UIBehavior, IScrollHandler
         noResultText.gameObject.SetActive(false);
 
         content.SetActive(false);
-        iconCache.enabled = false;
     }
+
+    // The recipe screen (D10) shares this cache: one RT per item serves both
+    // the strip and the recipe panel. The cache is never disabled as a whole
+    // anymore - requests only ever come from active cells, which stop ticking
+    // the moment their own root hides.
+    public JEIIconCache IconCache => iconCache;
 
     // Virtual grid: only the visible rows (plus one buffer row) exist as cells;
     // scrolling re-binds them to shifted item ids, so the cell count is
@@ -135,15 +135,15 @@ public class JEIPanel : UIBehavior, IScrollHandler
         if(content.activeSelf != visible)
         {
             content.SetActive(visible);
-            iconCache.enabled = visible;   // stop burning renders while hidden
-            recipePage.Hide();             // reset the recipe view on any flip
             if(!visible)
             {
-                // Panel closed under the pointer: no exit event will arrive, so
-                // drop our own stale hover feed (the tooltip also guards this).
-                // Covers strip and recipe cells alike - both are JEICell.
+                // Strip cells deactivate under the pointer without an exit
+                // event, so drop that now-stale hover feed (the tooltip also
+                // guards this). Recipe cells live on the recipe panel's own
+                // root and keep hovering - only clear a cell this flip hid.
                 var ui = UIManager.Instance;
-                if(ui != null && ui.CurrentHoverInfo is JEICell)ui.CurrentHoverInfo = null;
+                if(ui != null && ui.CurrentHoverInfo is JEICell cell && !cell.gameObject.activeInHierarchy)
+                    ui.CurrentHoverInfo = null;
                 return;
             }
             scrollRow = 0;
@@ -159,22 +159,27 @@ public class JEIPanel : UIBehavior, IScrollHandler
         followEnabled = !followEnabled;
     }
 
-    // R/U semantics (design §6.4), routed from the UIManager action ring (P7):
-    // a hovered item opens its recipe page (or navigates the open one); with
-    // no hover target the same keys retreat to the item list. The hover lookup
-    // stays on the general CurrentHoverInfo feed - panel slots and JEI cells
-    // alike.
+    // R/U semantics (design §6.4, D10), routed from the UIManager action ring
+    // (P7): a hovered item opens its recipe screen ("jei:recipe", an
+    // independent SinglePanel). Opening is close-then-open - whatever UI is
+    // open (a world panel or the previous recipe screen) closes first and is
+    // never restored on exit. No hover target is a no-op. The hover lookup
+    // stays on the general CurrentHoverInfo feed - panel slots, strip cells
+    // and recipe cells alike, so chained navigation works.
     public void OnRecipeKey(bool recipesNotUses)
     {
         // The ring polls regardless of JEI visibility (its slot gate only
         // concerns the hovered slot); keep the old scope: a hidden JEI ignores
-        // R/U. Covers "follow off" and "no panel open" alike.
+        // R/U. Covers "follow off" and "no panel open" alike. With the recipe
+        // screen open its handler keeps this condition true.
         if(!followEnabled || !IsWorldPanelOpen())return;
         var ui = UIManager.Instance;
-        if(ui != null && ui.DragActive)return;   // hover feed is stale mid-drag
-        IHoverItemSource source = HoverSource.Validate(ui == null ? null : ui.CurrentHoverInfo);
-        if(source != null && source.TryGetHoverItemId(out ushort itemId))recipePage.Show(itemId, recipesNotUses);
-        else recipePage.Hide();
+        if(ui == null || ui.DragActive)return;   // hover feed is stale mid-drag
+        IHoverItemSource source = HoverSource.Validate(ui.CurrentHoverInfo);
+        if(source == null || !source.TryGetHoverItemId(out ushort itemId))return;
+        var recipes = recipesNotUses ? data.GetRecipesMaking(itemId) : data.GetRecipesUsing(itemId);
+        ui.CloseUI();   // D10: the recipe screen replaces whatever was open
+        ui.OpenUI("jei:recipe", recipes);
     }
 
     // Follow condition (decision D1): a world panel is open. The menu pushes

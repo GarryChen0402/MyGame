@@ -6,6 +6,8 @@ using UnityEngine;
 // pipeline design: Docs/JEI管线化-设计草案.md). P1: follow-panel item list, live
 // search and cheat-mode give. P8: the panel rides the standard UI pipeline - a
 // UIDefinition of kind Overlay (root owned by UIManager) built on first open.
+// D10: the recipe screen is a second definition of kind SinglePanel, opened by
+// the R/U callbacks in place of whatever UI was open.
 // The base game knows nothing about it - everything it needs is reached
 // through Core seams (UIActions registry, UIDefinitions registry,
 // ContainerCommandProcessor.GiveItem).
@@ -38,6 +40,26 @@ public class JEIMod : IMod
                 var root = UIPanelBuilder.BuildStretchRoot(null, "JEI Panel");
                 root.gameObject.AddComponent<JEIPanel>();
                 return root.gameObject;
+            }
+        });
+        // D10: the recipe screen is an independent SinglePanel; its close-then-
+        // open lives in JEIPanel.OnRecipeKey. It pushes the ui input handler,
+        // which keeps the strip's follow condition true so the item list stays
+        // usable beside it. The factory injects the strip's icon cache so both
+        // screens share one RT per item - panel is always built before this
+        // definition can first open (the R/U callbacks are guarded on it).
+        ResourceSystem.Instance.UIDefinitions.Register(new UIDefinition
+        {
+            modId = ModId,
+            name = "recipe",
+            Kind = UIKind.SinglePanel,
+            InputHandlerId = "minecraft:ui_input_handler",
+            Factory = () =>
+            {
+                var go = new GameObject("JEI Recipe Panel", typeof(RectTransform));
+                var page = go.AddComponent<JEIRecipePage>();
+                page.Init(panel.IconCache);
+                return go;
             }
         });
         // P7: all three are ui_actions now - the UIManager action ring owns
