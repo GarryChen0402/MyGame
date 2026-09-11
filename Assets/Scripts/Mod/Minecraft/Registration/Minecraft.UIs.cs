@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -49,7 +50,8 @@ public partial class Minecraft
                 AllowedInputHandlers = allowedHandlers == null ? null : new HashSet<string>(allowedHandlers)
             });
         }
-        void RegisterUIAction(string name, KeyCode key, string category, params string[] allowedHandlers)
+        void RegisterUIAction(string name, KeyCode key, string category, Action<UIActionContext> callback = null,
+            bool slotTargeted = false, params string[] allowedHandlers)
         {
             ResourceSystem.Instance.UIActions.Register(new UIAction
             {
@@ -57,7 +59,22 @@ public partial class Minecraft
                 name = name,
                 DefaultKey = key,
                 Category = category,
+                SlotTargeted = slotTargeted,
+                Callback = callback,
                 AllowedInputHandlers = allowedHandlers == null ? null : new HashSet<string>(allowedHandlers)
+            });
+        }
+        void RegisterCoreSlotAction(string name, Action<UIActionContext> callback)
+        {
+            ResourceSystem.Instance.UIActions.Register(new UIAction
+            {
+                modId = ModId,
+                name = name,
+                DefaultKey = KeyCode.None,   // pointer-driven: no physical key
+                Category = "ui",
+                SlotTargeted = true,
+                AllowRebind = false,
+                Callback = callback
             });
         }
         RegisterWorldAction("forward", KeyCode.W, "movement", "minecraft:player_input_handler");
@@ -69,19 +86,39 @@ public partial class Minecraft
         RegisterWorldAction("jump", KeyCode.Space, "movement", "minecraft:player_input_handler");
         RegisterWorldAction("attack", KeyCode.Mouse0, "game", "minecraft:player_input_handler");
         RegisterWorldAction("use_item", KeyCode.Mouse1, "game", "minecraft:player_input_handler");
-        // UI actions (game-state triggered, UI-owned; P6 routes them through
-        // the UI action ring - global actions, not slot-targeted).
-        RegisterUIAction("open_inventory", KeyCode.E, "game", "minecraft:player_input_handler");
+        // UI actions (game-state triggered, UI-owned; the UI action ring
+        // carries key-driven ones from P6 - global actions, not slot-targeted).
+        // P6 migration: only close_ui moved to the ring; the three open-entry
+        // actions keep their legacy pollers (PlayerInputHandler) and stay
+        // callback-less (the ring skips callback-less actions).
+        RegisterUIAction("open_inventory", KeyCode.E, "game", null, false, "minecraft:player_input_handler");
         // Same default key as open_inventory on purpose: routing (KeyBindingManager
         // refresh) feeds the press to whichever action the current input context
         // admits, so E opens in game and closes inside a panel (design doc §6.1).
-        RegisterUIAction("close_ui", KeyCode.E, "ui", "minecraft:ui_input_handler");
+        // P6: the ring polls it (UIInputHandler's E branch retired); the
+        // whitelist context stays the same.
+        RegisterUIAction("close_ui", KeyCode.E, "ui", _ => UIManager.Instance?.CloseUI(), false, "minecraft:ui_input_handler");
         // Widget smoke-test UI (UI 组件化重构设计方案 §3.4): opens the tab /
         // icon / text / input / button demo panel (WidgetTestUI).
-        RegisterUIAction("open_widget_test", KeyCode.T, "game", "minecraft:player_input_handler");
+        RegisterUIAction("open_widget_test", KeyCode.T, "game", null, false, "minecraft:player_input_handler");
         // Entity model editor (design doc §7): plain P. Decision C originally
         // specified Ctrl+P; the combo collides with the Unity editor's play
         // shortcut, so the revision binds the bare key (2026-09-04).
-        RegisterUIAction("open_entity_model_editor", KeyCode.P, "game", "minecraft:player_input_handler");
+        RegisterUIAction("open_entity_model_editor", KeyCode.P, "game", null, false, "minecraft:player_input_handler");
+
+        // Core slot actions (P6, design §2.6): pointer-driven (no physical key,
+        // non-rebindable); the UIManager ring resolves them from the pointer
+        // entries, gates them against the slot's declared actionIds, then runs
+        // these built-in callbacks (the existing command path).
+        RegisterCoreSlotAction("left_click_action",
+            ctx => ContainerCommandProcessor.Instance.Click(ctx.Slot.Addr.Value, false));
+        RegisterCoreSlotAction("right_click_action",
+            ctx => ContainerCommandProcessor.Instance.Click(ctx.Slot.Addr.Value, true));
+        RegisterCoreSlotAction("shift_left_click_action",
+            ctx => ContainerCommandProcessor.Instance.QuickMove(ctx.Slot.Addr.Value));
+        RegisterCoreSlotAction("shift_right_click_action",
+            ctx => ContainerCommandProcessor.Instance.QuickMove(ctx.Slot.Addr.Value));
+        RegisterCoreSlotAction("drag_action",
+            ctx => UIManager.Instance?.BeginSlotDrag(ctx.Slot, ctx.EventData));
     }
 }

@@ -192,7 +192,9 @@ public class KeyBindingManager
     // Post-freeze sanity sweep: whitelist handler ids must exist; same
     // (key, modifier) on whitelist-overlapping actions is a real conflict
     // (late registration wins, only warned), on mutually exclusive whitelists
-    // it is legitimate context reuse (E: open/close). Warnings only, never fatal.
+    // it is legitimate context reuse (E: open/close). Keyless ui_actions
+    // (pointer-driven, P6 ring) sit outside both checks. Warnings only, never
+    // fatal.
     private void ValidateAll()
     {
         // The action tables validate as one namespace (action names are global).
@@ -213,11 +215,15 @@ public class KeyBindingManager
         for(int i = 0; i < list.Count; i++)
         {
             GetCurrentBinding(list[i], out var keyI, out var modI);
-            if(!IsBindableKey(keyI))
+            // Pointer-driven ui_actions (P6 ring) legitimately carry no key.
+            bool keylessUi = keyI == KeyCode.None && list[i] is UIAction;
+            if(!keylessUi && !IsBindableKey(keyI))
                 Debug.LogWarning($"[KeyBinding] {list[i].FullName} has unbindable default key {keyI}");
+            if(keylessUi)continue;
             for(int j = i + 1; j < list.Count; j++)
             {
                 GetCurrentBinding(list[j], out var keyJ, out var modJ);
+                if(keyJ == KeyCode.None && list[j] is UIAction)continue;
                 if(keyI != keyJ || modI != modJ)continue;
                 if(WhitelistsOverlap(list[i].AllowedInputHandlers, list[j].AllowedInputHandlers))
                     Debug.LogWarning($"[KeyBinding] conflict: {list[i].FullName} and {list[j].FullName} both bound to {Format(keyI, modI)} with overlapping contexts (later registration wins)");
@@ -318,7 +324,8 @@ public class KeyBindingManager
     private void UpdateHeld(KeyBinding binding, bool ctrl, bool shift, bool alt)
     {
         GetCurrentBinding(binding, out var key, out var modifier);
-        down[binding.FullName] = Input.GetKey(key) && ModifierHeld(modifier, ctrl, shift, alt);
+        // Keyless actions (pointer-driven ui_actions) are never "down".
+        down[binding.FullName] = IsBindableKey(key) && Input.GetKey(key) && ModifierHeld(modifier, ctrl, shift, alt);
     }
 
     // Cross-table action lookup (P5): action names are globally unique, so the

@@ -141,10 +141,12 @@ public class UIManager : MonoBehaviour
         if(PlayerInventoryRoot != null)PlayerInventoryRoot.SetActive(false);
     }
 
-    // Entry point of every slot click (SlotUI.OnPointerClick → here): gate
-    // the click, then settle it as a command (rule R-C1-0b). No same-frame
-    // explicit refresh: the mirror sync + per-frame panel sweep echo the
-    // change within one render frame (the approved ≤1-frame semantics).
+    // Entry point of every slot click (SlotUI.OnPointerClick → here): resolve
+    // the gesture to a core slot ui_action, gate it against the slot's
+    // declared actionIds (P6 ring) and route it to the action's callback,
+    // which settles it as a command (rule R-C1-0b). No same-frame explicit
+    // refresh: the mirror sync + per-frame panel sweep echo the change within
+    // one render frame (the approved ≤1-frame semantics).
     public void HandleSlotClicked(SlotUI slotUI, PointerEventData eventData)
     {
         if(currentUI == null)return;
@@ -152,9 +154,50 @@ public class UIManager : MonoBehaviour
         if(addr == null)return;   // display-only slot: not clickable
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         bool rightClick = eventData.button == PointerEventData.InputButton.Right;
-        var processor = ContainerCommandProcessor.Instance;
-        if(shift)processor.QuickMove(addr.Value);
-        else processor.Click(addr.Value, rightClick);
+        string actionId = shift
+            ? (rightClick ? CoreSlotActions.ShiftRightClick : CoreSlotActions.ShiftLeftClick)
+            : (rightClick ? CoreSlotActions.RightClick : CoreSlotActions.LeftClick);
+        InvokeSlotAction(actionId, slotUI, eventData);
+    }
+
+    // ---- UI action ring (P6 of Docs/UI槽位编码与解析映射-实施文档.md) ----
+
+    // Key-driven ui_actions poll here (single point): press → slot gate (only
+    // slot-targeted actions; the hovered slot must declare the id) → response
+    // callback. Callback-less actions stay with their legacy pollers (P6: the
+    // three open-entry actions in PlayerInputHandler).
+    private void PollUIActions()
+    {
+        var keys = KeyBindingManager.Instance;
+        var actions = ResourceSystem.Instance.UIActions;
+        for(ushort id = 0; id < actions.Count; id++)
+        {
+            if(!actions.TryGetResourceWithNumberId(id, out var action))continue;
+            if(action.Callback == null)continue;
+            if(!keys.WasPressed(action.FullName))continue;
+            if(action.SlotTargeted)
+            {
+                var hover = CurrentHoverSlotUI;
+                var entry = hover == null ? null : hover.BindingEntry;
+                if(entry == null || !entry.ActionIds.Contains(action.FullName))continue;
+                action.Callback(new UIActionContext { Slot = hover });
+            }
+            else action.Callback(new UIActionContext());
+        }
+    }
+
+    // Resolve → gate → route for pointer entries: the slot must declare the
+    // action id on its binding entry (P0 declarations), then the action's own
+    // callback carries the response.
+    private void InvokeSlotAction(string actionId, SlotUI slot, PointerEventData eventData)
+    {
+        if(!ResourceSystem.Instance.UIActions.TryGetResourceWithFullName(actionId, out var action))return;
+        if(action.SlotTargeted)
+        {
+            var entry = slot.BindingEntry;
+            if(entry == null || !entry.ActionIds.Contains(actionId))return;
+        }
+        action.Callback?.Invoke(new UIActionContext { Slot = slot, EventData = eventData });
     }
 
     // ---- drag-to-distribute session (Docs/物品拖拽分配交互实现方案.md §4) ----
@@ -178,6 +221,7 @@ public class UIManager : MonoBehaviour
 
     private void Update()
     {
+        PollUIActions();
         if(activeDrag != null)PollPointer();
     }
 
@@ -187,7 +231,17 @@ public class UIManager : MonoBehaviour
         var addr = slotUI == null ? null : slotUI.Addr;
         if(addr == null)return;   // display-only slot: not draggable
         if(activeDrag != null)return;   // one drag at a time
+        InvokeSlotAction(CoreSlotActions.Drag, slotUI, eventData);
+    }
 
+    // drag_action's built-in response (see the core registrations): open the
+    // distribution session, picking the source up first when the cursor is
+    // empty. Invoked back through the ring after the gate passed.
+    public void BeginSlotDrag(SlotUI slot, PointerEventData eventData)
+    {
+        var addr = slot.Addr;
+        if(addr == null)return;   // display-only slot: not draggable
+        bool right = eventData != null && eventData.button == PointerEventData.InputButton.Right;
         var processor = ContainerCommandProcessor.Instance;
         var heldMirror = MirrorSync.Instance.PlayerHeldMirror;
         bool cursorEmpty = heldMirror == null || heldMirror.Content.IsEmpty;
@@ -198,15 +252,11 @@ public class UIManager : MonoBehaviour
             // vanilla; the emptied source slot never receives the spread. The
             // command returns whether the cursor now holds items - the mirror
             // would only reflect the pickup on the next frame.
-            bool picked = processor.Click(addr.Value,
-                eventData.button == PointerEventData.InputButton.Right);
+            bool picked = processor.Click(addr.Value, right);
             if(!picked)return;   // nothing to pick: no session
         }
 
-        activeDrag = new DragSession
-        {
-            Right = eventData.button == PointerEventData.InputButton.Right
-        };
+        activeDrag = new DragSession { Right = right };
         PollPointer();
     }
 
